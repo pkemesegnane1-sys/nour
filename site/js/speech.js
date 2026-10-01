@@ -8,6 +8,9 @@ const Speech = {
   recog: null,
   recognizing: false,
   heardText: '',
+  recStart: 0,
+  recDuration: 0,
+  lastBlob: null,
   _onResult: null,
 
   micSupported() {
@@ -18,14 +21,36 @@ const Speech = {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
   },
 
-  /* --- Enregistrement audio --- */
+  /* --- Enregistrement audio (robuste mobile) --- */
+  _pickMime() {
+    if (typeof MediaRecorder === 'undefined') return '';
+    const cands = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+    for (const m of cands) {
+      try { if (!MediaRecorder.isTypeSupported || MediaRecorder.isTypeSupported(m)) return m; } catch (e) {}
+    }
+    return '';
+  },
+
   async startRecording() {
     if (!this.micSupported()) throw new Error('micro-indisponible');
     this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     this.chunks = [];
-    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-    this.recorder = new MediaRecorder(this.stream, { mimeType: mime });
-    this.recorder.ondataavailable = e => { if (e.data.size) this.chunks.push(e.data); };
+    this.recStart = Date.now();
+    this.recDuration = 0;
+    this.lastBlob = null;
+    // MediaRecorder absent (vieux iOS) : on enregistre « à la durée » → auto-évaluation possible quand même
+    if (typeof MediaRecorder === 'undefined') {
+      this.recorder = 'pseudo';
+      return true;
+    }
+    const mime = this._pickMime();
+    try {
+      this.recorder = mime ? new MediaRecorder(this.stream, { mimeType: mime }) : new MediaRecorder(this.stream);
+    } catch (e) {
+      this.recorder = 'pseudo';
+      return true;
+    }
+    this.recorder.ondataavailable = e => { if (e.data && e.data.size) this.chunks.push(e.data); };
     this.recorder.start();
     return true;
   },
@@ -33,14 +58,32 @@ const Speech = {
   stopRecording() {
     return new Promise(res => {
       if (!this.recorder) return res(null);
-      this.recorder.onstop = () => {
-        const blob = new Blob(this.chunks, { type: this.recorder.mimeType || 'audio/webm' });
-        this.stream.getTracks().forEach(t => t.stop());
+      const finish = (blob) => {
+        try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+        this.stream = null;
         this.recorder = null;
+        this.recDuration = (Date.now() - this.recStart) / 1000;
+        this.lastBlob = blob || null;
         res(blob);
       };
-      this.recorder.stop();
+      if (this.recorder === 'pseudo') { finish(null); return; }
+      this.recorder.onstop = () => {
+        let blob = null;
+        try {
+          if (this.chunks.length) blob = new Blob(this.chunks, { type: this.recorder.mimeType || 'audio/webm' });
+        } catch (e) {}
+        finish(blob);
+      };
+      try { this.recorder.stop(); } catch (e) { finish(null); }
     });
+  },
+
+  /* Réécoute de son propre enregistrement */
+  playLast() {
+    if (!this.lastBlob) { toast('Aucun enregistrement à réécouter.', 'warn'); return; }
+    const url = URL.createObjectURL(this.lastBlob);
+    const a = new Audio(url);
+    a.play().catch(() => toast('Lecture impossible.', 'err'));
   },
 
   /* --- Reconnaissance vocale arabe --- */
@@ -99,6 +142,20 @@ const Speech = {
   /* --- Synthèse vocale pour les exercices --- */
   speak(text, rate = 0.75) {
     speakArabic(text, rate);
+  },
+
+  /* Arrêt d'urgence (navigation) : coupe tout sans évaluation */
+  forceStop() {
+    try { if (this.recog) this.recog.stop(); } catch (e) {}
+    try {
+      if (this.recorder && this.recorder !== 'pseudo') this.recorder.stop();
+    } catch (e) {}
+    try { if (this.stream) this.stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    this.stream = null;
+    this.recorder = null;
+    this.recog = null;
+    this.recognizing = false;
+    if (typeof Verify !== 'undefined') Verify._recording = false;
   }
 };
 
@@ -149,7 +206,9 @@ const Verify = {
 
   async toggle() {
     const btn = $('#mic-btn'), status = $('#mic-status');
-    if (Speech.recognizing) {
+    // IMPORTANT : l'état s'appuie sur _recording (Speech.recognizing est faux sans reconnaissance vocale → bug mobile)
+    if (this._recording) {
+      this._recording = false;
       btn.classList.remove('rec');
       btn.textContent = '🎙';
       status.textContent = 'Analyse de votre prononciation…';
@@ -157,36 +216,33 @@ const Verify = {
       const blob = await Speech.stopRecording();
       this.evaluate(heard, blob);
     } else {
+      this._recording = true;
       try {
         await Speech.startRecording();
       } catch (e) {
-        status.textContent = 'Micro refusé ou indisponible — autorisez l\'accès au micro dans votre navigateur.';
+        this._recording = false;
+        status.textContent = 'Micro refusé ou indisponible — autorisez l\'accès au micro (cadenas 🔒 dans la barre d\'adresse) puis réessayez.';
         this.attempts++;
+        this.render();
         if (this.attempts >= 3) this.renderCompanion();
         return;
       }
-      Speech.startRecognition(t => {
+      const recogOk = Speech.startRecognition(t => {
         const hb = $('#heard-box');
         if (hb && t) hb.textContent = t;
       });
       btn.classList.add('rec');
       btn.textContent = '⏹';
-      status.textContent = 'Je vous écoute… récitez lentement et distinctement.';
+      status.textContent = recogOk
+        ? 'Je vous écoute… récitez lentement et distinctement, puis appuyez sur ⏹.'
+        : '🔴 Enregistrement en cours… récitez, puis appuyez sur ⏹ pour terminer.';
     }
   },
 
   async evaluate(heard, blob) {
     const c = this.current;
     this.attempts++;
-    const result = scoreRecitation(c.expectedAr, heard);
-    const threshold = (Progress.data && Progress.data.settings.threshold) || 60;
-
-    const hb = $('#heard-box');
-    if (hb) {
-      hb.innerHTML = heard
-        ? escapeHtml(heard)
-        : '<span class="muted">(aucune voix reconnue — réessayez plus près du micro, ou utilisez le mode accompagné)</span>';
-    }
+    const threshold = (Progress.data && Progress.data.settings && Progress.data.settings.threshold) || 60;
 
     // sauvegarder l'enregistrement
     let clipId = null;
@@ -195,14 +251,90 @@ const Verify = {
         clipId = await Speech.saveClip(blob, {
           user: Auth.current() ? Auth.current().id : null,
           surah: c.surah, verse: c.verse || 0,
-          label: c.label || '', score: result.score
+          label: c.label || ''
         });
         this.lastClipId = clipId;
       } catch { /* stockage plein : on continue sans clip */ }
     }
 
+    const hb = $('#heard-box');
+    const hasText = heard && normalizeArabic(heard).replace(/\s/g, '').length > 0;
+
+    /* ---- CAS 1 : aucune transcription (typique sur mobile) ---- */
+    if (!hasText) {
+      const dur = Speech.recDuration || 0;
+      const tooShort = dur < 1.2;
+
+      if (hb) {
+        hb.innerHTML = `<span class="muted">${tooShort
+          ? '(enregistrement trop court ou silence)'
+          : '(analyse des mots indisponible sur cet appareil)'}</span>`;
+      }
+
+      const slot = $('#score-slot');
+      const actions = $('#verify-actions');
+
+      if (tooShort) {
+        // Enregistrement vide : rouge, mais avec explication claire (pas un mystérieux 0%)
+        if (c.onResult) { try { c.onResult({ score: 0, matched: [], missed: [], heard: [] }, false, clipId); } catch (e) {} }
+        if (slot) {
+          slot.innerHTML = `
+            <div class="score-badge fail">
+              <div class="val">—</div>
+              <div class="lbl">trop court</div>
+            </div>`;
+        }
+        if (actions) {
+          actions.innerHTML = `
+            <button class="btn btn-gold" onclick="Verify.toggle()">↻ Réessayer — parlez plus fort</button>
+            <button class="btn btn-ghost" onclick="Verify.showTips()">💡 Conseils</button>`;
+        }
+        if (this.attempts >= 3) this.renderCompanion();
+        return { score: 0, short: true };
+      }
+
+      // Enregistrement sonore présent mais non analysable : auto-évaluation guidée
+      if (slot) {
+        slot.innerHTML = `
+          <div class="score-badge" style="background:rgba(194,154,69,.15);color:var(--gold-2);border:3px solid rgba(194,154,69,.4)">
+            <div class="val" style="font-size:1.45rem">📱</div>
+            <div class="lbl">écoutez et évaluez</div>
+          </div>`;
+      }
+      if (actions) {
+        actions.innerHTML = `
+          <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter mon enregistrement</button>
+          <button class="btn btn-ghost" onclick="loopVerseHady(${c.surah || 1},${c.verse || 1})">🔊 Réécouter le récitateur</button>
+          <div class="w-100"></div>
+          <button class="btn btn-primary" onclick="Verify.selfRate(true)">✓ J'ai bien récité (trait vert)</button>
+          <button class="btn btn-danger" onclick="Verify.selfRate(false)">✗ C'était mal récité (trait rouge)</button>`;
+      }
+      const notice = document.createElement('div');
+      notice.className = 'info-box';
+      notice.style.marginTop = '.95rem';
+      notice.innerHTML = `
+        <strong>Comment ça marche ici ?</strong><br>
+        Votre navigateur ne peut pas analyser automatiquement les mots récités
+        (courant sur les téléphones). C'est donc <strong>à vous</strong> de comparer :
+        écoutez <strong>votre enregistrement</strong>, écoutez <strong>le récitateur</strong>,
+        puis indiquez si c'est bien récité. Un proche ou un enseignant peut aussi vous confirmer ;
+        après 3 essais, le mode accompagné est proposé.`;
+      if (actions && !actions.nextElementSibling) actions.insertAdjacentElement('afterend', notice);
+      this.renderCompanion();
+      return { score: null, noTranscript: true };
+    }
+
+    /* ---- CAS 2 : transcription disponible → score automatique ---- */
+    const result = scoreRecitation(c.expectedAr, heard);
+    if (hb) hb.innerHTML = escapeHtml(heard);
+
     const slot = $('#score-slot');
     const passed = result.score >= threshold;
+
+    // Retour immédiat : trait vert ou rouge sur le verset en cours
+    if (c.onResult) {
+      try { c.onResult(result, false, clipId); } catch (e) { /* visuel secondaire */ }
+    }
 
     if (slot) {
       slot.innerHTML = `
@@ -214,30 +346,39 @@ const Verify = {
 
     const actions = $('#verify-actions');
     if (actions) {
+      actions.innerHTML = `
+        <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter ma récitation</button>`;
       if (passed) {
-        actions.innerHTML = `
-          <button class="btn btn-primary btn-lg" onclick="Verify.pass()">✓ Passer à l'étape suivante</button>
+        actions.innerHTML += `
+          <button class="btn btn-primary" onclick="Verify.pass()">✓ Ce verset est validé → suivant</button>
           <button class="btn btn-ghost" onclick="Verify.toggle()">↻ Réciter encore mieux</button>`;
       } else {
+        actions.innerHTML += `
+          <button class="btn btn-gold" onclick="Verify.toggle()">↻ Réessayer</button>
+          <button class="btn btn-ghost" onclick="Verify.showTips()">💡 Conseils</button>`;
         const missTxt = result.missed.length
           ? `<div class="info-box" style="margin-top:.9rem;text-align:right;direction:rtl;font-family:var(--font-ar)">
                Mots à retravailler : ${result.missed.map(w => `<span class="diff-miss">${escapeHtml(w)}</span>`).join(' ')}
              </div>`
           : '';
-        actions.innerHTML = `
-          <button class="btn btn-gold" onclick="Verify.toggle()">↻ Réessayer</button>
-          <button class="btn btn-ghost" onclick="Verify.showTips()">💡 Conseils</button>`;
         const hb2 = $('#heard-box');
-        if (hb2) hb2.insertAdjacentHTML('afterend', missTxt);
+        if (hb2 && missTxt) hb2.insertAdjacentHTML('afterend', missTxt);
       }
     }
 
     if (this.attempts >= 3) this.renderCompanion();
-
-    if (passed && c.autoPass) {
-      // validation automatique optionnelle
-    }
     return result;
+  },
+
+  /* Auto-évaluation (mobile sans analyse vocale, ou après écoute comparée) */
+  selfRate(ok) {
+    const c = this.current;
+    const thr = (Progress.data && Progress.data.settings && Progress.data.settings.threshold) || 60;
+    const score = ok ? Math.max(thr, 75) : Math.max(0, Math.min(thr - 15, 35));
+    if (c && c.onResult) {
+      try { c.onResult({ score, matched: [], missed: [], heard: [], self: true }, false, this.lastClipId || null); } catch (e) {}
+    }
+    this.finishPass(score, false);
   },
 
   renderCompanion() {
@@ -271,6 +412,9 @@ const Verify = {
     const ok = ['comp-1', 'comp-2', 'comp-3'].every(id => $('#' + id) && $('#' + id).checked);
     if (!ok) { toast('Veuillez cocher les trois engagements pour valider.', 'warn'); return; }
     const thr = (Progress.data && Progress.data.settings && Progress.data.settings.threshold) || 60;
+    if (this.current && this.current.onResult) {
+      try { this.current.onResult({ score: Math.max(60, thr), matched: [], missed: [], heard: [] }, true, this.lastClipId || null); } catch (e) {}
+    }
     this.finishPass(Math.max(60, thr), true);
   },
 

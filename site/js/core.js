@@ -30,17 +30,73 @@ function toast(msg, type = '') {
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; setTimeout(() => el.remove(), 420); }, 3600);
 }
 
+/* ---------- Pile d'interfaces (modales / console) ----------
+   Le RETOUR du téléphone (popstate) et la touche Échap reculent d'un cran :
+   1. fermer la modale / la console ouverte  →  2. sinon, page précédente. */
+
+const UIStack = [];
+
+function pushUI(type) {
+  try { history.pushState({ nourUI: type }, ''); UIStack.push(type); } catch (e) {}
+}
+
+function closeModalNow() {
+  const overlay = $('#modal-overlay');
+  if (overlay) overlay.classList.add('hidden');
+  const box = $('#modal-box');
+  if (box) box.innerHTML = '';
+}
+
+function closeConsoleNow() {
+  if (typeof ReciteState !== 'undefined') ReciteState.verse = null;
+  const body = document.getElementById('console-body');
+  const vbox = document.getElementById('verify-box');
+  if (vbox) vbox.innerHTML = '';
+  document.querySelectorAll('.verse-reciting').forEach(el => el.classList.remove('verse-reciting'));
+}
+
+function closeTopUI() {
+  const t = UIStack.pop();
+  if (t === 'modal') closeModalNow();
+  else if (t === 'console') closeConsoleNow();
+  return !!t;
+}
+
 function showModal(html, onOpen) {
   const overlay = $('#modal-overlay'), box = $('#modal-box');
   box.innerHTML = html;
   overlay.classList.remove('hidden');
   overlay.onclick = e => { if (e.target === overlay) closeModal(); };
   if (onOpen) onOpen(box);
+  pushUI('modal');
 }
+
 function closeModal() {
-  $('#modal-overlay').classList.add('hidden');
-  $('#modal-box').innerHTML = '';
+  closeModalNow();
+  if (UIStack.length && UIStack[UIStack.length - 1] === 'modal') {
+    UIStack.pop();
+    // Avale l'entrée d'historique de la modale, sauf si une navigation suit aussitôt
+    setTimeout(() => {
+      if (window.__nourNav) return;
+      try { history.back(); } catch (e) {}
+    }, 0);
+  }
 }
+
+/* Bouton retour du téléphone / navigateur */
+window.addEventListener('popstate', () => {
+  if (UIStack.length) { closeTopUI(); return; }
+  // sinon : le hashchange rend la page précédente
+});
+
+/* Touche Échap = retour */
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (UIStack.length) { closeTopUI(); return; }
+    if (location.hash && location.hash !== '#/accueil') history.back();
+  }
+});
 
 async function sha256(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -55,6 +111,17 @@ const LS = {
   },
   set(key, val) { localStorage.setItem('nour.' + key, JSON.stringify(val)); },
   del(key) { localStorage.removeItem('nour.' + key); }
+};
+
+/* Session « de courte durée » : effacée à la fermeture du navigateur
+   (utilisée quand l'utilisateur décoche « Se souvenir de moi ») */
+const SS = {
+  get(key, def = null) {
+    try { const v = sessionStorage.getItem('nour.' + key); return v === null ? def : JSON.parse(v); }
+    catch { return def; }
+  },
+  set(key, val) { sessionStorage.setItem('nour.' + key, JSON.stringify(val)); },
+  del(key) { sessionStorage.removeItem('nour.' + key); }
 };
 
 /* ---------- IndexedDB (enregistrements audio) ---------- */
@@ -108,10 +175,15 @@ const IDB = {
 const Auth = {
   all() { return LS.get('users', {}); },
   current() {
-    const id = LS.get('session', null);
+    const id = LS.get('session', null) ?? SS.get('session', null);
     return id ? this.all()[id] || null : null;
   },
-  async register({ name, email, password }) {
+  _saveSession(id, remember = true) {
+    // « Se souvenir de moi » : la session survit à la fermeture du navigateur
+    if (remember) { LS.set('session', id); SS.del('session'); }
+    else { SS.set('session', id); LS.del('session'); }
+  },
+  async register({ name, email, password, remember = true }) {
     email = String(email).trim().toLowerCase();
     name = String(name).trim();
     if (!name || !email || password.length < 6) throw new Error('Veuillez remplir tous les champs (mot de passe : 6 caractères minimum).');
@@ -120,21 +192,22 @@ const Auth = {
     const id = 'u' + Date.now().toString(36);
     users[id] = { id, name, email, passHash: await sha256(password), created: Date.now() };
     LS.set('users', users);
-    LS.set('session', id);
+    this._saveSession(id, remember);
     Progress.init(id);
     return users[id];
   },
-  async login({ email, password }) {
+  async login({ email, password, remember = true }) {
     email = String(email).trim().toLowerCase();
     const users = this.all();
     const user = Object.values(users).find(u => u.email === email);
     if (!user || user.passHash !== await sha256(password)) throw new Error('E-mail ou mot de passe incorrect.');
-    LS.set('session', user.id);
+    this._saveSession(user.id, remember);
     if (!LS.get('progress.' + user.id)) Progress.init(user.id);
     return user;
   },
   logout() {
     LS.del('session');
+    SS.del('session');
     location.hash = '#/';
   }
 };
@@ -162,7 +235,7 @@ const Progress = {
         streak: { current: 0, best: 0, lastDay: null },
         dailyLog: {},            // "YYYY-MM-DD": {versesLearned, recitations, minutes}
         marks: {},               // repères A/B : "n": {"a": secondes}
-        literacy: { lettersDone: [], modules: {} },
+        literacy: { lettersDone: [], modules: {}, stepsDone: [] },
         settings: { threshold: 60 },
         journal: []              // [{date, type, surah, verse, score, clipId, label}]
       });
@@ -203,6 +276,38 @@ const Progress = {
     this.save();
     this.refreshStreak();
     return this.data.verified[key];
+  },
+
+  /* --- Récitation verset par verset (traits verts / rouges) --- */
+  verseRecStatus(surah, verse) {
+    this.data.verseRecitation = this.data.verseRecitation || {};
+    return (this.data.verseRecitation[String(surah)] || {})[String(verse)] || null;
+  },
+
+  setVerseRecStatus(surah, verse, data) {
+    this.data.verseRecitation = this.data.verseRecitation || {};
+    const s = String(surah);
+    if (!this.data.verseRecitation[s]) this.data.verseRecitation[s] = {};
+    this.data.verseRecitation[s][String(verse)] = { ...data, date: Date.now() };
+    this.save();
+    return this.data.verseRecitation[s][String(verse)];
+  },
+
+  surahRecPassed(surah, total) {
+    for (let v = 1; v <= total; v++) {
+      const st = this.verseRecStatus(surah, v);
+      if (!st || !st.ok) return false;
+    }
+    return true;
+  },
+
+  surahRecScore(surah, total) {
+    let sum = 0, n = 0;
+    for (let v = 1; v <= total; v++) {
+      const st = this.verseRecStatus(surah, v);
+      if (st) { sum += st.score || 0; n++; }
+    }
+    return n ? Math.round(sum / n) : 0;
   },
 
   /* ordre du parcours : sourate 1 d'abord, puis 114 → 2 */
@@ -315,6 +420,14 @@ const Progress = {
     this.save();
   },
   letterDone(letter) { return this.data.literacy.lettersDone.includes(letter); },
+  stepDone(id) { return (this.data.literacy.stepsDone || []).includes(id); },
+  completeStep(id) {
+    if (!this.data.literacy.stepsDone) this.data.literacy.stepsDone = [];
+    if (!this.data.literacy.stepsDone.includes(id)) {
+      this.data.literacy.stepsDone.push(id);
+      this.save();
+    }
+  },
   completeLetter(letter) {
     if (!this.data.literacy.lettersDone.includes(letter)) {
       this.data.literacy.lettersDone.push(letter);

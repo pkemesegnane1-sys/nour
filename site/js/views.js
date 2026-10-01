@@ -4,20 +4,44 @@
 const View = {};
 
 /* ---------- Bloc verset (mise en page « Coran en français ») ---------- */
-function verseBlockHTML(a, { showTools = true, surahNum = null, current = false, masked = 0 } = {}) {
+/* Barre de retour en haut de page (navigation mobile) */
+function backBar(href, label) {
+  return `<div class="back-bar"><a href="${href}">← ${escapeHtml(label)}</a></div>`;
+}
+
+function verseBlockHTML(a, { showTools = true, surahNum = null, current = false, masked = 0, reciteMode = false } = {}) {
+  // Statut de récitation (trait vert / rouge) si connu
+  let statusCls = '', statusHtml = '';
+  if (surahNum && typeof Progress !== 'undefined' && Progress.data) {
+    const st = Progress.verseRecStatus(surahNum, a.number);
+    if (st) {
+      statusCls = st.ok ? 'verse-ok' : 'verse-ko';
+      const mode = st.companion ? ' · accompagné' : st.self ? ' · auto-éval.' : '';
+      statusHtml = st.ok
+        ? `<span class="verse-status ok">✓ ${st.score}%${mode}</span>`
+        : `<span class="verse-status ko">✗ ${st.score}% — à reprendre${mode}</span>`;
+    } else if (reciteMode) {
+      statusHtml = `<span class="verse-status none">à réciter</span>`;
+    }
+  }
   return `
-  <div class="verse ${current ? 'current' : ''} ${masked === 1 ? 'masked' : masked >= 2 ? 'masked masked-2' : ''}" id="verse-${a.number}">
+  <div class="verse ${current ? 'current' : ''} ${statusCls} ${masked === 1 ? 'masked' : masked >= 2 ? 'masked masked-2' : ''}" id="verse-${a.number}">
     <div class="verse-hdr">
       <div class="verse-num">${a.number}</div>
       <div class="muted" style="font-size:.82rem">Verset ${a.number}</div>
+      ${statusHtml}
     </div>
     <div class="verse-ar arabic">${escapeHtml(a.ar)}</div>
     <div class="verse-phon">${escapeHtml(a.phonetic)}</div>
     <div class="verse-fr">${escapeHtml(a.fr)}</div>
-    ${showTools && surahNum ? `
+    ${reciteMode && surahNum ? `
     <div class="verse-tools">
-      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();playOneAyah(${surahNum},${a.number})">🔊 Écouter ce verset</button>
-      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopOneAyah(${surahNum},${a.number})">🔁 Boucle ×${(Progress.data?.learning?.loops) || 5}</button>
+      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();reciteVerse(${surahNum},${a.number})">🎙 Réciter ce verset</button>
+      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopVerseHady(${surahNum},${a.number})">🔁 Écouter (Hady Touré)</button>
+    </div>` : ''}
+    ${showTools && !reciteMode && surahNum ? `
+    <div class="verse-tools">
+      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopVerseHady(${surahNum},${a.number})">🔊 Écouter avec Hady Touré</button>
       <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();speakArabic(${escapeHtml(JSON.stringify(a.ar))})">🗣 Prononcer</button>
     </div>` : ''}
   </div>`;
@@ -36,6 +60,22 @@ function surahHeaderHTML(s, extra = '') {
     </div>
     ${extra}
   </div>`;
+}
+
+/* Écoute d'un verset avec la voix de Mouhamed Hady Touré :
+   - si les repères A→B du verset sont marqués : boucle exacte du verset
+   - sinon : la sourate tourne en boucle (on suit le verset affiché) */
+function loopVerseHady(surah, verse) {
+  const loops = (Progress.data && Progress.data.learning && Progress.data.learning.loops) || 3;
+  const start = Progress.getMark(surah, verse);
+  const end = Progress.getMark(surah, verse + 1);
+  if (start != null && end != null && end > start) {
+    Player.playSegment(surah, start, end, loops, 'hady_hafs');
+    toast(`Boucle du verset ${verse} — Mouhamed Hady Touré ×${loops}`, 'ok');
+    return;
+  }
+  Player.playSurah(surah, { reciter: 'hady_hafs', loop: loops });
+  toast(`Mouhamed Hady Touré — sourate en boucle ×${loops}. Astuce : marquez les débuts de versets avec ⏱ dans le lecteur pour isoler ce verset.`, 'ok');
 }
 
 function playOneAyah(surah, verse) {
@@ -60,7 +100,8 @@ View.read = async function (n) {
   const s = await Quran.loadSurah(n);
   const prev = n > 1 ? n - 1 : null, next = n < 114 ? n + 1 : null;
 
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/lecture','Toutes les sourates')}
+
     <div class="row between" style="margin-bottom:1.15rem">
       <a class="btn btn-ghost btn-sm" href="#/lecture/1">← Toutes les sourates</a>
       <div class="row" style="gap:.55rem">
@@ -87,6 +128,7 @@ View.read = async function (n) {
             Idéal pour apprendre un verset avec <strong>Mouhamed Hady Touré</strong>.
           </p>
           <button class="btn btn-soft btn-sm" style="margin-top:.75rem" onclick="playSurahLoop(${n})">🔁 Écouter la sourate en boucle</button>
+          <a class="btn btn-ghost btn-sm" style="margin-top:.55rem;display:inline-flex" href="#/ecouter/${n}">🎧 Mode écoute libre</a>
         </div>
         <div class="card">
           <h4>Aller à un verset</h4>
@@ -112,14 +154,15 @@ function playSurahLoop(n) {
 function goToVerse(n) {
   const v = +($('#goto-verse') || {}).value;
   const el = document.getElementById('verse-' + v);
-  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('current'); }
+  if (el) { if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('current'); }
 }
 
 /* Liste de toutes les sourates */
 View.surahList = async function () {
   await Quran.loadIndex();
   const app = $('#app');
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/accueil','Accueil')}
+
     <div class="kicker">Le Coran en français</div>
     <h1>Les 114 sourates</h1>
     <p class="lead" style="margin:.75rem 0 1.65rem">Texte arabe, phonétique et traduction de Muhammad Hamidullah, verset par verset — avec l'audio de Mouhamed Hady Touré.</p>
@@ -177,7 +220,8 @@ const Session = {
     Quran.loadSurah(it.surah).then(s => {
       const a = s.ayahs[it.verse - 1];
       const isLast = this.idx >= this.items.length - 1;
-      app.innerHTML = `
+      app.innerHTML = `${backBar('#/quotidien','Apprentissage quotidien')}
+
         <div class="row between" style="margin-bottom:1.15rem">
           <div>
             <div class="kicker">Séance du jour · verset ${this.idx + 1} / ${this.items.length}</div>
@@ -231,6 +275,8 @@ const Session = {
         </div>`;
       this.renderActions();
       Player.stop();
+      Player.setReciter(l.reciter);
+      Player.setRate(l.rate); // ralenti volontaire pour la mémorisation
     });
   },
 
@@ -375,7 +421,8 @@ View.daily = async function () {
   if (!p.learningUnlocked) {
     const done = Progress.verifiedCount();
     const need = 3;
-    app.innerHTML = `
+    app.innerHTML = `${backBar('#/accueil','Accueil')}
+
       <div class="kicker">Phase 2</div>
       <h1>L'apprentissage quotidien</h1>
       <div class="locked-overlay" style="margin-top:1.65rem">
@@ -405,7 +452,8 @@ View.daily = async function () {
   const today = p.dailyLog[todayKey()] || { versesLearned: 0, recitations: 0, minutes: 0 };
   const remaining = Math.max(0, l.dailyGoal - (today.versesLearned || 0));
 
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/accueil','Accueil')}
+
     <div class="kicker">Phase 2 · apprentissage</div>
     <h1>Votre apprentissage quotidien</h1>
     <p class="lead" style="margin:.75rem 0 1.85rem">Chaque jour : ${l.dailyGoal} verset${l.dailyGoal > 1 ? 's' : ''}, avec la voix de ${escapeHtml(RECITERS[l.reciter].name)}, répétés en boucle. La régularité fait toute la différence.</p>
@@ -415,6 +463,22 @@ View.daily = async function () {
       <div class="stat-card"><div class="stat-num">${today.versesLearned || 0}<small>/${l.dailyGoal}</small></div><div class="stat-lbl">Aujourd'hui</div><div class="stat-sub">${remaining ? `Encore ${remaining} verset${remaining > 1 ? 's' : ''}` : 'Objectif atteint ✓'}</div></div>
       <div class="stat-card"><div class="stat-num">${p.streak.current}</div><div class="stat-lbl">Jours consécutifs</div><div class="stat-sub">${p.streak.current === 0 ? 'Le premier pas compte' : `Record : ${p.streak.best} jours`}</div></div>
       <div class="stat-card"><div class="stat-num">${Progress.overallProgress()}<small>%</small></div><div class="stat-lbl">Progression globale</div><div class="stat-sub">un voyage, pas une course</div></div>
+    </div>
+
+    <div class="grid grid-2" style="margin-bottom:1.85rem">
+      <div class="card gold-edge">
+        <div class="badge badge-gold">Mode Apprentissage</div>
+        <h3 style="margin:.55rem 0">🎯 Écouter pour apprendre</h3>
+        <p class="muted">Mémorisation guidée : verset par verset — <strong>écouter → répéter → mémoriser</strong>,
+        avec vérification et traits verts. C'est ici qu'on retient le Coran.</p>
+      </div>
+      <div class="card">
+        <div class="badge badge-soft">Mode Écoute</div>
+        <h3 style="margin:.55rem 0">🎧 Écouter le Coran simplement</h3>
+        <p class="muted">Comme dans « Le Coran en français » : <strong>écoute libre</strong>, sourate par sourate,
+        en suivant le texte — <strong>sans test ni score</strong>. Pour la contemplation et la familiarisation.</p>
+        <a class="btn btn-ghost btn-sm" href="#/ecouter" style="margin-top:.65rem">🎧 Ouvrir le mode écoute</a>
+      </div>
     </div>
 
     <div class="grid grid-2" style="margin-top:1.85rem;align-items:start">
@@ -515,7 +579,8 @@ function estimateTime(perDay) {
 View.alphabet = function () {
   const app = $('#app');
   const done = Progress.data ? Progress.data.literacy.lettersDone.length : 0;
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/accueil','Accueil')}
+
     <div class="kicker">Alphabétisation · module 1</div>
     <h1>Les lettres, votre premier pas</h1>
     <p class="lead" style="margin:.75rem 0 .55rem">
@@ -594,6 +659,223 @@ function answerLetterQuiz(btn, correct) {
   $('#quiz-feedback').innerHTML = correct
     ? '<div class="info-box">✓ Excellent ! <button class="btn btn-soft btn-sm" style="margin-left:.65rem" onclick="renderLetterQuiz()">Question suivante</button></div>'
     : '<div class="warn-box">Pas tout à fait — la bonne réponse est en vert. <button class="btn btn-soft btn-sm" style="margin-left:.65rem" onclick="renderLetterQuiz()">Réessayer</button></div>';
+}
+
+/* ============================ PARCOURS DES RÈGLES DE BASE (étape par étape) ============================ */
+
+function courseStepHTML(step, idx) {
+  const total = COURSE_STEPS.length;
+  const prev = idx > 0 ? idx : null;
+  const next = idx < total - 1 ? idx + 1 : null;
+  const done = Progress.stepDone(step.id);
+
+  let lesson = '';
+
+  if (step.kind === 'letters') {
+    lesson = `
+      <div class="card pad-lg">
+        <p class="muted" style="margin:.35rem 0 1.25rem">Apprenez ces <strong>${step.letters.length} lettres</strong> : écoutez le nom, le son, puis lisez le mot exemple.
+        <em>Méthode : 3 à 4 lettres par jour, en écrivant chaque lettre une fois.</em></p>
+        ${step.letters.map(i => {
+          const L = ARABIC_LETTERS[i];
+          return `
+          <div class="tajweed-rule" style="margin-bottom:1.05rem">
+            <div class="row" style="gap:1.15rem;align-items:center;flex-wrap:wrap">
+              <div class="arabic" style="font-size:3.6rem;color:var(--emerald-2);line-height:1.2;min-width:4.2rem;text-align:center">${L.l}</div>
+              <div style="flex:1;min-width:220px">
+                <div style="font-size:1.12rem;font-weight:700">${escapeHtml(L.name)} — « ${escapeHtml(L.sound)} »</div>
+                <div class="muted" style="font-size:.88rem;margin-top:.25rem">Translittération : <code>${escapeHtml(L.tr)}</code> · Mot exemple : <span class="arabic" dir="rtl" style="font-size:1.25rem">${L.word}</span> (${escapeHtml(L.wordFr)})</div>
+                <div class="syl-row" style="justify-content:flex-start;margin-top:.55rem">
+                  ${L.forms.map((f, k) => `<span class="syl" style="cursor:default">${f}<small style="display:block;font-size:.62rem;opacity:.65">${['isolée', 'initiale', 'médiane', 'finale'][k]}</small></span>`).join('')}
+                </div>
+              </div>
+              <div class="row" style="gap:.45rem">
+                <button class="btn btn-soft btn-sm" onclick="speakArabic('${L.name}')">🔊 Nom</button>
+                <button class="btn btn-soft btn-sm" onclick="speakArabic('${L.l}')">🔊 Son</button>
+                <button class="btn btn-soft btn-sm" onclick="speakArabic('${L.word}')">🔊 Mot</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  if (step.kind === 'haraka') {
+    const h = HARAKAT.find(x => x.id === step.haraka) || HARAKAT[0];
+    const isVowel = !!VOWEL_MARKS[h.id];
+    const rows = VOWEL_ROWS.slice(0, 6);
+    lesson = `
+      <div class="card pad-lg">
+        <div class="center" style="margin:.35rem 0 1.15rem">
+          <div class="arabic" style="font-size:4.6rem;color:var(--emerald-2);line-height:1.25">${isVowel ? 'ب' + VOWEL_MARKS[h.id] : h.ex}</div>
+          <div style="font-size:1.18rem;font-weight:700;margin-top:.35rem">${escapeHtml(h.name)} — ${escapeHtml(h.sound)}</div>
+        </div>
+        <div class="info-box">${escapeHtml(h.desc)}</div>
+        ${isVowel ? `
+        <h4 style="margin:1.35rem 0 .65rem">Lisez à voix haute (cliquez pour écouter)</h4>
+        <div class="syl-row">
+          ${rows.map(r => `<button class="syl" onclick="speakArabic('${r.l}${VOWEL_MARKS[h.id]}')">${r.l}${VOWEL_MARKS[h.id]}<small style="display:block;font-size:.68rem;opacity:.7">${escapeHtml(r.reads[h.id])}</small></button>`).join('')}
+        </div>` : `
+        <h4 style="margin:1.35rem 0 .65rem">Exemples à écouter</h4>
+        <div class="syl-row">
+          ${h.id === 'tanwin' ? ['بًا', 'بٍ', 'بٌ', 'كِتَابًا', 'عَلِيمٌ', 'شَكُورٍ'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('') : ''}
+          ${h.id === 'shadda' ? ['بّ', 'مُحَمَّد', 'إِنَّ', 'اللَّهُ', 'جَنَّة'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('') : ''}
+          ${h.id === 'madd' ? ['بَا', 'بِي', 'بُو', 'قَالَ', 'نُور', 'فِي'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('') : ''}
+          ${h.id === 'sukun' ? ['بْ', 'تْ', 'مْ', 'قُلْ', 'أَحَدْ', 'الْفَلَقِ'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('') : ''}
+        </div>`}
+        <div class="warn-box" style="margin-top:1.25rem"><strong>Astuce :</strong> ${escapeHtml(h.desc)} Une seule chose par séance — la régularité fait le reste.</div>
+      </div>`;
+  }
+
+  if (step.kind === 'syllables') {
+    lesson = `
+      <div class="card pad-lg">
+        <p class="muted" style="margin:.35rem 0 1.15rem">Le cœur de la <strong>Noorani Qaida</strong> : on assemble d'abord <strong>deux sons</strong>,
+        puis trois. Ne passez à l'étape suivante que lorsque la précédente est fluide.</p>
+        <h4>1. Deux sons (consonne + voyelle longue)</h4>
+        <div class="syl-row">
+          ${['بَا', 'بِي', 'بُو', 'تَا', 'تِي', 'تُو', 'مَا', 'مِي', 'مُو', 'نَا', 'نِي', 'نُو'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('')}
+        </div>
+        <h4 style="margin:1.35rem 0 .65rem">2. Trois sons (syllabes fermées)</h4>
+        <div class="syl-row">
+          ${['بَاب', 'بَيْت', 'تَاب', 'نُور', 'مَاء', 'يَد', 'دَار', 'تِين', 'سَمَاء', 'لَيْل'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('')}
+        </div>
+        <h4 style="margin:1.35rem 0 .65rem">3. Le jeu des sons : ba-bi-bou</h4>
+        <div class="syl-row">
+          ${['بَ', 'بِ', 'بُ', 'تَ', 'تِ', 'تُ', 'ثَ', 'ثِ', 'ثُ', 'جَ', 'جِ', 'جُ', 'مَ', 'مِ', 'مُ'].map(s => `<button class="syl" onclick="speakArabic('${s}')">${s}</button>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  if (step.kind === 'words') {
+    const words = [
+      { s: 'بَاب', p: 'bāb', f: 'porte' }, { s: 'بَيْت', p: 'bayt', f: 'maison' },
+      { s: 'نُور', p: 'nūr', f: 'lumière' }, { s: 'مَاء', p: 'māʾ', f: 'eau' },
+      { s: 'يَد', p: 'yad', f: 'main' }, { s: 'دَار', p: 'dār', f: 'maison' },
+      { s: 'كِتَاب', p: 'kitāb', f: 'livre' }, { s: 'شَمْس', p: 'shams', f: 'soleil' }
+    ];
+    lesson = `
+      <div class="card pad-lg">
+        <p class="muted" style="margin:.35rem 0 1.15rem">Lisez lentement, <strong>15 minutes par jour</strong> suffisent. Quand un mot résiste,
+        isolez ses syllabes puis reconstituez-le. Cliquez pour écouter chaque mot.</p>
+        <div class="grid grid-2">
+          ${words.map(w => `
+            <div class="card" style="padding:1.05rem;display:flex;gap:.85rem;align-items:center">
+              <div class="arabic" style="font-size:2.15rem;color:var(--emerald-2)">${w.s}</div>
+              <div><div style="font-weight:600">« ${escapeHtml(w.p)} »</div><div class="muted" style="font-size:.85rem">${escapeHtml(w.f)}</div></div>
+              <button class="btn btn-soft btn-sm" style="margin-left:auto" onclick="speakArabic('${w.s}')">🔊</button>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  if (step.kind === 'verses') {
+    lesson = `
+      <div class="card pad-lg">
+        <p class="muted" style="margin:.35rem 0 1.15rem">Les mots que vous allez retrouver dans les plus courtes sourates.
+        Écoutez, répétez, puis tentez de lire sans l'audio.</p>
+        <h4>Al-Faatiha (l'Ouverture)</h4>
+        <div class="syl-row">
+          ${[['بِسْمِ', 'Au nom de'], ['الرَّحْمَٰنِ', 'le Tout Miséricordieux'], ['الرَّحِيمِ', 'le Très Miséricordieux'], ['الْحَمْدُ', 'La louange'], ['رَبِّ', 'appartient au Seigneur'], ['الْعَالَمِينَ', 'des mondes']].map(([s, f]) => `
+            <button class="syl" onclick="speakArabic('${s}')" title="${escapeHtml(f)}">${s}<small style="display:block;font-size:.66rem;opacity:.7">${escapeHtml(f)}</small></button>`).join('')}
+        </div>
+        <h4 style="margin:1.35rem 0 .65rem">Al-Ikhlas, Al-Falaq, An-Nas</h4>
+        <div class="syl-row">
+          ${[['قُلْ', 'Dis'], ['اللَّهُ', 'Allah'], ['أَحَدْ', 'Un'], ['الْفَلَقِ', "l'Aube"], ['النَّاسِ', 'des hommes'], ['الْإِخْلَاصِ', 'la Pureté']].map(([s, f]) => `
+            <button class="syl" onclick="speakArabic('${s}')" title="${escapeHtml(f)}">${s}<small style="display:block;font-size:.66rem;opacity:.7">${escapeHtml(f)}</small></button>`).join('')}
+        </div>
+        <div class="row" style="margin-top:1.55rem">
+          <a class="btn btn-primary" href="#/lecture/1">Lire Al-Faatiha complète →</a>
+          <a class="btn btn-ghost" href="#/lecture/114">Lire An-Nas →</a>
+        </div>
+      </div>`;
+  }
+
+  return `
+    ${backBar('#/apprendre', 'Règles de base')}
+    <div class="kicker">Règles de base · Étape ${idx + 1} sur ${total}${done ? ' · ✓ terminée' : ''}</div>
+    <h1>${escapeHtml(step.title)}</h1>
+    <p class="lead" style="margin:.75rem 0 .85rem">${escapeHtml(step.desc || '')}</p>
+    <div class="bar" style="margin:0 0 1.55rem"><span style="width:${Math.round((idx + 1) / total * 100)}%"></span></div>
+    ${lesson}
+    <div class="card pad-lg" style="margin-top:1.15rem">
+      <h4>Mini-quiz de l'étape</h4>
+      <div id="course-quiz" style="margin-top:.85rem"></div>
+    </div>
+    <div class="row" style="margin-top:1.55rem;justify-content:space-between;flex-wrap:wrap;gap:.65rem">
+      <div class="row" style="gap:.55rem">
+        ${prev != null ? `<a class="btn btn-soft" href="#/cours/${prev}">← Étape précédente</a>` : ''}
+        <a class="btn btn-ghost" href="#/apprendre">Toutes les étapes</a>
+      </div>
+      <div class="row" style="gap:.55rem">
+        <button class="btn btn-gold" onclick="completeCourseStep('${step.id}',${idx})">✓ J'ai maîtrisé cette étape</button>
+        ${next != null ? `<a class="btn btn-primary" href="#/cours/${next}">Étape suivante →</a>` : `<a class="btn btn-primary" href="#/apprendre">Parcours terminé 🎉</a>`}
+      </div>
+    </div>`;
+}
+
+View.course = function (stepIdx) {
+  const app = $('#app');
+  // #/cours/3 = étape 3 (1-indexé) ; #/cours = prochaine étape à faire
+  const i = (stepIdx == null) ? nextCourseStep() : Math.max(0, Math.min(COURSE_STEPS.length - 1, (+stepIdx) - 1));
+  const step = COURSE_STEPS[i];
+  app.innerHTML = courseStepHTML(step, i);
+  renderCourseQuiz(step);
+};
+
+function renderCourseQuiz(step) {
+  const box = $('#course-quiz');
+  if (!box) return;
+  const q = makeCourseQuiz(step);
+  box.innerHTML = `
+    <h4 style="margin:.15rem 0 .65rem">${escapeHtml(q.question)}</h4>
+    <div class="center" style="margin:.55rem 0">${q.display}</div>
+    ${q.options.map(o => `<button class="quiz-opt" data-correct="${o.correct}" onclick="answerCourseQuiz(this,${o.correct})">${escapeHtml(o.text)}</button>`).join('')}
+    <div id="cq-feedback" style="margin-top:.85rem"></div>`;
+}
+
+function answerCourseQuiz(btn, correct) {
+  $$('#course-quiz .quiz-opt').forEach(o => {
+    o.disabled = true;
+    if (o.dataset.correct === 'true') o.classList.add('correct');
+  });
+  if (!correct) btn.classList.add('wrong');
+  const fb = $('#cq-feedback');
+  if (fb) fb.innerHTML = correct
+    ? '<div class="info-box">✓ Excellent ! <button class="btn btn-soft btn-sm" style="margin-left:.65rem" onclick="renderCourseQuiz(COURSE_STEPS[' + currentCourseIdx() + '])">Autre question</button></div>'
+    : '<div class="warn-box">Pas tout à fait — la bonne réponse est en vert. <button class="btn btn-soft btn-sm" style="margin-left:.65rem" onclick="renderCourseQuiz(COURSE_STEPS[' + currentCourseIdx() + '])">Réessayer</button></div>';
+}
+
+function currentCourseIdx() {
+  const m = (location.hash || '').match(/^#\/cours\/(\d+)$/);
+  if (m) return Math.max(0, Math.min(COURSE_STEPS.length - 1, (+m[1]) - 1));
+  return nextCourseStep();
+}
+
+function completeCourseStep(id, idx) {
+  Progress.completeStep(id);
+  // les lettres de l'étape sont connues aussi dans l'alphabet
+  const step = COURSE_STEPS[idx];
+  if (step && step.kind === 'letters') {
+    step.letters.forEach(i => Progress.completeLetter(ARABIC_LETTERS[i].l));
+  }
+  toast('Étape maîtrisée ✓ Masha\'Allah !', 'ok');
+  const nxt = idx + 1;
+  if (nxt < COURSE_STEPS.length) {
+    location.hash = '#/cours/' + (nxt + 1);
+  } else {
+    showModal(`
+      <div class="center">
+        <div style="font-size:3.2rem">🎉</div>
+        <h2 style="margin:.65rem 0">Parcours des règles de base terminé !</h2>
+        <p class="lead">Vous connaissez l'alphabet, les voyelles et les premiers mots.
+        Poursuivez avec les modules avancés ou la mémorisation des sourates.</p>
+        <div class="row" style="justify-content:center;margin-top:1.55rem">
+          <a class="btn btn-primary" href="#/apprendre" onclick="closeModal()">Modules avancés</a>
+          <a class="btn btn-gold" href="#/parcours" onclick="closeModal()">Mon parcours Coran</a>
+        </div>
+      </div>`);
+  }
 }
 
 /* ============================ APPRENDRE (voyelles → mots → tajwid) ============================ */
@@ -716,13 +998,41 @@ View.learn = function (moduleId) {
       </div>`;
   }
 
-  app.innerHTML = `
+  const nextIdx = nextCourseStep();
+  const nextStep = COURSE_STEPS[nextIdx];
+  const courseHTML = `
+    <div class="card pad-lg" style="margin-bottom:1.85rem">
+      <div class="kicker">Étape par étape — dans l'ordre</div>
+      <h2 style="margin:.35rem 0 .55rem">Les règles de base : d'abord l'alphabet, puis les voyelles</h2>
+      <p class="muted" style="margin:0 0 1.05rem">
+        <strong>${(Progress.data ? Progress.data.literacy.stepsDone.length : 0)}/${COURSE_STEPS.length} étapes terminées.</strong>
+        L'alphabet → la Fatha → la Kasra → la Damma → le sukun, le tanwin, la shadda, le madd → les syllabes → les mots.
+        Une seule étape à la fois, avec écoute et mini-quiz.
+      </p>
+      <a class="btn btn-primary" href="#/cours/${nextIdx + 1}">▶ ${Progress.stepDone(nextStep.id) ? 'Réviser toutes les étapes' : 'Reprendre : ' + escapeHtml(nextStep.title)}</a>
+      <div style="margin-top:1.35rem">
+        ${COURSE_STEPS.map((s, i) => {
+          const done = Progress.stepDone(s.id);
+          const courant = i === nextIdx && !done;
+          return `<a href="#/cours/${i + 1}" style="display:flex;gap:.75rem;align-items:center;padding:.55rem .65rem;border-radius:.75rem;text-decoration:none;color:inherit;background:${done ? 'rgba(16,163,74,.07)' : courant ? 'rgba(194,154,69,.12)' : 'transparent'};margin:.25rem 0;border:1px solid ${courant ? 'rgba(194,154,69,.35)' : 'transparent'}">
+            <span style="min-width:1.85rem;height:1.85rem;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;background:${done ? 'var(--emerald)' : courant ? 'var(--gold)' : 'var(--sand)'};color:${done || courant ? '#fff' : 'var(--ink-2)'}">${done ? '✓' : i + 1}</span>
+            <span style="font-weight:600;flex:1">${escapeHtml(s.title)}</span>
+            <span class="muted" style="font-size:.82rem">${done ? 'terminée' : courant ? '▶ à faire' : ''}</span>
+          </a>`;
+        }).join('')}
+      </div>
+    </div>`;
+
+  app.innerHTML = `${backBar('#/alphabet','Apprendre à lire')}
+
     <div class="kicker">Alphabétisation · parcours complet</div>
     <h1>Apprendre à lire le Coran</h1>
     <p class="lead" style="margin:.75rem 0 1.55rem">
-      Six modules progressifs inspirés de la <strong>Noorani Qaida</strong> et des meilleures méthodes :
-      des lettres à la lecture fluide, un pas après l'autre.
+      La méthode <strong>Noorani Qaida</strong> pas à pas : des lettres à la lecture fluide,
+      en commençant toujours par les règles de base.
     </p>
+    ${courseHTML}
+    <div class="section-head"><div><div class="kicker">Pour aller plus loin</div><h2>Les 6 modules</h2></div></div>
     <div class="pill-tabs">${tabs}</div>
     ${body}`;
 
@@ -758,7 +1068,8 @@ function completeModule(id) {
 /* ============================ TAJWID ============================ */
 View.tajweed = function () {
   const app = $('#app');
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/apprendre','Les modules')}
+
     <div class="kicker">Alphabétisation · module 5</div>
     <h1>Les bases du tajwid</h1>
     <p class="lead" style="margin:.75rem 0 1.65rem">
@@ -787,7 +1098,8 @@ View.tajweed = function () {
 /* ============================ MÉTHODE ============================ */
 View.methode = function () {
   const app = $('#app');
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/accueil','Accueil')}
+
     <div class="kicker">La méthode Nour</div>
     <h1>Apprendre le Coran : la voie éprouvée</h1>
     <p class="lead" style="margin:.75rem 0 1.85rem">
@@ -887,7 +1199,8 @@ View.stats = async function () {
     });
   }
 
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/accueil','Accueil')}
+
     <div class="kicker">Ma progression</div>
     <h1>Chaque jour compte</h1>
     <p class="lead" style="margin:.75rem 0 1.65rem">Un voyage, pas une course. Voici l'état de votre chemin.</p>
@@ -992,7 +1305,8 @@ View.settings = function () {
   const app = $('#app');
   const u = Auth.current();
   const p = Progress.data;
-  app.innerHTML = `
+  app.innerHTML = `${backBar('#/accueil','Accueil')}
+
     <div class="kicker">Mon compte</div>
     <h1>Réglages</h1>
     <div class="grid grid-2" style="margin-top:1.65rem;align-items:start">
@@ -1095,3 +1409,141 @@ async function doReset() {
   toast('Progression réinitialisée.', 'ok');
   location.hash = '#/';
 }
+
+/* ============================ MODE ÉCOUTE LIBRE ============================
+   « Écouter le Coran simplement » — comme dans un site de Coran en français :
+   on suit le texte, sans test, sans score, sans pression. La contemplation.
+---------------------------------------------------------------------------- */
+const ListenState = { surah: 114, showPhon: true, showFr: true };
+
+const Listen = {
+  playAll() {
+    const n = ListenState.surah;
+    const r = RECITERS[Player.state.reciter] || RECITERS.hady_hafs;
+    Quran.loadSurah(n).then(s => {
+      if (r.type === 'ayah') {
+        // défilé verset par verset avec surlignage automatique
+        const queue = s.ayahs.slice(1).map(a => ({ surah: n, verse: a.number, loop: 1 }));
+        Player.playAyah(n, 1, 1, queue);
+        toast('Lecture verset par verset — le texte se surligne.', 'ok');
+      } else {
+        Player.playSurah(n, { reciter: r.id, loop: 1 });
+        toast(`${s.latin} — ${r.name} (sourate complète)`, 'ok');
+      }
+    });
+  },
+
+  togglePhon() {
+    ListenState.showPhon = !ListenState.showPhon;
+    $$('.verse-phon').forEach(el => el.classList.toggle('hidden', !ListenState.showPhon));
+    const b = $('#tgl-phon'); if (b) b.classList.toggle('active', ListenState.showPhon);
+  },
+
+  toggleFr() {
+    ListenState.showFr = !ListenState.showFr;
+    $$('.verse-fr').forEach(el => el.classList.toggle('hidden', !ListenState.showFr));
+    const b = $('#tgl-fr'); if (b) b.classList.toggle('active', ListenState.showFr);
+  },
+
+  setSurah(n) {
+    ListenState.surah = +n;
+    location.hash = '#/ecouter/' + n;
+  }
+};
+
+View.listen = async function (n) {
+  await Quran.loadIndex();
+  if (n) ListenState.surah = clamp(+n, 1, 114);
+  const app = $('#app');
+  app.innerHTML = `${backBar('#/quotidien','Apprentissage quotidien')}
+    <div class="center" style="padding:3rem"><div class="muted">Chargement…</div></div>`;
+  const s = await Quran.loadSurah(ListenState.surah);
+  const meta = Quran.meta(ListenState.surah);
+  const prev = ListenState.surah > 1 ? ListenState.surah - 1 : null;
+  const next = ListenState.surah < 114 ? ListenState.surah + 1 : null;
+
+  app.innerHTML = `${backBar('#/quotidien','Apprentissage quotidien')}
+    <div class="kicker">Mode écoute · sans test ni score</div>
+    <h1>🎧 Écouter le Coran</h1>
+    <p class="lead" style="margin:.75rem 0 1.65rem">
+      Comme dans « Le Coran en français » : écoutez librement, sourate par sourate,
+      en suivant le texte arabe, la phonétique et la traduction. Rien à valider — juste écouter et méditer.
+    </p>
+
+    <div class="grid grid-2" style="margin-bottom:1.65rem">
+      <div class="card">
+        <div class="badge badge-soft">Mode Écoute</div>
+        <h3 style="margin:.5rem 0">🎧 Écouter le Coran simplement</h3>
+        <p class="muted">Vous êtes ici : lecture libre, sans pression.</p>
+      </div>
+      <div class="card card-click" onclick="location.hash='#/quotidien'">
+        <div class="badge badge-gold">Mode Apprentissage</div>
+        <h3 style="margin:.5rem 0">🎯 Écouter pour apprendre</h3>
+        <p class="muted">Mémorisation guidée avec vérification → passer en mode apprentissage.</p>
+      </div>
+    </div>
+
+    <div class="card pad-lg" style="margin-bottom:1.35rem">
+      <div class="row between">
+        <div class="row" style="gap:.55rem">
+          ${prev ? `<a class="btn btn-ghost btn-sm" href="#/ecouter/${prev}">← ${escapeHtml(Quran.meta(prev).latin)}</a>` : ''}
+          <select class="select" style="max-width:230px" onchange="Listen.setSurah(this.value)">
+            ${Quran.surahs.map(x => `<option value="${x.number}" ${x.number === ListenState.surah ? 'selected' : ''}>${x.number}. ${escapeHtml(x.latin)}</option>`).join('')}
+          </select>
+          ${next ? `<a class="btn btn-ghost btn-sm" href="#/ecouter/${next}">${escapeHtml(Quran.meta(next).latin)} →</a>` : ''}
+        </div>
+        <div class="row" style="gap:.55rem">
+          <button class="btn btn-soft btn-sm active" id="tgl-phon" onclick="Listen.togglePhon()">Phonétique</button>
+          <button class="btn btn-soft btn-sm active" id="tgl-fr" onclick="Listen.toggleFr()">Traduction</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:.95rem;gap:.65rem">
+        <label class="muted" style="font-size:.88rem">Récitateur
+          <select class="select" style="margin-left:.55rem;max-width:250px"
+            onchange="Player.setReciter(this.value);toast('Récitateur : '+RECITERS[this.value].name,'ok')">
+            ${Object.values(RECITERS).map(r => `<option value="${r.id}" ${Player.state.reciter === r.id ? 'selected' : ''}>${escapeHtml(r.name)}${r.star ? ' ★' : ''}${r.type === 'ayah' ? ' (par verset)' : ''}</option>`).join('')}
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="grid-split">
+      <div class="card pad-lg" id="verses-box">
+        ${s.ayahs.map(a => `
+          <div class="verse" id="verse-${a.number}">
+            <div class="verse-hdr">
+              <div class="verse-num">${a.number}</div>
+              <div class="muted" style="font-size:.82rem">Verset ${a.number}</div>
+            </div>
+            <div class="verse-ar arabic">${escapeHtml(a.ar)}</div>
+            <div class="verse-phon ${ListenState.showPhon ? '' : 'hidden'}">${escapeHtml(a.phonetic)}</div>
+            <div class="verse-fr ${ListenState.showFr ? '' : 'hidden'}">${escapeHtml(a.fr)}</div>
+          </div>`).join('')}
+      </div>
+      <div class="col" style="position:sticky;top:96px">
+        ${playerHTML({ surah: ListenState.surah, title: `${s.latin} — écoute libre`, sub: 'Suivez le texte, à votre rythme', mode: 'surah' })}
+        <div class="card">
+          <h4>Comment profiter de cette écoute ?</h4>
+          <div class="col" style="margin-top:.75rem;font-size:.93rem">
+            <div class="row" style="gap:.6rem;align-items:flex-start"><span class="badge badge-gold">1</span><span>Écoutez <strong>plusieurs fois</strong> sans lire, puis en suivant le texte.</span></div>
+            <div class="row" style="gap:.6rem;align-items:flex-start"><span class="badge badge-gold">2</span><span>Avec un récitateur « par verset », le texte <strong>se surligne</strong> automatiquement.</span></div>
+            <div class="row" style="gap:.6rem;align-items:flex-start"><span class="badge badge-gold">3</span><span>Pour <strong>mémoriser</strong>, passez en mode Apprentissage — là-bas, tout est guidé.</span></div>
+          </div>
+          <button class="btn btn-primary btn-sm" style="margin-top:.95rem;width:100%" onclick="Listen.playAll()">▶ Écouter cette sourate</button>
+          <a class="btn btn-ghost btn-sm" style="margin-top:.55rem;width:100%" href="#/reciter/${ListenState.surah}">🎯 L'apprendre verset par verset</a>
+        </div>
+      </div>
+    </div>`;
+
+  Player.stop();
+  Player.setRate(1); // écoute naturelle, sans ralenti
+  // Surlignage automatique du verset en cours (récitateurs « par verset »)
+  Player.on('track', (info) => {
+    if (!info || !info.verse) return;
+    const el = document.getElementById('verse-' + info.verse);
+    if (!el) return;
+    $$('.verse').forEach(x => x.classList.remove('current'));
+    el.classList.add('current');
+    if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+};

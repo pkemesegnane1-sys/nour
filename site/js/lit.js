@@ -174,3 +174,159 @@ function makeHarakatQuiz() {
     tip: h.desc
   };
 }
+
+/* =====================================================================
+   PARCOURS GUIDÉ DES RÈGLES DE BASE
+   Ordre imposé par l'apprenant : l'alphabet d'abord, puis la Fatha,
+   la Kasra, la Damma, etc. Une étape à la fois, avec écoute + quiz.
+   ===================================================================== */
+const COURSE_STEPS = [
+  { id: 'let1', kind: 'letters', letters: [0, 1, 2, 3], title: 'Alphabet — 1re leçon', desc: 'Alif, Bā, Tā, Thā : noms, sons et formes.' },
+  { id: 'let2', kind: 'letters', letters: [4, 5, 6, 7], title: 'Alphabet — 2e leçon', desc: 'Jīm, Ḥā, Khā, Dāl.' },
+  { id: 'let3', kind: 'letters', letters: [8, 9, 10, 11], title: 'Alphabet — 3e leçon', desc: 'Dhāl, Rā, Zāy, Sīn.' },
+  { id: 'let4', kind: 'letters', letters: [12, 13, 14, 15], title: 'Alphabet — 4e leçon', desc: 'Shīn, Ṣād, Ḍād, Ṭā.' },
+  { id: 'let5', kind: 'letters', letters: [16, 17, 18, 19], title: 'Alphabet — 5e leçon', desc: 'Ẓā, ʿAyn, Ghayn, Fā.' },
+  { id: 'let6', kind: 'letters', letters: [20, 21, 22, 23], title: 'Alphabet — 6e leçon', desc: 'Qāf, Kāf, Lām, Mīm.' },
+  { id: 'let7', kind: 'letters', letters: [24, 25, 26, 27], title: 'Alphabet — 7e leçon', desc: 'Nūn, Hā, Wāw, Yā : dernières lettres.' },
+  { id: 'fatha', kind: 'haraka', haraka: 'fatha', title: 'La Fatha (ـَ) — le son « a »', desc: 'La première voyelle : un trait au-dessus de la lettre.' },
+  { id: 'kasra', kind: 'haraka', haraka: 'kasra', title: 'La Kasra (ـِ) — le son « i »', desc: 'Un trait sous la lettre.' },
+  { id: 'damma', kind: 'haraka', haraka: 'damma', title: 'La Damma (ـُ) — le son « ou »', desc: 'Une petite wāw au-dessus de la lettre.' },
+  { id: 'sukun', kind: 'haraka', haraka: 'sukun', title: 'Le Sukūn (ـْ) — la lettre au repos', desc: 'Sans voyelle : la lettre se prononce seule.' },
+  { id: 'tanwin', kind: 'haraka', haraka: 'tanwin', title: 'Le Tanwīn — an / in / oun', desc: 'La double voyelle de fin de mot.' },
+  { id: 'shadda', kind: 'haraka', haraka: 'shadda', title: 'La Shadda (ـّ) — la lettre doublée', desc: 'La lettre prononcée deux fois, appuyée.' },
+  { id: 'madd', kind: 'haraka', haraka: 'madd', title: 'Le Madd — les voyelles longues', desc: 'ā / ī / ū : on allonge le son.' },
+  { id: 'syllables', kind: 'syllables', title: 'Les syllabes : ba-bi-bou', desc: 'Assembler deux sons, puis trois.' },
+  { id: 'words', kind: 'words', title: 'Les premiers mots', desc: 'Lire des mots entiers, doucement.' },
+  { id: 'verses', kind: 'verses', title: 'Les premiers versets', desc: 'Les mots des plus courtes sourates.' }
+];
+
+/* Table de lecture : lettre + voyelle → son */
+const VOWEL_ROWS = [
+  { l: 'ب', reads: { fatha: 'ba', kasra: 'bi', damma: 'bou', sukun: 'b' } },
+  { l: 'ت', reads: { fatha: 'ta', kasra: 'ti', damma: 'tou', sukun: 't' } },
+  { l: 'م', reads: { fatha: 'ma', kasra: 'mi', damma: 'mou', sukun: 'm' } },
+  { l: 'ن', reads: { fatha: 'na', kasra: 'ni', damma: 'nou', sukun: 'n' } },
+  { l: 'س', reads: { fatha: 'sa', kasra: 'si', damma: 'sou', sukun: 's' } },
+  { l: 'ل', reads: { fatha: 'la', kasra: 'li', damma: 'lou', sukun: 'l' } },
+  { l: 'ك', reads: { fatha: 'ka', kasra: 'ki', damma: 'kou', sukun: 'k' } },
+  { l: 'ر', reads: { fatha: 'ra', kasra: 'ri', damma: 'rou', sukun: 'r' } }
+];
+const VOWEL_MARKS = { fatha: 'َ', kasra: 'ِ', damma: 'ُ', sukun: 'ْ' };
+
+/* Quiz d'une étape : renvoie {question, display, options[{text,correct}], tip} */
+function makeCourseQuiz(step) {
+  if (step.kind === 'letters') {
+    return makeLetterQuiz(step.letters[Math.floor(Math.random() * step.letters.length)]);
+  }
+  if (step.kind === 'haraka') {
+    const hid = step.haraka;
+    if (VOWEL_MARKS[hid]) {
+      const row = VOWEL_ROWS[Math.floor(Math.random() * VOWEL_ROWS.length)];
+      const display = `<div class="arabic" style="font-size:3.2rem;text-align:center">${row.l}${VOWEL_MARKS[hid]}</div>`;
+      const opts = ['fatha', 'kasra', 'damma', 'sukun'].map(id => ({ text: `« ${row.reads[id]} »`, correct: id === hid }));
+      return {
+        question: `Comment lit-on ce signe ?`,
+        display,
+        options: opts.sort(() => Math.random() - 0.5),
+        tip: `${row.l} + ${HARAKAT.find(h => h.id === hid).name} = « ${row.reads[hid]} »`
+      };
+    }
+    if (hid === 'tanwin') {
+      const items = [
+        { s: 'بًا', p: 'ban', ok: true }, { s: 'بٍ', p: 'bin' }, { s: 'بٌ', p: 'boun' }
+      ];
+      const target = items[Math.floor(Math.random() * 3)];
+      return {
+        question: 'Quel est le son de ce signe ?',
+        display: `<div class="arabic" style="font-size:3.2rem;text-align:center">${target.s}</div>`,
+        options: [
+          { text: '« ' + target.p + ' »', correct: true },
+          { text: '« ' + (target.p === 'ban' ? 'bin' : 'ban') + ' »', correct: false },
+          { text: '« ' + (target.p === 'boun' ? 'bā' : 'boun') + ' »', correct: false },
+          { text: '« b (sec) »', correct: false }
+        ].sort(() => Math.random() - 0.5),
+        tip: 'Le tanwīn ajoute « n » à la voyelle : ban / bin / boun.'
+      };
+    }
+    if (hid === 'shadda') {
+      return {
+        question: 'Que fait la shadda (ّ) ?',
+        display: `<div class="arabic" style="font-size:3.2rem;text-align:center">بّ</div>`,
+        options: [
+          { text: 'Elle double la lettre : « bb »', correct: true },
+          { text: 'Elle ajoute un « a »', correct: false },
+          { text: 'Elle fait taire la lettre', correct: false },
+          { text: 'Elle allonge le son', correct: false }
+        ].sort(() => Math.random() - 0.5),
+        tip: 'La shadda = la lettre deux fois, appuyée : مُحَمَّد (Muḥammad).'
+      };
+    }
+    // madd
+    return {
+      question: 'Que fait le madd (allongement) ?',
+      display: `<div class="arabic" style="font-size:3.2rem;text-align:center">بَا</div>`,
+      options: [
+        { text: 'Il allonge le son : « bā »', correct: true },
+        { text: 'Il double la lettre', correct: false },
+        { text: 'Il coupe la lecture', correct: false },
+        { text: 'Il ajoute un « n »', correct: false }
+      ].sort(() => Math.random() - 0.5),
+      tip: 'Alif, waw ou yā après une voyelle = on tient le son (2 temps).'
+    };
+  }
+  if (step.kind === 'syllables') {
+    const items = [
+      { s: 'بِي', p: 'bi' }, { s: 'بُو', p: 'bou' }, { s: 'مَا', p: 'mā' },
+      { s: 'تَا', p: 'tā' }, { s: 'نُو', p: 'nou' }, { s: 'سِي', p: 'si' }
+    ];
+    const t = items[Math.floor(Math.random() * items.length)];
+    return {
+      question: 'Comment lit-on cette syllabe ?',
+      display: `<div class="arabic" style="font-size:3.2rem;text-align:center">${t.s}</div>`,
+      options: [
+        { text: `« ${t.p} »`, correct: true },
+        ...items.filter(x => x.s !== t.s).sort(() => Math.random() - 0.5).slice(0, 3).map(x => ({ text: `« ${x.p} »`, correct: false }))
+      ].sort(() => Math.random() - 0.5),
+      tip: `${t.s} se lit « ${t.p} » : assemblage de deux sons.`
+    };
+  }
+  if (step.kind === 'words') {
+    const items = [
+      { s: 'بَاب', p: 'bāb', f: 'porte' }, { s: 'بَيْت', p: 'bayt', f: 'maison' },
+      { s: 'نُور', p: 'nūr', f: 'lumière' }, { s: 'مَاء', p: 'māʾ', f: 'eau' },
+      { s: 'يَد', p: 'yad', f: 'main' }, { s: 'دَار', p: 'dār', f: 'maison' }
+    ];
+    const t = items[Math.floor(Math.random() * items.length)];
+    return {
+      question: `Que signifie « ${t.p} » ?`,
+      display: `<div class="arabic" style="font-size:3.2rem;text-align:center">${t.s}</div>`,
+      options: [
+        { text: t.f, correct: true },
+        ...items.filter(x => x.s !== t.s).sort(() => Math.random() - 0.5).slice(0, 3).map(x => ({ text: x.f, correct: false }))
+      ].sort(() => Math.random() - 0.5),
+      tip: `${t.s} = ${t.f} (se lit « ${t.p} »).`
+    };
+  }
+  // versets
+  const items = [
+    { s: 'بِسْمِ', p: 'bismi', f: 'Au nom de' }, { s: 'الرَّحْمَٰنِ', p: 'ar-raḥmān', f: 'le Tout Miséricordieux' },
+    { s: 'الْحَمْدُ', p: 'al-ḥamdu', f: 'La louange' }, { s: 'الْعَالَمِينَ', p: 'al-ʿālamīn', f: 'des mondes' },
+    { s: 'قُلْ', p: 'qul', f: 'Dis :' }, { s: 'النَّاسِ', p: 'an-nās', f: 'des hommes' }
+  ];
+  const t = items[Math.floor(Math.random() * items.length)];
+  return {
+    question: `Que signifie ce mot du Coran ?`,
+    display: `<div class="arabic" style="font-size:3.2rem;text-align:center">${t.s}</div>`,
+    options: [
+      { text: t.f, correct: true },
+      ...items.filter(x => x.s !== t.s).sort(() => Math.random() - 0.5).slice(0, 3).map(x => ({ text: x.f, correct: false }))
+    ].sort(() => Math.random() - 0.5),
+    tip: `${t.s} = ${t.f} (« ${t.p} »).`
+  };
+}
+
+/* Étape suivante à faire (première non terminée) */
+function nextCourseStep() {
+  const i = COURSE_STEPS.findIndex(s => !Progress.stepDone(s.id));
+  return i === -1 ? COURSE_STEPS.length - 1 : i;
+}

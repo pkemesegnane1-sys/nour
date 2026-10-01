@@ -55,7 +55,7 @@ const Player = {
     reciter: 'hady_hafs',
     surah: null,
     verse: null,
-    rate: 0.75,
+    rate: 1,       // vitesse normale par défaut (le ralenti est un outil d'apprentissage)
     loopCount: 1,        // nombre de répétitions restantes
     loopTotal: 1,
     segment: null,       // {start, end} pour la boucle A→B
@@ -219,7 +219,10 @@ function fmtTime(sec) {
 }
 
 /* ---------- Lecteur HTML réutilisable ---------- */
-function playerHTML({ surah, verse = null, title = '', sub = '', mode = 'surah' } = {}) {
+let PlayerCtx = { surah: null, reciter: 'hady_hafs', loop: 1 };
+
+function playerHTML({ surah, verse = null, title = '', sub = '', mode = 'surah', reciter = 'hady_hafs', loop = 1 } = {}) {
+  PlayerCtx = { surah, reciter, loop };
   return `
   <div class="player" id="audio-player">
     <div class="row between">
@@ -266,6 +269,11 @@ function playerHTML({ surah, verse = null, title = '', sub = '', mode = 'surah' 
 let _segStart = null, _segEnd = null;
 
 function togglePlayer() {
+  // Si aucune source n'est chargée (page récitation / écoute) : charge la sourate
+  if (!Player.audio.getAttribute('src') && PlayerCtx.surah) {
+    Player.playSurah(PlayerCtx.surah, { reciter: PlayerCtx.reciter, loop: PlayerCtx.loop, rate: Player.state.rate });
+    return;
+  }
   Player.toggle();
 }
 

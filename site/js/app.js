@@ -4,16 +4,22 @@
 /* ============================ ROUTEUR ============================ */
 const routes = [
   { pattern: /^#?\/?$/, view: () => (Auth.current() ? View.home() : View.landing()) },
-  { pattern: /^#\/inscription$/, view: () => View.auth('register'), public: true },
-  { pattern: /^#\/connexion$/, view: () => View.auth('login'), public: true },
+  { pattern: /^#\/inscription$/, view: () => View.auth('register'), public: true, authPage: true },
+  { pattern: /^#\/connexion$/, view: () => View.auth('login'), public: true, authPage: true },
   { pattern: /^#\/accueil$/, view: () => View.home() },
   { pattern: /^#\/parcours$/, view: () => View.path() },
   { pattern: /^#\/reciter\/(\d+)$/, view: m => View.recite(+m[1]) },
   { pattern: /^#\/quotidien$/, view: () => View.daily() },
+  { pattern: /^#\/ecouter$/, view: () => View.listen() },
+  { pattern: /^#\/ecouter\/(\d+)$/, view: m => View.listen(+m[1]) },
   { pattern: /^#\/session$/, view: () => View.session() },
   { pattern: /^#\/lecture$/, view: () => View.surahList() },
   { pattern: /^#\/lecture\/(\d+)$/, view: m => View.read(+m[1]) },
   { pattern: /^#\/alphabet$/, view: () => View.alphabet() },
+  { pattern: /^#\/cours$/, view: () => View.course() },
+  { pattern: /^#\/cours\/(\d+)$/, view: m => View.course(+m[1]) },
+  { pattern: /^#\/cours$/, view: () => View.course() },
+  { pattern: /^#\/cours\/(\d+)$/, view: m => View.course(+m[1]) },
   { pattern: /^#\/apprendre$/, view: () => View.learn() },
   { pattern: /^#\/apprendre\/([a-z]+)$/, view: m => View.learn(m[1]) },
   { pattern: /^#\/tajwid$/, view: () => View.tajweed() },
@@ -37,6 +43,12 @@ function router() {
       if (!r.public && !user) {
         toast('Créez un compte pour commencer votre voyage avec le Coran.', 'warn');
         location.hash = '#/inscription';
+        return;
+      }
+      // Déjà connecté : on ne ré-affiche jamais les pages de connexion/inscription
+      if (r.authPage && user) {
+        toast(`Bonjour à nouveau, ${escapeHtml(user.name)} ! Vous êtes déjà connecté(e).`, 'ok');
+        location.hash = '#/accueil';
         return;
       }
       renderTopbar();
@@ -217,6 +229,11 @@ View.auth = function (mode) {
             autocomplete="${isRegister ? 'new-password' : 'current-password'}" minlength="6">
           ${isRegister ? '<div class="hint">Il ne quitte jamais votre appareil — il est crypté en local.</div>' : ''}
         </div>
+        <label class="row" style="gap:.65rem;cursor:pointer;margin-top:.35rem">
+          <input type="checkbox" id="auth-remember" checked style="width:1.1rem;height:1.1rem">
+          <span style="font-size:.93rem;color:var(--ink-soft)"><strong>Se souvenir de moi</strong> sur cet appareil
+            <span class="muted">(je reste connecté à chaque visite)</span></span>
+        </label>
         <button class="btn btn-primary btn-lg" type="submit" style="margin-top:.65rem">
           ${isRegister ? 'Créer mon compte et commencer' : 'Se connecter'}
         </button>
@@ -239,14 +256,18 @@ View.auth = function (mode) {
 async function submitAuth(e, mode) {
   e.preventDefault();
   try {
+    const remember = $('#auth-remember') ? $('#auth-remember').checked : true;
     const payload = {
       name: $('#auth-name') ? $('#auth-name').value : '',
       email: $('#auth-email').value,
-      password: $('#auth-pass').value
+      password: $('#auth-pass').value,
+      remember
     };
     const user = mode === 'register' ? await Auth.register(payload) : await Auth.login(payload);
     Progress.load();
-    toast(`Bienvenue ${user.name} ! Votre voyage commence.`, 'ok');
+    toast(mode === 'register'
+      ? `Bienvenue ${user.name} ! Votre voyage commence.`
+      : `Ravi de vous revoir, ${user.name} !`, 'ok');
     location.hash = mode === 'register' ? '#/parcours' : '#/accueil';
   } catch (err) {
     toast(escapeHtml(err.message), 'err');
@@ -418,6 +439,7 @@ View.path = async function () {
   }).join('');
 
   $('#app').innerHTML = `
+    ${backBar('#/accueil','Accueil')}
     <div class="kicker">Phase 1 · récitation guidée</div>
     <h1>Ma voie de récitation</h1>
     <p class="lead" style="margin:.75rem 0 1.65rem">
@@ -475,7 +497,15 @@ View.path = async function () {
     <div class="path-grid">${cells}</div>`;
 };
 
-/* ============================ RÉCITATION D'UNE SOURATE (passerelle) ============================ */
+/* ============================ RÉCITATION VERSER PAR VERSER ============================
+   1. L'apprenant récite chaque verset au micro
+   2. Traît VERT si bien récité, trait ROUGE si mal récité (retour immédiat)
+   3. L'apprenant reprend les versets rouges jusqu'au vert
+   4. C'est ENSUITE l'apprenant qui valide : « cette sourate est bien retenue »
+   5. → passage à la sourate suivante, ainsi de suite
+------------------------------------------------------------------------------------ */
+const ReciteState = { surah: null, verse: null };
+
 View.recite = async function (n) {
   n = +n;
   await Quran.loadIndex();
@@ -490,29 +520,31 @@ View.recite = async function (n) {
   app.innerHTML = '<div class="center" style="padding:4rem"><div class="muted">Chargement…</div></div>';
   const s = await Quran.loadSurah(n);
   const next = Progress.nextStep(n);
-  const verified = Progress.isVerified(n);
   const nextMeta = next ? Quran.meta(next) : null;
+  const verified = Progress.isVerified(n);
+  const total = s.numberOfAyahs;
+  ReciteState.surah = n;
+  ReciteState.verse = null;
 
-  app.innerHTML = `
-    <div class="row between" style="margin-bottom:1.15rem">
-      <a class="btn btn-ghost btn-sm" href="#/parcours">← Mon parcours</a>
-      <span class="badge ${verified ? 'badge-ok' : 'badge-gold'}">
-        ${verified ? `✓ Sourate validée (${Progress.data.verified[String(n)].score}%)` : 'Étape en cours'}
+  app.innerHTML = `${backBar('#/parcours','Mon parcours')}
+
+    <div class="row between" style="margin-bottom:.65rem">
+      <span class="badge ${verified ? 'badge-ok' : 'badge-gold'}" id="surah-status-badge">
+        ${verified ? `✓ Sourate validée (${Progress.data.verified[String(n)].score}%)` : 'Étape en cours — récitez verset par verset'}
       </span>
     </div>
 
     ${surahHeaderHTML(s, `
       <div class="row" style="margin-top:1.15rem;gap:.55rem">
-        <span class="badge badge-soft">Écouter</span>
-        <span class="badge badge-soft">Répéter</span>
-        <span class="badge badge-soft">Vérifier</span>
-        ${verified ? `<span class="badge badge-ok">Validée</span>` : ''}
+        <span class="badge badge-soft">🎙 Réciter chaque verset</span>
+        <span class="badge badge-ok">Vert = bien récité</span>
+        <span class="badge badge-err">Rouge = à reprendre</span>
       </div>`)}
 
     <div class="grid-split">
       <div class="col">
         <div class="card pad-lg" id="verses-box">
-          ${s.ayahs.map(a => verseBlockHTML(a, { surahNum: n })).join('')}
+          ${s.ayahs.map(a => verseBlockHTML(a, { surahNum: n, reciteMode: true })).join('')}
         </div>
       </div>
 
@@ -521,26 +553,31 @@ View.recite = async function (n) {
     surah: n,
     title: `${s.latin} — écoute active`,
     sub: 'Mouhamed Hady Touré · Hafs \'an Asim',
-    mode: 'surah'
+    mode: 'segment'
   })}
 
-        <div class="card">
-          <h3>🎙 Votre récitation</h3>
-          <p class="muted" style="margin:.55rem 0 .35rem">
-            Récitez ${s.numberOfAyahs > 6 ? 'les versets de cette sourate' : 'toute la sourate'} à voix haute.
-            L'application vérifie votre prononciation (seuil : ${Progress.data.settings.threshold}%).
-          </p>
-          <button class="btn btn-primary" style="margin-top:.85rem;width:100%" onclick="startVerify(${n})">
-            ${verified ? '↻ Re-vérifier ma récitation' : '▶ Commencer la vérification'}
-          </button>
+        <div class="card" id="recite-console">
+          <h3>🎙 Console de récitation</h3>
+          <div id="console-body">
+            <p class="muted" style="margin-top:.55rem">
+              Cliquez sur <strong>« 🎙 Réciter ce verset »</strong> à côté d'un verset pour commencer.
+              Écoutez d'abord, puis récitez : le verset surlignera en
+              <span class="verse-status ok">✓ vert</span> ou
+              <span class="verse-status ko">✗ rouge</span>.
+            </p>
+          </div>
         </div>
 
-        <div class="card">
-          <h4>Conseils de récitation</h4>
-          <div class="col" style="margin-top:.65rem;font-size:.92rem">
-            <div class="row" style="gap:.55rem;align-items:flex-start"><span class="badge badge-gold">1</span><span>Écoutez la sourate <strong>au moins 3 fois</strong> avant de réciter.</span></div>
-            <div class="row" style="gap:.55rem;align-items:flex-start"><span class="badge badge-gold">2</span><span>Répétez <strong>verset par verset</strong> avec le bouton boucle.</span></div>
-            <div class="row" style="gap:.55rem;align-items:flex-start"><span class="badge badge-gold">3</span><span>Ralentissez : la qualité prime sur la vitesse.</span></div>
+        <div class="card" id="recite-progress-card">
+          <h4>Progression de la sourate</h4>
+          <div class="bar" style="margin:.75rem 0"><span id="recite-bar" style="width:0%"></span></div>
+          <div class="muted" id="recite-count">0 verset validé sur ${total}</div>
+          <button class="btn btn-gold" id="btn-validate-surah" style="margin-top:.95rem;width:100%"
+            onclick="validateSurahRetained(${n})" disabled>
+            ✓ Cette sourate est bien retenue
+          </button>
+          <div class="hint" id="validate-hint" style="margin-top:.55rem">
+            Récitez tous les versets en vert, puis validez vous-même la sourate pour passer à la suivante.
           </div>
         </div>
 
@@ -552,66 +589,194 @@ View.recite = async function (n) {
           <a class="btn btn-primary btn-sm" href="#/reciter/${next}">Passer à l'étape suivante →</a>
         </div>` : ''}
       </div>
-    </div>
-
-    <div id="verify-modal-slot"></div>`;
+    </div>`;
 
   Player.stop();
   Player.setReciter('hady_hafs');
+  updateReciteProgress(n, total);
 };
 
-function startVerify(n) {
-  Quran.loadSurah(n).then(async s => {
-    // Vérification globale : on prend le texte complet (ou les 8 premiers versets pour les longues sourates)
-    const verses = s.numberOfAyahs <= 10 ? s.ayahs : s.ayahs.slice(0, 8);
-    const expectedAr = verses.map(a => a.ar).join(' ');
-    const expectedPhon = verses.map(a => a.phonetic).join(' — ');
-
-    showModal(`
-      <div class="row between">
-        <div>
-          <div class="kicker">Vérification de prononciation</div>
-          <h2>${escapeHtml(s.latin)}</h2>
+/* Ouvre la console de récitation pour un verset précis */
+function reciteVerse(n, v) {
+  n = +n; v = +v;
+  const consoleOuverte = ReciteState.verse != null;
+  ReciteState.verse = v;
+  if (!consoleOuverte && typeof pushUI === 'function') pushUI('console');
+  Quran.loadSurah(n).then(s => {
+    const a = s.ayahs[v - 1];
+    const body = $('#console-body');
+    if (body) {
+      body.innerHTML = `
+        <div class="row between" style="margin-bottom:.65rem">
+          <div class="badge badge-gold">Verset ${v} / ${s.numberOfAyahs}</div>
+          <button class="btn btn-soft btn-sm" onclick="loopVerseHady(${n},${v})">🔁 Écouter en boucle (Hady Touré)</button>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fermer</button>
-      </div>
-      <div class="info-box" style="margin:1.15rem 0">
-        ${s.numberOfAyahs <= 10
-        ? `Récitez la sourate complète (${s.numberOfAyahs} versets) à voix haute.`
-        : `Récitez les ${verses.length} premiers versets à voix haute :`}<br>
-        <span class="phon">${escapeHtml(expectedPhon)}</span>
-      </div>
-      <div id="verify-box"></div>
-    `);
+        <div class="arabic" dir="rtl" style="font-size:1.45rem;line-height:2;text-align:right">${escapeHtml(a.ar)}</div>
+        <div class="phon" style="margin:.45rem 0 .25rem">${escapeHtml(a.phonetic)}</div>
+        <div class="muted" style="font-size:.92rem;margin-bottom:.85rem">${escapeHtml(a.fr)}</div>
+        <div id="verify-box"></div>`;
+    }
+
+    // surlignage du verset en cours
+    $$('.verse').forEach(el => el.classList.remove('verse-reciting'));
+    const vel = document.getElementById('verse-' + v);
+    if (vel) vel.classList.add('verse-reciting');
 
     Verify.start({
-      expectedAr,
-      expectedPhon,
+      expectedAr: a.ar,
+      expectedPhon: a.phonetic,
       surah: n,
-      verse: null,
-      label: `Sourate ${n} — ${s.latin}`,
-      onPass: async (score, clipId, attempts, companion) => {
-        Progress.verifySurah(n, score, clipId, attempts);
-        closeModal();
-        const next = Progress.nextStep(n);
-        const unlockedLearning = Progress.data.learningUnlocked;
-        showModal(`
-          <div class="center">
-            <div style="font-size:3.2rem">🎉</div>
-            <h2 style="margin:.65rem 0">Sourate ${n} validée ${companion ? '(mode accompagné)' : ''} !</h2>
-            <p class="lead" style="margin:0 auto">
-              Score : <strong>${score}%</strong> — Masha'Allah.<br>
-              ${next ? `L'étape suivante est débloquée : <strong>${escapeHtml(Quran.meta(next).latin)}</strong>.` : 'Parcours complet !'}
-            </p>
-            ${unlockedLearning ? '<div class="info-box" style="margin-top:.85rem">🌙 L\'apprentissage quotidien est maintenant disponible.</div>' : ''}
-            <div class="row" style="justify-content:center;margin-top:1.65rem">
-              ${next ? `<a class="btn btn-primary" href="#/reciter/${next}" onclick="closeModal()">Étape suivante →</a>` : ''}
-              <a class="btn btn-gold" href="#/quotidien" onclick="closeModal()">Apprentissage quotidien</a>
-              <button class="btn btn-ghost" onclick="closeModal();View.recite(${n})">Revoir la sourate</button>
-            </div>
-          </div>`);
-        toast(`Sourate ${n} vérifiée ✓ ${score}%`, 'ok');
+      verse: v,
+      label: `Sourate ${n} — verset ${v}`,
+      onResult: (result, companion, clipId) => {
+        const thr = (Progress.data && Progress.data.settings && Progress.data.settings.threshold) || 60;
+        const self = !!(result && result.self);
+        const ok = companion || self || result.score >= thr;
+        Progress.setVerseRecStatus(n, v, {
+          score: result.score,
+          ok,
+          companion: !!companion,
+          self,
+          clipId: clipId || null
+        });
+        updateVerseVisual(n, v);
+        updateReciteProgress(n, s.numberOfAyahs);
+        if (ok) toast(`Verset ${v} : trait vert ✓ ${result.score}%`, 'ok');
+        else toast(`Verset ${v} : trait rouge — réessayez (${result.score}%)`, 'err');
+      },
+      onPass: () => {
+        // le verset est validé → on propose le verset suivant non vert
+        const nxt = nextIncompleteVerse(n, s.numberOfAyahs);
+        if (nxt) {
+          reciteVerse(n, nxt);
+          const el = document.getElementById('verse-' + nxt);
+          if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          toast('Tous les versets sont verts ! Validez la sourate ci-dessous. ✓', 'ok');
+          const btn = $('#btn-validate-surah');
+          if (btn) { btn.classList.add('btn-primary'); btn.scrollIntoView && btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        }
       }
     });
   });
 }
+
+function updateVerseVisual(n, v) {
+  const el = document.getElementById('verse-' + v);
+  if (!el) return;
+  const st = Progress.verseRecStatus(n, v);
+  el.classList.remove('verse-ok', 'verse-ko');
+  if (!st) return;
+  el.classList.add(st.ok ? 'verse-ok' : 'verse-ko');
+  const hdr = el.querySelector('.verse-hdr');
+  if (hdr) {
+    const old = hdr.querySelector('.verse-status');
+    if (old) old.remove();
+    const mode = st.companion ? ' · accompagné' : st.self ? ' · auto-éval.' : '';
+    hdr.insertAdjacentHTML('beforeend', st.ok
+      ? `<span class="verse-status ok">✓ ${st.score}%${mode}</span>`
+      : `<span class="verse-status ko">✗ ${st.score}% — à reprendre${mode}</span>`);
+  }
+}
+
+function nextIncompleteVerse(n, total) {
+  for (let v = 1; v <= total; v++) {
+    const st = Progress.verseRecStatus(n, v);
+    if (!st || !st.ok) return v;
+  }
+  return null;
+}
+
+function updateReciteProgress(n, total) {
+  let done = 0;
+  for (let v = 1; v <= total; v++) {
+    const st = Progress.verseRecStatus(n, v);
+    if (st && st.ok) done++;
+  }
+  const bar = $('#recite-bar');
+  if (bar) bar.style.width = Math.round(done / total * 100) + '%';
+  const cnt = $('#recite-count');
+  if (cnt) cnt.textContent = `${done} verset${done > 1 ? 's' : ''} validé${done > 1 ? 's' : ''} (vert) sur ${total}`;
+  const btn = $('#btn-validate-surah');
+  const hint = $('#validate-hint');
+  const allGreen = done === total;
+  if (btn) {
+    btn.disabled = !allGreen;
+    btn.classList.toggle('btn-gold', true);
+  }
+  if (hint) {
+    hint.textContent = allGreen
+      ? 'Tous les versets sont verts — à vous de valider si la sourate est bien retenue !'
+      : `Encore ${total - done} verset${total - done > 1 ? 's' : ''} à réciter correctement (au moins ${Progress.data.settings.threshold}%).`;
+  }
+}
+
+/* L'apprenant valide lui-même la mémorisation de la sourate */
+function validateSurahRetained(n) {
+  n = +n;
+  const s = Quran.cache[n];
+  if (!s) { Quran.loadSurah(n).then(() => validateSurahRetained(n)); return; }
+  const total = s.numberOfAyahs;
+  if (!Progress.surahRecPassed(n, total)) {
+    toast('Tous les versets doivent être en vert avant de valider.', 'warn');
+    return;
+  }
+  const score = Progress.surahRecScore(n, total);
+  showModal(`
+    <div class="center">
+      <div style="font-size:3rem">📖</div>
+      <h2 style="margin:.65rem 0">Sourate ${escapeHtml(s.latin)} — bien retenue ?</h2>
+      <p class="lead" style="margin:0 auto">
+        Vous certifiez avoir <strong>reçu et retenu</strong> cette sourate
+        (${total} versets · score moyen : <strong>${score}%</strong>).<br>
+        Une fois validée, l'étape suivante se débloque.
+      </p>
+      <label class="row" style="gap:.65rem;justify-content:center;margin-top:1.35rem;cursor:pointer">
+        <input type="checkbox" id="confirm-retained" style="width:1.15rem;height:1.15rem">
+        <span>Je certifie que cette sourate est bien retenue</span>
+      </label>
+      <div class="row" style="justify-content:center;margin-top:1.55rem">
+        <button class="btn btn-primary btn-lg" onclick="finishSurahValidation(${n})">✓ Valider et passer à la suite</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Continuer à réciter</button>
+      </div>
+    </div>`);
+}
+
+function finishSurahValidation(n) {
+  const cb = $('#confirm-retained');
+  if (!cb || !cb.checked) { toast('Veuillez cocher la certification.', 'warn'); return; }
+  const s = Quran.cache[n];
+  const total = s.numberOfAyahs;
+  const score = Progress.surahRecScore(n, total);
+  Progress.verifySurah(n, score, null, 1);
+  const next = Progress.nextStep(n);
+  const nextMeta = next ? Quran.meta(next) : null;
+  closeModal();
+  showModal(`
+    <div class="center">
+      <div style="font-size:3.2rem">🎉</div>
+      <h2 style="margin:.65rem 0">Sourate ${escapeHtml(s.latin)} validée !</h2>
+      <p class="lead" style="margin:0 auto">
+        Masha'Allah — score : <strong>${score}%</strong>.<br>
+        ${nextMeta ? `Prochaine étape : <strong>${escapeHtml(nextMeta.latin)}</strong> (${nextMeta.numberOfAyahs} versets).` : 'Parcours complet !'}
+      </p>
+      <div class="row" style="justify-content:center;margin-top:1.65rem">
+        ${next ? `<a class="btn btn-primary" href="#/reciter/${next}" onclick="closeModal()">Sourate suivante →</a>` : ''}
+        <a class="btn btn-gold" href="#/quotidien" onclick="closeModal()">Apprentissage quotidien</a>
+        <a class="btn btn-ghost" href="#/parcours" onclick="closeModal()">Mon parcours</a>
+      </div>
+    </div>`);
+  toast(`Sourate ${n} retenue ✓ ${score}%`, 'ok');
+}
+
+// En changeant de page : fermeture nette (modales, console) + micro coupé SANS évaluation
+window.addEventListener('hashchange', () => {
+  window.__nourNav = true;
+  setTimeout(() => { window.__nourNav = false; }, 50);
+  if (typeof UIStack !== 'undefined') {
+    while (UIStack.length) UIStack.pop();
+    if (typeof closeModalNow === 'function') closeModalNow();
+    if (typeof closeConsoleNow === 'function') closeConsoleNow();
+  }
+  if (typeof Speech !== 'undefined' && Speech.forceStop) Speech.forceStop();
+});
