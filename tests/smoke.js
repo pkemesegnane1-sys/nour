@@ -14,7 +14,7 @@ const dom = new JSDOM(html, {
 const { window } = dom;
 
 window.fetch = async (url) => {
-  const p = path.join(SITE, String(url).replace(/^\//, ''));
+  const p = path.join(SITE, String(url).replace(/[?#].*$/, '').replace(/^\//, ''));
   const data = JSON.parse(fs.readFileSync(p, 'utf8'));
   return { ok: true, json: async () => data };
 };

@@ -451,7 +451,7 @@ const Quran = {
 
   async loadIndex() {
     if (this.surahs) return this.surahs;
-    const res = await fetch('data/surahs.json');
+    const res = await fetch('data/surahs.json?v=' + (window.__APPV || ''));
     this.surahs = await res.json();
     return this.surahs;
   },
@@ -461,7 +461,7 @@ const Quran = {
     if (!this.surahs) await this.loadIndex();
     const meta = this.surahs[n - 1];
     const chunk = meta && meta.chunk ? meta.chunk : Math.ceil(n / 15);
-    const res = await fetch(`data/chunks/c${chunk}.json`);
+    const res = await fetch(`data/chunks/c${chunk}.json?v=${window.__APPV || ''}`);
     if (!res.ok) throw new Error('Sourate introuvable : ' + n);
     const data = await res.json();
     // met en cache toutes les sourates du paquet
@@ -538,6 +538,21 @@ function scoreRecitation(expectedAr, heardAr) {
 }
 
 /* ---------- Synthèse vocale (littératie) ---------- */
+/* Vrai enregistrement audio d'une lettre (nom + son) — repli sur la voix du navigateur */
+let _letterAudio = null;
+function playLetterAudio(i) {
+  const L = (typeof ARABIC_LETTERS !== 'undefined') ? ARABIC_LETTERS[i] : null;
+  if (L && L.audio) {
+    try {
+      if (_letterAudio) { try { _letterAudio.pause(); } catch (e) {} }
+      _letterAudio = new Audio(L.audio);
+      _letterAudio.play().catch(() => speakArabic(L.name));
+      return;
+    } catch (e) { /* repli ci-dessous */ }
+  }
+  if (L) speakArabic(L.name);
+}
+
 function speakArabic(text, rate = 0.8) {
   if (!('speechSynthesis' in window)) { toast('La synthèse vocale n\'est pas disponible sur ce navigateur.', 'warn'); return; }
   speechSynthesis.cancel();

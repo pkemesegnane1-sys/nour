@@ -629,7 +629,7 @@ function openLetter(i) {
       — ${escapeHtml(L.wordFr)}
     </div>
     <div class="row" style="margin-top:1.55rem;justify-content:center">
-      <button class="btn btn-primary" onclick="speakArabic('${L.l}')">🔊 Écouter le son</button>
+      <button class="btn btn-primary" onclick="playLetterAudio(${i})">🔊 Écouter le son</button>
       <button class="btn btn-gold" onclick="Progress.completeLetter('${L.l}');closeModal();View.alphabet()">✓ Je connais cette lettre</button>
       <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
     </div>`);
@@ -690,7 +690,7 @@ function courseStepHTML(step, idx) {
                 </div>
               </div>
               <div class="row" style="gap:.45rem">
-                <button class="btn btn-soft btn-sm" onclick="speakArabic('${L.name}')">🔊 Nom</button>
+                <button class="btn btn-soft btn-sm" onclick="playLetterAudio(${i})">🔊 Nom & son</button>
                 <button class="btn btn-soft btn-sm" onclick="speakArabic('${L.l}')">🔊 Son</button>
                 <button class="btn btn-soft btn-sm" onclick="speakArabic('${L.word}')">🔊 Mot</button>
               </div>
