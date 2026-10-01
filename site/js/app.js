@@ -609,7 +609,7 @@ function reciteVerse(n, v) {
       body.innerHTML = `
         <div class="row between" style="margin-bottom:.65rem">
           <div class="badge badge-gold">Verset ${v} / ${s.numberOfAyahs}</div>
-          <button class="btn btn-soft btn-sm" onclick="loopVerseHady(${n},${v})">🔁 Écouter en boucle (Hady Touré)</button>
+          <button class="btn btn-soft btn-sm" onclick="loopOneAyah(${n},${v})">🔁 Écouter en boucle</button>
         </div>
         <div class="arabic" dir="rtl" style="font-size:1.45rem;line-height:2;text-align:right">${escapeHtml(a.ar)}</div>
         <div class="phon" style="margin:.45rem 0 .25rem">${escapeHtml(a.phonetic)}</div>

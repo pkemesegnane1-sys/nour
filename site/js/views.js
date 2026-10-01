@@ -37,7 +37,7 @@ function verseBlockHTML(a, { showTools = true, surahNum = null, current = false,
     ${reciteMode && surahNum ? `
     <div class="verse-tools">
       <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();reciteVerse(${surahNum},${a.number})">🎙 Réciter ce verset</button>
-      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopVerseHady(${surahNum},${a.number})">🔁 Écouter (Hady Touré)</button>
+      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopOneAyah(${surahNum},${a.number})">🔁 Écouter en boucle</button>
     </div>` : ''}
     ${showTools && !reciteMode && surahNum ? `
     <div class="verse-tools">
@@ -86,9 +86,9 @@ function playOneAyah(surah, verse) {
 
 function loopOneAyah(surah, verse) {
   const loops = (Progress.data && Progress.data.learning.loops) || 5;
-  Player.setReciter('alafasy');
+  Player.setReciter('husary'); // Al-Hussary, par verset — comme avant
   Player.playAyah(surah, verse, loops);
-  toast(`Boucle de ${loops} répétitions sur le verset ${verse}.`, 'ok');
+  toast(`Boucle de ${loops} répétitions sur le verset ${verse} (Al-Hussary, par verset).`, 'ok');
 }
 
 /* ============================ LECTURE ============================ */
