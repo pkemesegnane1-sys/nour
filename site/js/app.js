@@ -530,13 +530,13 @@ View.recite = async function (n) {
 
     <div class="row between" style="margin-bottom:.65rem">
       <span class="badge ${verified ? 'badge-ok' : 'badge-gold'}" id="surah-status-badge">
-        ${verified ? `✓ Sourate validée (${Progress.data.verified[String(n)].score}%)` : 'Étape en cours — récitez verset par verset'}
+        ${verified ? `✓ Sourate validée (${Progress.data.verified[String(n)].score}%)` : 'Étape en cours — récitez la sourate entière'}
       </span>
     </div>
 
     ${surahHeaderHTML(s, `
       <div class="row" style="margin-top:1.15rem;gap:.55rem">
-        <span class="badge badge-soft">🎙 Réciter chaque verset</span>
+        <span class="badge badge-soft">🎙 Réciter la sourate entière</span>
         <span class="badge badge-ok">Vert = bien récité</span>
         <span class="badge badge-err">Rouge = à reprendre</span>
       </div>`)}
@@ -557,27 +557,28 @@ View.recite = async function (n) {
   })}
 
         <div class="card" id="recite-console">
-          <h3>🎙 Console de récitation</h3>
+          <h3>🎙 Récitation — toute la sourate</h3>
           <div id="console-body">
             <p class="muted" style="margin-top:.55rem">
-              Cliquez sur <strong>« 🎙 Réciter ce verset »</strong> à côté d'un verset pour commencer.
-              Écoutez d'abord, puis récitez : le verset surlignera en
-              <span class="verse-status ok">✓ vert</span> ou
-              <span class="verse-status ko">✗ rouge</span>.
+              Enregistrez-vous en récitant <strong>la sourate entière</strong> : c'est votre
+              récitation qui décide si vous pouvez <strong>avancer</strong>.
+              Écoutez d'abord, puis appuyez sur le micro et récitez.
             </p>
+            <div id="verify-box"></div>
           </div>
         </div>
 
         <div class="card" id="recite-progress-card">
-          <h4>Progression de la sourate</h4>
-          <div class="bar" style="margin:.75rem 0"><span id="recite-bar" style="width:0%"></span></div>
-          <div class="muted" id="recite-count">0 verset validé sur ${total}</div>
-          <button class="btn btn-gold" id="btn-validate-surah" style="margin-top:.95rem;width:100%"
+          <h4>Pouvez-vous avancer ?</h4>
+          <div id="surah-rec-state" class="muted" style="margin:.75rem 0">
+            Récitez la sourate entière dans la console ci-dessus : en vert, vous pouvez avancer.
+          </div>
+          <button class="btn btn-gold" id="btn-validate-surah" style="margin-top:.55rem;width:100%"
             onclick="validateSurahRetained(${n})" disabled>
             ✓ Cette sourate est bien retenue
           </button>
           <div class="hint" id="validate-hint" style="margin-top:.55rem">
-            Récitez tous les versets en vert, puis validez vous-même la sourate pour passer à la suivante.
+            Votre récitation de la sourate entière doit être en vert pour valider.
           </div>
         </div>
 
@@ -593,72 +594,71 @@ View.recite = async function (n) {
 
   Player.stop();
   Player.setReciter('hady_hafs');
-  updateReciteProgress(n, total);
+  Player.setRate(1); // son naturel du récitateur sur cette page
+  renderSurahRecState(n, s);
+  startSurahVerify(n); // console de récitation : la sourate entière
 };
 
-/* Ouvre la console de récitation pour un verset précis */
-function reciteVerse(n, v) {
-  n = +n; v = +v;
-  const consoleOuverte = ReciteState.verse != null;
-  ReciteState.verse = v;
-  if (!consoleOuverte && typeof pushUI === 'function') pushUI('console');
-  Quran.loadSurah(n).then(s => {
-    const a = s.ayahs[v - 1];
-    const body = $('#console-body');
-    if (body) {
-      body.innerHTML = `
-        <div class="row between" style="margin-bottom:.65rem">
-          <div class="badge badge-gold">Verset ${v} / ${s.numberOfAyahs}</div>
-          <button class="btn btn-soft btn-sm" onclick="loopOneAyah(${n},${v})">🔁 Écouter en boucle</button>
-        </div>
-        <div class="arabic" dir="rtl" style="font-size:1.45rem;line-height:2;text-align:right">${escapeHtml(a.ar)}</div>
-        <div class="phon" style="margin:.45rem 0 .25rem">${escapeHtml(a.phonetic)}</div>
-        <div class="muted" style="font-size:.92rem;margin-bottom:.85rem">${escapeHtml(a.fr)}</div>
-        <div id="verify-box"></div>`;
-    }
-
-    // surlignage du verset en cours
-    $$('.verse').forEach(el => el.classList.remove('verse-reciting'));
-    const vel = document.getElementById('verse-' + v);
-    if (vel) vel.classList.add('verse-reciting');
-
+/* ================= RÉCITATION DE LA SOURATE ENTIÈRE =================
+   L'utilisateur s'enregistre sur toute la sourate : vert = il peut avancer,
+   rouge = il reprend. Les versets se travaillent en boucle délimitée. */
+function startSurahVerify(n) {
+  n = +n;
+  const mount = () => {
+    const s = Quran.cache[n];
+    if (!s) return;
+    const fullAr = s.ayahs.map(a => a.ar).join(' ');
+    const fullPhon = s.ayahs.map(a => a.phonetic).join(' ');
     Verify.start({
-      expectedAr: a.ar,
-      expectedPhon: a.phonetic,
+      expectedAr: fullAr,
+      expectedPhon: fullPhon,
       surah: n,
-      verse: v,
-      label: `Sourate ${n} — verset ${v}`,
+      verse: null,
+      label: `Sourate ${s.latin} — sourate entière`,
       onResult: (result, companion, clipId) => {
         const thr = (Progress.data && Progress.data.settings && Progress.data.settings.threshold) || 60;
         const self = !!(result && result.self);
         const ok = companion || self || result.score >= thr;
-        Progress.setVerseRecStatus(n, v, {
+        Progress.setSurahRec(n, {
           score: result.score,
           ok,
           companion: !!companion,
           self,
           clipId: clipId || null
         });
-        updateVerseVisual(n, v);
-        updateReciteProgress(n, s.numberOfAyahs);
-        if (ok) toast(`Verset ${v} : trait vert ✓ ${result.score}%`, 'ok');
-        else toast(`Verset ${v} : trait rouge — réessayez (${result.score}%)`, 'err');
+        renderSurahRecState(n, s);
       },
-      onPass: () => {
-        // le verset est validé → on propose le verset suivant non vert
-        const nxt = nextIncompleteVerse(n, s.numberOfAyahs);
-        if (nxt) {
-          reciteVerse(n, nxt);
-          const el = document.getElementById('verse-' + nxt);
-          if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-          toast('Tous les versets sont verts ! Validez la sourate ci-dessous. ✓', 'ok');
-          const btn = $('#btn-validate-surah');
-          if (btn) { btn.classList.add('btn-primary'); btn.scrollIntoView && btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        }
-      }
+      onPass: () => renderSurahRecState(n, s)
     });
-  });
+  };
+  if (Quran.cache[n]) mount();
+  else Quran.loadSurah(n).then(mount);
+}
+
+function renderSurahRecState(n, s) {
+  const rec = Progress.getSurahRec(n);
+  const state = $('#surah-rec-state');
+  const btn = $('#btn-validate-surah');
+  const hint = $('#validate-hint');
+  const mode = rec ? (rec.companion ? ' · accompagné' : rec.self ? ' · auto-éval.' : '') : '';
+  if (state) {
+    state.innerHTML = rec && rec.ok
+      ? `<span class="verse-status ok">✓ Bien récité — ${rec.score}%${mode}</span><br>
+         <strong>Vous pouvez avancer :</strong> validez la sourate ci-dessous pour passer à la suivante.`
+      : rec
+        ? `<span class="verse-status ko">✗ Mal récité — ${rec.score}%${mode}</span><br>
+           Reprenez votre récitation : réécoutez, puis enregistrez-vous à nouveau.`
+        : 'Récitez la sourate entière dans la console ci-dessus : en vert, vous pouvez avancer.';
+  }
+  if (btn) {
+    btn.disabled = !(rec && rec.ok);
+    btn.classList.toggle('btn-gold', true);
+  }
+  if (hint) {
+    hint.textContent = rec && rec.ok
+      ? 'À vous de juger : si la sourate est bien retenue, certifiez-la.'
+      : 'Votre récitation de la sourate entière doit être en vert pour valider.';
+  }
 }
 
 function updateVerseVisual(n, v) {
@@ -687,41 +687,18 @@ function nextIncompleteVerse(n, total) {
   return null;
 }
 
-function updateReciteProgress(n, total) {
-  let done = 0;
-  for (let v = 1; v <= total; v++) {
-    const st = Progress.verseRecStatus(n, v);
-    if (st && st.ok) done++;
-  }
-  const bar = $('#recite-bar');
-  if (bar) bar.style.width = Math.round(done / total * 100) + '%';
-  const cnt = $('#recite-count');
-  if (cnt) cnt.textContent = `${done} verset${done > 1 ? 's' : ''} validé${done > 1 ? 's' : ''} (vert) sur ${total}`;
-  const btn = $('#btn-validate-surah');
-  const hint = $('#validate-hint');
-  const allGreen = done === total;
-  if (btn) {
-    btn.disabled = !allGreen;
-    btn.classList.toggle('btn-gold', true);
-  }
-  if (hint) {
-    hint.textContent = allGreen
-      ? 'Tous les versets sont verts — à vous de valider si la sourate est bien retenue !'
-      : `Encore ${total - done} verset${total - done > 1 ? 's' : ''} à réciter correctement (au moins ${Progress.data.settings.threshold}%).`;
-  }
-}
-
 /* L'apprenant valide lui-même la mémorisation de la sourate */
 function validateSurahRetained(n) {
   n = +n;
   const s = Quran.cache[n];
   if (!s) { Quran.loadSurah(n).then(() => validateSurahRetained(n)); return; }
   const total = s.numberOfAyahs;
-  if (!Progress.surahRecPassed(n, total)) {
-    toast('Tous les versets doivent être en vert avant de valider.', 'warn');
+  const rec = Progress.getSurahRec(n);
+  if (!rec || !rec.ok) {
+    toast("Récitez d'abord la sourate entière dans la console : en vert, vous pourrez valider.", 'warn');
     return;
   }
-  const score = Progress.surahRecScore(n, total);
+  const score = rec.score;
   showModal(`
     <div class="center">
       <div style="font-size:3rem">📖</div>
@@ -747,7 +724,8 @@ function finishSurahValidation(n) {
   if (!cb || !cb.checked) { toast('Veuillez cocher la certification.', 'warn'); return; }
   const s = Quran.cache[n];
   const total = s.numberOfAyahs;
-  const score = Progress.surahRecScore(n, total);
+  const rec = Progress.getSurahRec(n);
+  const score = rec ? rec.score : 100;
   Progress.verifySurah(n, score, null, 1);
   const next = Progress.nextStep(n);
   const nextMeta = next ? Quran.meta(next) : null;

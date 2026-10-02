@@ -304,7 +304,7 @@ const Verify = {
       if (actions) {
         actions.innerHTML = `
           <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter mon enregistrement</button>
-          <button class="btn btn-ghost" onclick="loopVerseHady(${c.surah || 1},${c.verse || 1})">🔊 Réécouter le récitateur</button>
+          <button class="btn btn-ghost" onclick="Player.playSurah(${c.surah || 1},{reciter:'hady_hafs',loop:3})">🔊 Réécouter le Coran (en boucle)</button>
           <div class="w-100"></div>
           <button class="btn btn-primary" onclick="Verify.selfRate(true)">✓ J'ai bien récité (trait vert)</button>
           <button class="btn btn-danger" onclick="Verify.selfRate(false)">✗ C'était mal récité (trait rouge)</button>`;

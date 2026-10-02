@@ -236,6 +236,7 @@ const Progress = {
         dailyLog: {},            // "YYYY-MM-DD": {versesLearned, recitations, minutes}
         marks: {},               // repères A/B : "n": {"a": secondes}
         literacy: { lettersDone: [], modules: {}, stepsDone: [] },
+        surahRec: {},
         settings: { threshold: 60 },
         journal: []              // [{date, type, surah, verse, score, clipId, label}]
       });
@@ -411,6 +412,16 @@ const Progress = {
     if (!this.data.marks[s]) this.data.marks[s] = {};
     this.data.marks[s][String(verse)] = seconds;
     this.save();
+  },
+
+  /* --- Récitation de la sourate entière (pour savoir si l'on peut avancer) --- */
+  setSurahRec(n, res) {
+    if (!this.data.surahRec) this.data.surahRec = {};
+    this.data.surahRec[String(n)] = res;
+    this.save();
+  },
+  getSurahRec(n) {
+    return (this.data.surahRec || {})[String(n)] || null;
   },
 
   /* --- Littératie --- */

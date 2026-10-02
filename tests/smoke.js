@@ -135,24 +135,26 @@ function check(label, cond) {
   await sleep(300);
   let t = window.document.body.textContent;
   check('Récitation : Al-Fatiha chargée (chunks)', t.includes("L'Ouverture") && t.includes('Verset 1'));
-  check('Récitation : boutons par verset', t.includes('Réciter ce verset'));
+  check('Récitation : outils de boucle par verset', t.includes('Boucle du verset'));
   check('Récitation : legendes vert/rouge', t.includes('Vert = bien récité') && t.includes('Rouge = à reprendre'));
 
-  for (let v = 1; v <= 7; v++) {
-    window.reciteVerse(1, v);
-    await sleep(150);
-    window.Verify.attempts = 3;
-    window.Verify.renderCompanion();
-    await sleep(40);
-    window.document.querySelector('#comp-1').checked = true;
-    window.document.querySelector('#comp-2').checked = true;
-    window.document.querySelector('#comp-3').checked = true;
-    window.Verify.companionPass();
-    await sleep(100);
-  }
-  check('Verset 1 : statut vert', window.Progress.verseRecStatus(1, 1) && window.Progress.verseRecStatus(1, 1).ok === true);
-  check('Verset 1 : classe visuelle verse-ok', !!window.document.querySelector('#verse-1.verse-ok'));
-  check('Sourate 1 : tous les versets verts', window.Progress.surahRecPassed(1, 7));
+  check('Récitation : boucle délimitée par verset', t.includes('⏱ Début') && t.includes('⏱ Fin') && t.includes('Boucle du verset'));
+
+  // Récitation de la sourate ENTIÈRE (pour savoir si l'on peut avancer)
+  window.startSurahVerify(1);
+  await sleep(250);
+  check('Console sourate entière : micro présent', !!window.document.querySelector('#verify-box .mic-btn'));
+  window.Verify.attempts = 3;
+  window.Verify.renderCompanion();
+  await sleep(60);
+  check('Console sourate entière : zone accompagnateur', !!window.document.querySelector('#comp-1'));
+  window.document.querySelector('#comp-1').checked = true;
+  window.document.querySelector('#comp-2').checked = true;
+  window.document.querySelector('#comp-3').checked = true;
+  window.Verify.companionPass();
+  await sleep(150);
+  check('Sourate entière : résultat vert', window.Progress.getSurahRec(1) && window.Progress.getSurahRec(1).ok === true);
+  check('Pouvez-vous avancer : affiché', window.document.body.textContent.includes('Vous pouvez avancer'));
   check('Bouton « sourate retenue » activé', !window.document.querySelector('#btn-validate-surah').disabled);
 
   window.validateSurahRetained(1);

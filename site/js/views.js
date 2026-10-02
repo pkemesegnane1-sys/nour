@@ -36,8 +36,9 @@ function verseBlockHTML(a, { showTools = true, surahNum = null, current = false,
     <div class="verse-fr">${escapeHtml(a.fr)}</div>
     ${reciteMode && surahNum ? `
     <div class="verse-tools">
-      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();reciteVerse(${surahNum},${a.number})">🎙 Réciter ce verset</button>
-      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopOneAyah(${surahNum},${a.number})">🔁 Écouter en boucle</button>
+      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();markVerseStart(${surahNum},${a.number})">⏱ Début</button>
+      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();markVerseEnd(${surahNum},${a.number})">⏱ Fin</button>
+      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();loopVerseDelim(${surahNum},${a.number})">🔁 Boucle du verset</button>
     </div>` : ''}
     ${showTools && !reciteMode && surahNum ? `
     <div class="verse-tools">
@@ -60,6 +61,39 @@ function surahHeaderHTML(s, extra = '') {
     </div>
     ${extra}
   </div>`;
+}
+
+/* Délimitation par l'UTILISATEUR : il marque lui-même le début et la fin du verset */
+function markVerseStart(n, v) {
+  if (!Player.audio || !Player.audio.getAttribute('src')) {
+    toast("Lancez d'abord la lecture de la sourate (▶), puis appuyez au début du verset.", 'warn');
+    return;
+  }
+  Progress.setMark(n, v, Player.audio.currentTime);
+  toast(`⏱ Début du verset ${v} enregistré — à la fin du verset, appuyez sur « ⏱ Fin ».`, 'ok');
+}
+
+function markVerseEnd(n, v) {
+  if (!Player.audio || !Player.audio.getAttribute('src')) {
+    toast("Lancez d'abord la lecture de la sourate (▶), puis appuyez à la fin du verset.", 'warn');
+    return;
+  }
+  Progress.setMark(n, v + 1, Player.audio.currentTime);
+  toast(`⏱ Fin du verset ${v} enregistrée — « 🔁 Boucle » répète maintenant ce passage.`, 'ok');
+}
+
+/* Boucle d'un verset : délimitée par l'utilisateur s'il a posé ses repères, sinon la boucle du verset (Al-Hussary) */
+function loopVerseDelim(n, v) {
+  const start = Progress.getMark(n, v);
+  const end = Progress.getMark(n, v + 1);
+  const loops = (Progress.data && Progress.data.learning && Progress.data.learning.loops) || 5;
+  if (start != null && end != null && end > start) {
+    Player.playSegment(n, start, end, loops, 'hady_hafs');
+    toast(`🔁 Boucle du verset ${v} ×${loops} — passage délimité par vous.`, 'ok');
+    return;
+  }
+  loopOneAyah(n, v);
+  toast('Astuce : avec « ⏱ Début » et « ⏱ Fin », délimitez vous-même la boucle exacte du verset.', 'ok');
 }
 
 /* Écoute d'un verset avec la voix de Mouhamed Hady Touré :
