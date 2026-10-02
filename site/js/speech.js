@@ -355,25 +355,15 @@ const Verify = {
       }
       if (actions) {
         actions.innerHTML = `
-          <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter mon enregistrement</button>
-          <button class="btn btn-soft" onclick="Speech.downloadLast()">⬇ Télécharger mon enregistrement</button>
-          <button class="btn btn-ghost" onclick="Player.playSurah(${c.surah || 1},{reciter:'hady_hafs',loop:3})">🔊 Réécouter le Coran (en boucle)</button>
+          <button class="btn btn-primary" onclick="Speech.playLast()">▶ Écouter ma récitation</button>
+          <button class="btn btn-ghost" onclick="Player.playSurah(${c.surah || 1},{reciter:'hady_hafs',loop:3})">🔊 Écouter le Coran</button>
           <div class="w-100"></div>
-          <button class="btn btn-primary" onclick="Verify.selfRate(true)">✓ J'ai bien récité (trait vert)</button>
-          <button class="btn btn-danger" onclick="Verify.selfRate(false)">✗ C'était mal récité (trait rouge)</button>`;
+          <button class="btn btn-primary btn-lg" onclick="Verify.selfRate(true)">✓ Bien récité</button>
+          <button class="btn btn-danger btn-lg" onclick="Verify.selfRate(false)">✗ À reprendre</button>
+          <div class="w-100"></div>
+          <button class="btn btn-soft btn-sm" onclick="Speech.downloadLast()">⬇ Télécharger</button>
+          <button class="btn btn-soft btn-sm" onclick="Verify.companionPass()">🤝 Mon accompagnant a validé</button>`;
       }
-      const notice = document.createElement('div');
-      notice.className = 'info-box';
-      notice.style.marginTop = '.95rem';
-      notice.innerHTML = `
-        <strong>Comment ça marche ici ?</strong><br>
-        Votre navigateur ne peut pas analyser automatiquement les mots récités
-        (courant sur les téléphones). C'est donc <strong>à vous</strong> de comparer :
-        écoutez <strong>votre enregistrement</strong>, écoutez <strong>le récitateur</strong>,
-        puis indiquez si c'est bien récité. Un proche ou un enseignant peut aussi vous confirmer ;
-        après 3 essais, le mode accompagné est proposé.`;
-      if (actions && !actions.nextElementSibling) actions.insertAdjacentElement('afterend', notice);
-      this.renderCompanion();
       return { score: null, noTranscript: true };
     }
 
@@ -441,30 +431,12 @@ const Verify = {
     if (zone.dataset.done) return;
     zone.dataset.done = '1';
     zone.innerHTML = `
-      <div class="warn-box" style="margin-top:1.15rem;text-align:left">
-        <strong>Validation accompagnée</strong><br>
-        La reconnaissance vocale n'est pas infaillible. Si vous avez récité correctement
-        (idéalement devant un enseignant ou un proche), vous pouvez valider cette étape
-        en conscience, avec cet engagement :
-        <div class="col" style="margin-top:.85rem;text-align:left">
-          <label class="row" style="gap:.65rem;align-items:flex-start">
-            <input type="checkbox" id="comp-1"> <span>J'ai récité ce passage à voix haute, attentivement.</span>
-          </label>
-          <label class="row" style="gap:.65rem;align-items:flex-start">
-            <input type="checkbox" id="comp-2"> <span>J'ai vérifié ma prononciation (avec l'audio, un proche ou un enseignant).</span>
-          </label>
-          <label class="row" style="gap:.65rem;align-items:flex-start">
-            <input type="checkbox" id="comp-3"> <span>Je certifie ma récitation sincère et correcte.</span>
-          </label>
-          <button class="btn btn-ghost btn-sm" style="align-self:flex-start;margin-top:.55rem"
-            onclick="Verify.companionPass()">Valider cette étape (mode accompagné)</button>
-        </div>
+      <div class="row" style="justify-content:center;margin-top:.75rem">
+        <button class="btn btn-gold btn-sm" onclick="Verify.companionPass()">🤝 Accompagné(e) : c'est bien récité</button>
       </div>`;
   },
 
   companionPass() {
-    const ok = ['comp-1', 'comp-2', 'comp-3'].every(id => $('#' + id) && $('#' + id).checked);
-    if (!ok) { toast('Veuillez cocher les trois engagements pour valider.', 'warn'); return; }
     const thr = (Progress.data && Progress.data.settings && Progress.data.settings.threshold) || 60;
     if (this.current && this.current.onResult) {
       try { this.current.onResult({ score: Math.max(60, thr), matched: [], missed: [], heard: [] }, true, this.lastClipId || null); } catch (e) {}

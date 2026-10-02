@@ -150,10 +150,7 @@ function check(label, cond) {
   window.Verify.attempts = 3;
   window.Verify.renderCompanion();
   await sleep(60);
-  check('Console sourate entière : zone accompagnateur', !!window.document.querySelector('#comp-1'));
-  window.document.querySelector('#comp-1').checked = true;
-  window.document.querySelector('#comp-2').checked = true;
-  window.document.querySelector('#comp-3').checked = true;
+  check('Validation accompagnée : UN seul bouton, sans cases', !!window.document.querySelector('#companion-zone button') && !window.document.querySelector('#companion-zone input'));
   window.Verify.companionPass();
   await sleep(150);
   check('Sourate entière : résultat vert', window.Progress.getSurahRec(1) && window.Progress.getSurahRec(1).ok === true);
