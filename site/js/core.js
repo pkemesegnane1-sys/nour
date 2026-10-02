@@ -520,32 +520,51 @@ function similarity(a, b) {
   return 1 - dist / Math.max(a.length, b.length, 1);
 }
 
-/* Score de prononciation : compare la transcription reconnue au texte attendu */
+/* Score de prononciation : compare la transcription reconnue au texte attendu.
+   Retourne aussi une analyse MOT À MOT (words/extra) pour afficher les mots à améliorer. */
 function scoreRecitation(expectedAr, heardAr) {
-  const expWords = normalizeArabic(expectedAr).split(' ').filter(Boolean);
-  const heardNorm = normalizeArabic(heardAr);
-  const heardWords = heardNorm.split(' ').filter(Boolean);
+  const toPairs = (txt) => String(txt || '').trim().split(/\s+/).filter(Boolean)
+    .map(raw => ({ raw, norm: normalizeArabic(raw) }))
+    .filter(p => p.norm);
+  const expPairs = toPairs(expectedAr);
+  const heardPairs = toPairs(heardAr);
+  const heardWords = heardPairs.map(p => p.norm);
+  const expWords = expPairs.map(p => p.norm);
 
-  if (!heardWords.length) return { score: 0, matched: [], missed: expWords, heard: heardWords };
+  if (!heardPairs.length) {
+    return {
+      score: 0, matched: [], missed: expWords, heard: [], extra: [],
+      words: expPairs.map(p => ({ text: p.raw, status: 'miss', heard: '' }))
+    };
+  }
 
   // similarité globale (caractères)
-  const globalScore = similarity(normalizeArabic(expectedAr), heardNorm);
+  const globalScore = similarity(normalizeArabic(expectedAr), normalizeArabic(heardAr));
 
-  // analyse mot à mot
-  const matched = [], missed = [];
-  const pool = [...heardWords];
-  for (const w of expWords) {
+  // analyse mot à mot : ok (identique), improve (reconnu de travers), miss (manquant)
+  const matched = [], missed = [], extra = [], words = [];
+  const pool = heardPairs.map(p => ({ ...p, used: false }));
+  expPairs.forEach((p) => {
     let bestIdx = -1, bestSim = 0;
     pool.forEach((c, i) => {
-      const s = similarity(w, c);
+      if (c.used) return;
+      const s = similarity(p.norm, c.norm);
       if (s > bestSim) { bestSim = s; bestIdx = i; }
     });
-    if (bestIdx >= 0 && bestSim >= 0.6) { matched.push(w); pool.splice(bestIdx, 1); }
-    else missed.push(w);
-  }
+    if (bestIdx >= 0 && bestSim >= 0.6) {
+      const c = pool[bestIdx]; c.used = true;
+      matched.push(p.norm);
+      words.push({ text: p.raw, status: bestSim >= 0.85 ? 'ok' : 'improve', heard: c.raw });
+    } else {
+      missed.push(p.norm);
+      words.push({ text: p.raw, status: 'miss', heard: '' });
+    }
+  });
+  pool.forEach(c => { if (!c.used) extra.push(c.raw); });
+
   const coverage = expWords.length ? matched.length / expWords.length : 0;
   const score = Math.round(clamp(0.55 * coverage + 0.45 * globalScore, 0, 1) * 100);
-  return { score, matched, missed, heard: heardWords };
+  return { score, matched, missed, heard: heardWords, extra, words };
 }
 
 /* ---------- Synthèse vocale (littératie) ---------- */

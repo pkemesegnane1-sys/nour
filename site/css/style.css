@@ -541,3 +541,19 @@ code{background:var(--cream-2);padding:.12em .45em;border-radius:6px;font-size:.
   .grid-split > .col:first-child { order: 2; }
   .grid-split > .col:last-child { order: 1; position: static !important; }
 }
+
+
+/* --- Revue mot à mot (score de prononciation) --- */
+.word-review{margin-top:.9rem;text-align:left}
+.wr-title{font-size:.82rem;font-weight:700;letter-spacing:.04em;color:#b02a2a;margin:.55rem 0 .4rem;text-transform:uppercase}
+.wr-title.wr-ok{color:#0b7a3b}
+.wr-title.wr-extra{color:#8a6d1a}
+.wr-row{display:flex;flex-wrap:wrap;gap:.4rem;direction:rtl;justify-content:flex-end}
+.chip-w{display:inline-flex;align-items:center;gap:.35rem;padding:.32rem .72rem;border-radius:999px;font-size:.92rem;border:1.5px solid transparent;line-height:1.5}
+.chip-ok{background:rgba(16,163,74,.12);color:#0b7a3b;border-color:rgba(16,163,74,.35)}
+.chip-bad{background:rgba(214,69,69,.12);color:#b02a2a;border-color:rgba(214,69,69,.35)}
+.chip-w small{opacity:.8}
+@media (max-width:768px){
+  .word-review{text-align:center}
+  .wr-row{justify-content:center}
+}

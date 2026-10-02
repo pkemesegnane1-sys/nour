@@ -127,39 +127,62 @@ const Speech = {
     toast('Téléchargement de votre récitation ✓', 'ok');
   },
 
-  /* --- Reconnaissance vocale arabe --- */
-  startRecognition(onFinal) {
+  /* --- Reconnaissance vocale arabe (stable sur mobile : redémarrage auto après les silences) --- */
+  startRecognition(onChange, opts = {}) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return false;
     this.heardText = '';
+    this._heardFinal = '';
+    this._keepAlive = opts.keepAlive !== false;
+    this._onRecogChange = onChange || null;
     this.recog = new SR();
     this.recog.lang = 'ar-SA';
     this.recog.continuous = true;
     this.recog.interimResults = true;
     this.recog.maxAlternatives = 1;
     this.recog.onresult = (e) => {
-      let final = '', interim = '';
+      let interim = '';
       for (let i = 0; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) final += t + ' ';
+        const r = e.results[i];
+        const t = (r[0] && r[0].transcript) || '';
+        if (r.isFinal) this._heardFinal += t + ' ';   // accumulé : jamais perdu entre redémarrages
         else interim += t;
       }
-      this.heardText = (final + interim).trim();
-      if (onFinal) onFinal(this.heardText);
+      this.heardText = (this._heardFinal + interim).trim();
+      if (this._onRecogChange) this._onRecogChange(this.heardText);
     };
-    this.recog.onerror = () => {};
-    this.recog.onend = () => { this.recognizing = false; };
+    this.recog.onerror = (e) => {
+      const err = (e && e.error) || '';
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
+        this._keepAlive = false;
+        if (this._onRecogChange) this._onRecogChange(this.heardText, 'denied');
+      } else if (err === 'network') {
+        if (this._onRecogChange) this._onRecogChange(this.heardText, 'network');
+      }
+      // 'no-speech' / 'aborted' : onend relance automatiquement si keepAlive
+    };
+    this.recog.onend = () => {
+      this.recognizing = false;
+      if (this._keepAlive) {
+        setTimeout(() => {
+          if (!this._keepAlive) return;
+          try { this.recog.start(); this.recognizing = true; } catch { /* déjà démarré */ }
+        }, 120);
+      }
+    };
     try { this.recog.start(); this.recognizing = true; } catch { /* déjà démarré */ }
     return true;
   },
 
   stopRecognition() {
+    this._keepAlive = false;
     return new Promise(res => {
-      if (!this.recog) return res(this.heardText);
-      const done = () => { this.recognizing = false; res(this.heardText); };
+      const snapshot = this.heardText;
+      if (!this.recog) return res(snapshot);
+      const done = () => { this.recognizing = false; res(this.heardText || snapshot); };
       this.recog.onend = done;
       try { this.recog.stop(); } catch { done(); }
-      setTimeout(done, 900); // garde-fou
+      setTimeout(done, 1200); // garde-fou
     });
   },
 
@@ -246,7 +269,7 @@ const Verify = {
           <div id="score-slot"></div>
         </div>
         <div class="w-100">
-          <div class="kicker" style="justify-content:center">Ce que l'application a entendu</div>
+          <div class="kicker" style="justify-content:center">📝 Votre récitation transcrite en arabe</div>
           <div class="recog-box" id="heard-box">…</div>
         </div>
         <div id="verify-actions" class="row" style="justify-content:center"></div>
@@ -278,14 +301,27 @@ const Verify = {
         if (this.attempts >= 3) this.renderCompanion();
         return;
       }
-      const recogOk = Speech.startRecognition(t => {
+      const recogOk = Speech.startRecognition((t, ev) => {
         const hb = $('#heard-box');
-        if (hb && t) hb.textContent = t;
-      });
+        if (ev === 'denied') {
+          if (status) status.textContent = '❌ Transcription refusée : autorisez le micro (cadenas 🔒), ou utilisez les boutons d\'auto-évaluation ci-dessous.';
+          return;
+        }
+        if (ev === 'network') {
+          if (status) status.textContent = '🌐 La transcription arabe automatique a besoin d\'Internet — l\'audio reste enregistré.';
+          return;
+        }
+        // Transcription en direct en arabe (comme sur ordinateur)
+        if (hb) {
+          hb.innerHTML = t
+            ? `<span dir="rtl" style="font-family:var(--font-ar);font-size:1.35rem;line-height:2.1">${escapeHtml(t)}</span>`
+            : '<span class="muted">…</span>';
+        }
+      }, { keepAlive: true });
       btn.classList.add('rec');
       btn.textContent = '⏹';
       status.textContent = recogOk
-        ? 'Je vous écoute… récitez lentement et distinctement, puis appuyez sur ⏹.'
+        ? '📝 Je vous écoute et j\'écris votre récitation en arabe… récitez, puis appuyez sur ⏹.'
         : '🔴 Enregistrement en cours… récitez, puis appuyez sur ⏹ pour terminer.';
     }
   },
@@ -319,7 +355,7 @@ const Verify = {
       if (hb) {
         hb.innerHTML = `<span class="muted">${tooShort
           ? '(enregistrement trop court ou silence)'
-          : '(analyse des mots indisponible sur cet appareil)'}</span>`;
+          : '(transcription automatique indisponible ici \u2014 pour l\'analyse arabe sur t\u00e9l\u00e9phone, utilisez Chrome sur Android. Votre audio est enregistr\u00e9 : \u00e9coutez et \u00e9valuez ci-dessous)'}</span>`;
       }
 
       const slot = $('#score-slot');
@@ -367,9 +403,11 @@ const Verify = {
       return { score: null, noTranscript: true };
     }
 
-    /* ---- CAS 2 : transcription disponible → score automatique ---- */
+    /* ---- CAS 2 : transcription disponible → score + mots à améliorer ---- */
     const result = scoreRecitation(c.expectedAr, heard);
-    if (hb) hb.innerHTML = escapeHtml(heard);
+    if (hb) {
+      hb.innerHTML = `<span dir="rtl" style="font-family:var(--font-ar);font-size:1.15rem;line-height:2.1">${escapeHtml(heard)}</span>`;
+    }
 
     const slot = $('#score-slot');
     const passed = result.score >= threshold;
@@ -387,6 +425,40 @@ const Verify = {
         </div>`;
     }
 
+    /* Revue mot à mot : 🔴 mots à améliorer / ✅ mots bien récités / ➕ mots en trop */
+    const words = result.words || [];
+    const okWords = words.filter(w => w.status === 'ok');
+    const impWords = words.filter(w => w.status !== 'ok');
+    const extraWords = result.extra || [];
+    const CAP = 40;
+    const chip = (w, bad) => {
+      const heardTxt = (bad && w.heard && normalizeArabic(w.heard) !== normalizeArabic(w.text))
+        ? ` <small class="muted">(entendu : <bdi style="font-family:var(--font-ar)">${escapeHtml(w.heard)}</bdi>)</small>` : '';
+      return `<span class="chip-w ${bad ? 'chip-bad' : 'chip-ok'}"><bdi style="font-family:var(--font-ar);font-size:1.02em">${escapeHtml(w.text)}</bdi>${heardTxt}</span>`;
+    };
+    const row = (list, bad, cap) => {
+      const shown = cap && list.length > cap ? list.slice(0, cap) : list;
+      return shown.map(w => chip(w, bad)).join('') +
+        (cap && list.length > cap ? `<span class="chip-w">+ ${list.length - cap} autres…</span>` : '');
+    };
+    const reviewHTML = `
+      <div class="word-review w-100" id="word-review">
+        ${impWords.length ? `
+          <div class="wr-title">🔴 Mots à améliorer (${impWords.length})</div>
+          <div class="wr-row">${row(impWords, true, CAP)}</div>` : `
+          <div class="wr-title">🎉 Aucun mot à améliorer — tout est bien récité !</div>`}
+        ${okWords.length ? `
+          <div class="wr-title wr-ok">✅ Mots bien récités (${okWords.length})</div>
+          <div class="wr-row">${row(okWords, false, CAP)}</div>` : ''}
+        ${extraWords.length ? `
+          <div class="wr-title wr-extra">➕ Mots entendus en trop</div>
+          <div class="wr-row">${row(extraWords.map(w => ({ text: w })), false, CAP)}</div>` : ''}
+      </div>`;
+    const hb2 = $('#heard-box');
+    const oldReview = $('#word-review');
+    if (oldReview) oldReview.remove();
+    if (hb2) hb2.insertAdjacentHTML('afterend', reviewHTML);
+
     const actions = $('#verify-actions');
     if (actions) {
       actions.innerHTML = `
@@ -394,19 +466,12 @@ const Verify = {
         <button class="btn btn-soft" onclick="Speech.downloadLast()">⬇ Télécharger ma récitation</button>`;
       if (passed) {
         actions.innerHTML += `
-          <button class="btn btn-primary" onclick="Verify.pass()">✓ Ce verset est validé → suivant</button>
+          <button class="btn btn-primary" onclick="Verify.pass()">✓ C'est validé → suivant</button>
           <button class="btn btn-ghost" onclick="Verify.toggle()">↻ Réciter encore mieux</button>`;
       } else {
         actions.innerHTML += `
-          <button class="btn btn-gold" onclick="Verify.toggle()">↻ Réessayer</button>
+          <button class="btn btn-gold" onclick="Verify.toggle()">↻ Réessayer en améliorant les mots en rouge</button>
           <button class="btn btn-ghost" onclick="Verify.showTips()">💡 Conseils</button>`;
-        const missTxt = result.missed.length
-          ? `<div class="info-box" style="margin-top:.9rem;text-align:right;direction:rtl;font-family:var(--font-ar)">
-               Mots à retravailler : ${result.missed.map(w => `<span class="diff-miss">${escapeHtml(w)}</span>`).join(' ')}
-             </div>`
-          : '';
-        const hb2 = $('#heard-box');
-        if (hb2 && missTxt) hb2.insertAdjacentHTML('afterend', missTxt);
       }
     }
 
