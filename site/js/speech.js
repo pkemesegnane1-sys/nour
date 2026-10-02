@@ -86,6 +86,47 @@ const Speech = {
     a.play().catch(() => toast('Lecture impossible.', 'err'));
   },
 
+  /* ---------- Téléchargement de SA PROPRE récitation ---------- */
+  _ext(blob) {
+    const t = (blob && blob.type) || '';
+    if (t.includes('mp4')) return 'm4a';
+    if (t.includes('ogg')) return 'ogg';
+    if (t.includes('wav')) return 'wav';
+    return 'webm';
+  },
+
+  _downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { a.remove(); try { URL.revokeObjectURL(url); } catch (e) {} }, 5000);
+  },
+
+  downloadLast() {
+    if (!this.lastBlob && this.chunks && this.chunks.length) {
+      try { this.lastBlob = new Blob(this.chunks, { type: 'audio/webm' }); } catch (e) {}
+    }
+    if (!this.lastBlob) { toast("Aucun enregistrement à télécharger — enregistrez-vous d'abord.", 'warn'); return; }
+    const label = (typeof Verify !== 'undefined' && Verify.current && Verify.current.label) ? Verify.current.label : 'ma-recitation';
+    const safe = String(label).replace(/[^\w\-À-ÿ ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 40) || 'ma-recitation';
+    const d = new Date();
+    const stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    this._downloadBlob(this.lastBlob, `Nour-${safe}-${stamp}.${this._ext(this.lastBlob)}`);
+    toast('Téléchargement de votre récitation ✓', 'ok');
+  },
+
+  async downloadClip(id) {
+    const rec = await IDB.get(id);
+    if (!rec || !rec.blob) { toast('Enregistrement introuvable.', 'warn'); return; }
+    const d = new Date(rec.created || Date.now());
+    const stamp = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    this._downloadBlob(rec.blob, `Nour-recitation-${stamp}.${this._ext(rec.blob)}`);
+    toast('Téléchargement de votre récitation ✓', 'ok');
+  },
+
   /* --- Reconnaissance vocale arabe --- */
   startRecognition(onFinal) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -287,6 +328,7 @@ const Verify = {
         if (actions) {
           actions.innerHTML = `
             <button class="btn btn-gold" onclick="Verify.toggle()">↻ Réessayer — parlez plus fort</button>
+            <button class="btn btn-soft" onclick="Speech.downloadLast()">⬇ Télécharger</button>
             <button class="btn btn-ghost" onclick="Verify.showTips()">💡 Conseils</button>`;
         }
         if (this.attempts >= 3) this.renderCompanion();
@@ -304,6 +346,7 @@ const Verify = {
       if (actions) {
         actions.innerHTML = `
           <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter mon enregistrement</button>
+          <button class="btn btn-soft" onclick="Speech.downloadLast()">⬇ Télécharger mon enregistrement</button>
           <button class="btn btn-ghost" onclick="Player.playSurah(${c.surah || 1},{reciter:'hady_hafs',loop:3})">🔊 Réécouter le Coran (en boucle)</button>
           <div class="w-100"></div>
           <button class="btn btn-primary" onclick="Verify.selfRate(true)">✓ J'ai bien récité (trait vert)</button>
@@ -347,7 +390,8 @@ const Verify = {
     const actions = $('#verify-actions');
     if (actions) {
       actions.innerHTML = `
-        <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter ma récitation</button>`;
+        <button class="btn btn-primary" onclick="Speech.playLast()">▶ Réécouter ma récitation</button>
+        <button class="btn btn-soft" onclick="Speech.downloadLast()">⬇ Télécharger ma récitation</button>`;
       if (passed) {
         actions.innerHTML += `
           <button class="btn btn-primary" onclick="Verify.pass()">✓ Ce verset est validé → suivant</button>

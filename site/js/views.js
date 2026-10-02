@@ -1297,6 +1297,7 @@ View.stats = async function () {
               <div class="muted" style="font-size:.8rem">${new Date(c.created).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
             </div>
             <button class="btn btn-soft btn-sm" onclick="playClip('${c.id}')">▶</button>
+            <button class="btn btn-soft btn-sm" onclick="downloadClip('${c.id}')" title="Télécharger">⬇</button>
             <button class="btn btn-danger btn-sm" onclick="deleteClip('${c.id}')">✕</button>
           </div>`).join('') : '<p class="muted">Aucun enregistrement pour l\'instant. Vos récitations apparaîtront ici.</p>'}
       </div>
@@ -1326,6 +1327,10 @@ async function playClip(id) {
   const url = await Speech.getClipUrl(id);
   if (!url) { toast('Enregistrement introuvable.', 'err'); return; }
   new Audio(url).play().catch(() => toast('Lecture impossible.', 'err'));
+}
+
+async function downloadClip(id) {
+  await Speech.downloadClip(id);
 }
 
 async function deleteClip(id) {
