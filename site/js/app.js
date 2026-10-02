@@ -114,7 +114,7 @@ View.landing = function () {
     <div class="kicker">Assalâmu aleykoum ✦</div>
     <h1>Chaque verset,<br>un pas vers la lumière.</h1>
     <p class="lead" style="margin-top:1.15rem">Un peu chaque jour. Beaucoup dans le cœur.<br>
-      Récitation vérifiée, répétition en boucle avec Mouhamed Hady Touré, alphabétisation arabe.</p>
+      Récitation vérifiée, lecture en boucle du Coran, alphabétisation arabe.</p>
     <div class="hero-actions">
       <a class="btn btn-gold btn-lg" href="#/inscription">Votre voyage commence ici</a>
       <a class="btn btn-ghost btn-lg" style="color:#efe6cd;border-color:rgba(239,230,205,.35)" href="#/methode">Découvrir la méthode</a>
@@ -144,7 +144,7 @@ View.landing = function () {
         <div style="font-size:1.85rem">🔁</div>
         <h3 style="margin:.85rem 0 .45rem">Répétition en boucle</h3>
         <p class="muted">Chaque jour, le nombre de versets que vous voulez, avec la voix de
-          <strong>Mouhamed Hady Touré</strong> : écouter, répéter, mémoriser — encore et encore.</p>
+          <strong>La lecture en boucle du Coran</strong> : écouter, répéter, mémoriser — encore et encore.</p>
       </div>
       <div class="card pad-lg card-click" onclick="location.hash='#/alphabet'">
         <div style="font-size:1.85rem">ا</div>
@@ -349,7 +349,7 @@ View.home = async function () {
           <a class="btn btn-primary" href="#/reciter/${step}">Commencer mon apprentissage</a>
           <a class="btn btn-ghost" href="#/lecture/${step}">Lire d'abord</a>
         </div>
-        <p class="muted" style="margin-top:1.15rem;font-size:.88rem">Récitation de Mouhamed Hady Touré · vérification de prononciation</p>
+        <p class="muted" style="margin-top:1.15rem;font-size:.88rem">Lecture en boucle du Coran · vérification de prononciation</p>
         ` : `
         <h3>Masha'Allah — parcours de récitation terminé !</h3>
         <p class="muted" style="margin:.65rem 0 1.15rem">Poursuivez avec l'apprentissage quotidien : ${l.dailyGoal} versets par jour en boucle.</p>
@@ -360,7 +360,7 @@ View.home = async function () {
         <p class="muted" style="margin:.55rem 0 1.15rem">
           ${p.learningUnlocked
       ? `Objectif du jour : ${today.versesLearned || 0}/${l.dailyGoal} versets appris.`
-      : 'L\'apprentissage quotidien (versets par jour + boucles de Mouhamed Hady Touré) s\'ouvrira quand vous aurez récité toutes les sourates que vous pouvez.'}
+      : 'L\'apprentissage quotidien (versets par jour + lecture en boucle du Coran) s\'ouvrira quand vous aurez récité toutes les sourates que vous pouvez.'}
         </p>
         <div class="bar"><span style="width:${p.learningUnlocked
       ? clamp((today.versesLearned || 0) / l.dailyGoal * 100, 0, 100)
@@ -468,7 +468,7 @@ View.path = async function () {
       <div class="card tint">
         <h3>Comment ça marche ?</h3>
         <div class="col" style="margin-top:.85rem;font-size:.94rem">
-          <div class="row" style="gap:.65rem;align-items:flex-start"><span class="badge badge-gold">1</span><span>Écoutez la sourate de <strong>Mouhamed Hady Touré</strong>.</span></div>
+          <div class="row" style="gap:.65rem;align-items:flex-start"><span class="badge badge-gold">1</span><span>Écoutez la sourate en <strong>lecture en boucle du Coran</strong>.</span></div>
           <div class="row" style="gap:.65rem;align-items:flex-start"><span class="badge badge-gold">2</span><span><strong>Enregistrez</strong> votre récitation : l'application vérifie votre prononciation.</span></div>
           <div class="row" style="gap:.65rem;align-items:flex-start"><span class="badge badge-gold">3</span><span>Score suffisant → la <strong>sourate suivante</strong> se débloque.</span></div>
         </div>
@@ -477,7 +477,7 @@ View.path = async function () {
         <h3 style="color:#f6efdd">Après les sourates…</h3>
         <p class="muted" style="margin:.65rem 0 1.05rem">
           Quand vous aurez récité <strong>toutes les sourates que vous pouvez</strong>, l'apprentissage quotidien démarre :
-          chaque jour, le nombre de versets que vous voulez, en boucle avec Hady Touré.
+          chaque jour, le nombre de versets que vous voulez, en lecture en boucle du Coran.
         </p>
         <a class="btn btn-gold btn-sm" href="#/quotidien">Voir la phase 2</a>
       </div>

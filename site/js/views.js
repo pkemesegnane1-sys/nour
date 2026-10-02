@@ -41,7 +41,7 @@ function verseBlockHTML(a, { showTools = true, surahNum = null, current = false,
     </div>` : ''}
     ${showTools && !reciteMode && surahNum ? `
     <div class="verse-tools">
-      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopVerseHady(${surahNum},${a.number})">🔊 Écouter avec Hady Touré</button>
+      <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();loopVerseHady(${surahNum},${a.number})">🔊 Écouter en boucle</button>
       <button class="btn btn-soft btn-sm" onclick="event.stopPropagation();speakArabic(${escapeHtml(JSON.stringify(a.ar))})">🗣 Prononcer</button>
     </div>` : ''}
   </div>`;
@@ -71,11 +71,11 @@ function loopVerseHady(surah, verse) {
   const end = Progress.getMark(surah, verse + 1);
   if (start != null && end != null && end > start) {
     Player.playSegment(surah, start, end, loops, 'hady_hafs');
-    toast(`Boucle du verset ${verse} — Mouhamed Hady Touré ×${loops}`, 'ok');
+    toast(`Lecture en boucle du Coran — verset ${verse} ×${loops}`, 'ok');
     return;
   }
   Player.playSurah(surah, { reciter: 'hady_hafs', loop: loops });
-  toast(`Mouhamed Hady Touré — sourate en boucle ×${loops}. Astuce : marquez les débuts de versets avec ⏱ dans le lecteur pour isoler ce verset.`, 'ok');
+  toast(`Lecture en boucle du Coran ×${loops}. Astuce : marquez les débuts de versets avec ⏱ dans le lecteur pour isoler ce verset.`, 'ok');
 }
 
 function playOneAyah(surah, verse) {
@@ -125,7 +125,7 @@ View.read = async function (n) {
           <h4 style="margin-bottom:.55rem">Boucle A → B</h4>
           <p class="muted" style="font-size:.92rem">
             En écoutant, marquez le début puis la fin d'un passage : la boucle le répétera.
-            Idéal pour apprendre un verset avec <strong>Mouhamed Hady Touré</strong>.
+            Idéal pour apprendre un verset avec la <strong>lecture en boucle du Coran</strong>.
           </p>
           <button class="btn btn-soft btn-sm" style="margin-top:.75rem" onclick="playSurahLoop(${n})">🔁 Écouter la sourate en boucle</button>
           <a class="btn btn-ghost btn-sm" style="margin-top:.55rem;display:inline-flex" href="#/ecouter/${n}">🎧 Mode écoute libre</a>
@@ -148,7 +148,7 @@ function playSurahLoop(n) {
   Player.setReciter('hady_hafs');
   const loops = (Progress.data && Progress.data.learning.loops) || 5;
   Player.playSurah(n, { loop: loops });
-  toast(`Sourate ${n} en boucle ×${loops} avec Mouhamed Hady Touré.`, 'ok');
+  toast(`Sourate ${n} — lecture en boucle du Coran ×${loops}.`, 'ok');
 }
 
 function goToVerse(n) {
@@ -165,7 +165,7 @@ View.surahList = async function () {
 
     <div class="kicker">Le Coran en français</div>
     <h1>Les 114 sourates</h1>
-    <p class="lead" style="margin:.75rem 0 1.65rem">Texte arabe, phonétique et traduction de Muhammad Hamidullah, verset par verset — avec l'audio de Mouhamed Hady Touré.</p>
+    <p class="lead" style="margin:.75rem 0 1.65rem">Texte arabe, phonétique et traduction de Muhammad Hamidullah, verset par verset — avec la lecture en boucle du Coran.</p>
     <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(255px,1fr))">
       ${Quran.surahs.map(s => `
         <a class="card card-click" href="#/lecture/${s.number}" style="display:flex;align-items:center;gap:.95rem;padding:1.05rem 1.15rem">
@@ -267,7 +267,7 @@ const Session = {
               <p class="muted" style="font-size:.92rem;margin:.55rem 0 .85rem">
                 ${reciter.type === 'ayah'
           ? 'Ce récitateur dispose de l\'audio par verset : la boucle répétera exactement ce verset.'
-          : 'Mouhamed Hady Touré : la sourate tourne en boucle — suivez le verset affiché. Pour une boucle exacte du verset seul, utilisez un récitateur « par verset » dans les réglages.'}
+          : 'Lecture en boucle du Coran : la sourate tourne en boucle — suivez le verset affiché. Pour une boucle exacte du verset seul, utilisez un récitateur « par verset » dans les réglages.'}
               </p>
               <button class="btn btn-soft btn-sm" onclick="Session.loopVerse()">🔁 Lancer la boucle ×${l.loops}</button>
             </div>
@@ -433,7 +433,7 @@ View.daily = async function () {
             D'abord, récitez les sourates avec vérification de prononciation :
             <strong>Al-Faatiha</strong>, puis de la <strong>sourate 114 vers le début</strong>.
             Lorsque vous avez récité toutes les sourates que vous pouvez, l'apprentissage quotidien démarre :
-            chaque jour, le nombre de versets que vous voulez, avec la récitation de <strong>Mouhamed Hady Touré</strong> en boucle.
+            chaque jour, le nombre de versets que vous voulez, avec la <strong>lecture en boucle du Coran</strong>.
           </p>
           <div class="bar" style="max-width:420px;margin:0 auto 1.35rem"><span style="width:${Math.round(done / 38 * 100)}%"></span></div>
           <p class="muted">${done} sourate${done > 1 ? 's' : ''} récitées ${done < need ? `— encore ${need - done} pour pouvoir déclarer « toutes les sourates que je peux ».` : '— vous pouvez maintenant déclarer avoir récité toutes les sourates que vous pouvez.'}</p>
@@ -1152,7 +1152,7 @@ View.methode = function () {
             <div class="row" style="gap:.85rem;align-items:flex-start">
               <span class="badge badge-gold">Phase 2</span>
               <div><strong>Apprentissage quotidien.</strong> Le nombre de versets que vous voulez par jour,
-              avec Mouhamed Hady Touré en boucle : écouter, répéter, mémoriser.</div>
+              avec la lecture en boucle du Coran : écouter, répéter, mémoriser.</div>
             </div>
             <div class="row" style="gap:.85rem;align-items:flex-start">
               <span class="badge badge-gold">Phase 3</span>
