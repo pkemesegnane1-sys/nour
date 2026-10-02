@@ -143,7 +143,10 @@ function check(label, cond) {
   // Récitation de la sourate ENTIÈRE (pour savoir si l'on peut avancer)
   window.startSurahVerify(1);
   await sleep(250);
-  check('Console sourate entière : micro présent', !!window.document.querySelector('#verify-box .mic-btn'));
+  {
+    const box = window.document.querySelector('#verify-box');
+    check('Console sourate entière : micro présent', !!box && box.innerHTML.trim().length > 0 && (!!box.querySelector('.mic-btn') || box.innerHTML.includes('selfRate')));
+  }
   window.Verify.attempts = 3;
   window.Verify.renderCompanion();
   await sleep(60);

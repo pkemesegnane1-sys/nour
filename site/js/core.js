@@ -30,15 +30,9 @@ function toast(msg, type = '') {
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .4s'; setTimeout(() => el.remove(), 420); }, 3600);
 }
 
-/* ---------- Pile d'interfaces (modales / console) ----------
-   Le RETOUR du téléphone (popstate) et la touche Échap reculent d'un cran :
-   1. fermer la modale / la console ouverte  →  2. sinon, page précédente. */
-
-const UIStack = [];
-
-function pushUI(type) {
-  try { history.pushState({ nourUI: type }, ''); UIStack.push(type); } catch (e) {}
-}
+/* ---------- Modales & retour ----------
+   Le retour du téléphone / Échap revient en arrière ; le changement de page
+   ferme les fenêtres. Aucune manipulation de l'historique (fiable partout). */
 
 function closeModalNow() {
   const overlay = $('#modal-overlay');
@@ -47,53 +41,30 @@ function closeModalNow() {
   if (box) box.innerHTML = '';
 }
 
-function closeConsoleNow() {
-  if (typeof ReciteState !== 'undefined') ReciteState.verse = null;
-  const body = document.getElementById('console-body');
-  const vbox = document.getElementById('verify-box');
-  if (vbox) vbox.innerHTML = '';
-  document.querySelectorAll('.verse-reciting').forEach(el => el.classList.remove('verse-reciting'));
-}
-
-function closeTopUI() {
-  const t = UIStack.pop();
-  if (t === 'modal') closeModalNow();
-  else if (t === 'console') closeConsoleNow();
-  return !!t;
-}
-
 function showModal(html, onOpen) {
   const overlay = $('#modal-overlay'), box = $('#modal-box');
   box.innerHTML = html;
   overlay.classList.remove('hidden');
   overlay.onclick = e => { if (e.target === overlay) closeModal(); };
   if (onOpen) onOpen(box);
-  pushUI('modal');
 }
 
 function closeModal() {
   closeModalNow();
-  if (UIStack.length && UIStack[UIStack.length - 1] === 'modal') {
-    UIStack.pop();
-    // Avale l'entrée d'historique de la modale, sauf si une navigation suit aussitôt
-    setTimeout(() => {
-      if (window.__nourNav) return;
-      try { history.back(); } catch (e) {}
-    }, 0);
-  }
 }
 
-/* Bouton retour du téléphone / navigateur */
+/* Bouton retour du téléphone : ferme la fenêtre ouverte si nécessaire */
 window.addEventListener('popstate', () => {
-  if (UIStack.length) { closeTopUI(); return; }
-  // sinon : le hashchange rend la page précédente
+  const overlay = $('#modal-overlay');
+  if (overlay && !overlay.classList.contains('hidden')) { closeModalNow(); return; }
 });
 
 /* Touche Échap = retour */
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     e.preventDefault();
-    if (UIStack.length) { closeTopUI(); return; }
+    const overlay = $('#modal-overlay');
+    if (overlay && !overlay.classList.contains('hidden')) { closeModalNow(); return; }
     if (location.hash && location.hash !== '#/accueil') history.back();
   }
 });
@@ -217,29 +188,49 @@ const Progress = {
   uid: null,
   data: null,
 
+  defaults() {
+    return {
+      verified: {},            // sourates validées : "n": {score, date, attempts, clipId}
+      learningUnlocked: false,
+      learning: {
+        surah: 114,            // sourate en cours d'apprentissage (sens décroissant)
+        verseCursor: 1,        // prochain verset à apprendre
+        learned: {},           // "n:a": {date, score, reviews:[]}
+        dailyGoal: 5,
+        reciter: 'hady_hafs',
+        loops: 5,
+        rate: 0.75
+      },
+      streak: { current: 0, best: 0, lastDay: null },
+      dailyLog: {},            // "YYYY-MM-DD": {versesLearned, recitations, minutes}
+      marks: {},               // repères A/B : "n": {"a": secondes}
+      verseRecitation: {},     // statuts vert/rouge par verset
+      literacy: { lettersDone: [], modules: {}, stepsDone: [] },
+      surahRec: {},            // récitation de la sourate entière
+      settings: { threshold: 60 },
+      journal: []              // [{date, type, surah, verse, score, clipId, label}]
+    };
+  },
+
+  /* Complète les comptes créés avec une ancienne version (champs manquants) */
+  migrate() {
+    if (!this.data) return;
+    const deepFill = (target, defs) => {
+      for (const k of Object.keys(defs)) {
+        if (target[k] === undefined || target[k] === null) target[k] = defs[k];
+        else if (defs[k] && typeof defs[k] === 'object' && !Array.isArray(defs[k]) && typeof target[k] === 'object') {
+          deepFill(target[k], defs[k]);
+        }
+      }
+    };
+    deepFill(this.data, this.defaults());
+    this.save();
+  },
+
   init(uid) {
     this.uid = uid;
     if (!LS.get('progress.' + uid)) {
-      LS.set('progress.' + uid, {
-        verified: {},            // sourates validées : "n": {score, date, attempts, clipId}
-        learningUnlocked: false,
-        learning: {
-          surah: 114,            // sourate en cours d'apprentissage (sens décroissant)
-          verseCursor: 1,        // prochain verset à apprendre
-          learned: {},           // "n:a": {date, score, reviews:[]}
-          dailyGoal: 5,
-          reciter: 'hady_hafs',
-          loops: 5,
-          rate: 0.75
-        },
-        streak: { current: 0, best: 0, lastDay: null },
-        dailyLog: {},            // "YYYY-MM-DD": {versesLearned, recitations, minutes}
-        marks: {},               // repères A/B : "n": {"a": secondes}
-        literacy: { lettersDone: [], modules: {}, stepsDone: [] },
-        surahRec: {},
-        settings: { threshold: 60 },
-        journal: []              // [{date, type, surah, verse, score, clipId, label}]
-      });
+      LS.set('progress.' + uid, this.defaults());
     }
     this.load();
   },
@@ -250,6 +241,12 @@ const Progress = {
       if (u) this.uid = u.id;
     }
     this.data = this.uid ? LS.get('progress.' + this.uid) : null;
+    if (this.uid && !this.data) {
+      // Données perdues (navigateur, nettoyage…) : on repart des valeurs par défaut
+      this.data = this.defaults();
+      this.save();
+    }
+    if (this.data) this.migrate();
     return this.data;
   },
 
@@ -405,9 +402,11 @@ const Progress = {
 
   /* --- Repères audio (boucles A→B) --- */
   getMark(surah, verse) {
-    return (this.data.marks[String(surah)] || {})[String(verse)] ?? null;
+    return ((this.data && this.data.marks && this.data.marks[String(surah)]) || {})[String(verse)] ?? null;
   },
   setMark(surah, verse, seconds) {
+    if (!this.data) return;
+    if (!this.data.marks) this.data.marks = {};
     const s = String(surah);
     if (!this.data.marks[s]) this.data.marks[s] = {};
     this.data.marks[s][String(verse)] = seconds;
@@ -416,12 +415,13 @@ const Progress = {
 
   /* --- Récitation de la sourate entière (pour savoir si l'on peut avancer) --- */
   setSurahRec(n, res) {
+    if (!this.data) return;
     if (!this.data.surahRec) this.data.surahRec = {};
     this.data.surahRec[String(n)] = res;
     this.save();
   },
   getSurahRec(n) {
-    return (this.data.surahRec || {})[String(n)] || null;
+    return ((this.data && this.data.surahRec) || {})[String(n)] || null;
   },
 
   /* --- Littératie --- */

@@ -230,8 +230,18 @@ const Verify = {
         ? 'Appuyez sur le micro, récitez à voix haute, puis appuyez à nouveau pour arrêter.'
         : 'Votre navigateur ne supporte pas la reconnaissance vocale arabe. Utilisez le mode accompagné ci-dessous.'}
         </div>
-        <button class="mic-btn" id="mic-btn" onclick="Verify.toggle()" ${Speech.micSupported() ? '' : 'disabled'}>🎙</button>
-        <div id="mic-status" class="muted" style="min-height:1.4em"></div>
+        ${Speech.micSupported()
+          ? `<button class="mic-btn" id="mic-btn" onclick="Verify.toggle()">🎙</button>
+        <div id="mic-status" class="muted" style="min-height:1.4em"></div>`
+          : `<div class="info-box" style="margin:.65rem 0">
+               <strong>📱 Micro non disponible</strong> dans ce navigateur : autorisez le micro
+               (cadenas 🔒) ou utilisez la validation ci-dessous après avoir écouté et répété.
+             </div>
+             <div class="row" style="justify-content:center;gap:.5rem;flex-wrap:wrap">
+               <button class="btn btn-primary" onclick="Verify.selfRate(true)">✓ J'ai bien récité</button>
+               <button class="btn btn-danger" onclick="Verify.selfRate(false)">✗ Je dois reprendre</button>
+             </div>
+             <div id="mic-status" class="muted" style="min-height:1.4em"></div>`}
         <div class="row" style="justify-content:center">
           <div id="score-slot"></div>
         </div>

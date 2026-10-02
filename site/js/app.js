@@ -595,8 +595,8 @@ View.recite = async function (n) {
   Player.stop();
   Player.setReciter('hady_hafs');
   Player.setRate(1); // son naturel du récitateur sur cette page
-  renderSurahRecState(n, s);
-  startSurahVerify(n); // console de récitation : la sourate entière
+  try { startSurahVerify(n); } catch (e) { console.error(e); } // LE MICRO D'ABORD
+  try { renderSurahRecState(n, s); } catch (e) { console.error(e); }
 };
 
 /* ================= RÉCITATION DE LA SOURATE ENTIÈRE =================
@@ -636,6 +636,7 @@ function startSurahVerify(n) {
 }
 
 function renderSurahRecState(n, s) {
+  try {
   const rec = Progress.getSurahRec(n);
   const state = $('#surah-rec-state');
   const btn = $('#btn-validate-surah');
@@ -659,6 +660,7 @@ function renderSurahRecState(n, s) {
       ? 'À vous de juger : si la sourate est bien retenue, certifiez-la.'
       : 'Votre récitation de la sourate entière doit être en vert pour valider.';
   }
+  } catch (e) { console.error(e); }
 }
 
 function updateVerseVisual(n, v) {
@@ -747,14 +749,8 @@ function finishSurahValidation(n) {
   toast(`Sourate ${n} retenue ✓ ${score}%`, 'ok');
 }
 
-// En changeant de page : fermeture nette (modales, console) + micro coupé SANS évaluation
+// En changeant de page : fermeture nette des fenêtres + micro coupé SANS évaluation
 window.addEventListener('hashchange', () => {
-  window.__nourNav = true;
-  setTimeout(() => { window.__nourNav = false; }, 50);
-  if (typeof UIStack !== 'undefined') {
-    while (UIStack.length) UIStack.pop();
-    if (typeof closeModalNow === 'function') closeModalNow();
-    if (typeof closeConsoleNow === 'function') closeConsoleNow();
-  }
+  if (typeof closeModalNow === 'function') closeModalNow();
   if (typeof Speech !== 'undefined' && Speech.forceStop) Speech.forceStop();
 });

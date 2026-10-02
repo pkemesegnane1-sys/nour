@@ -534,3 +534,10 @@ code{background:var(--cream-2);padding:.12em .45em;border-radius:6px;font-size:.
   background:rgba(20,98,74,.08);border:1px solid rgba(20,98,74,.2);color:var(--emerald-2);
   padding:.95rem 1.25rem;border-radius:14px;font-size:.95rem;
 }
+
+/* ===== Mobile : le lecteur + la console de récitation AU-DESSUS des versets ===== */
+@media (max-width: 920px) {
+  .grid-split { display: flex; flex-direction: column; }
+  .grid-split > .col:first-child { order: 2; }
+  .grid-split > .col:last-child { order: 1; position: static !important; }
+}
