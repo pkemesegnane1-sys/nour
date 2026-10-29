@@ -1,0 +1,87 @@
+% =====================================================================
+%  ANGLAIS — LE GRAND LIVRE D'AUTO-FORMATION
+%  12 mois pour parler anglais comme vous parlez français
+%  Méthode complète pour francophones : A1 -> B2 (avec passerelles C1)
+%
+%  FICHIER PRINCIPAL : compilez CE fichier (main.tex), deux fois.
+%    - Overleaf : New Project -> Upload -> glisser tout le dossier,
+%                 compiler main.tex (Menu -> Compiler : pdfLaTeX).
+%    - En local : pdflatex main.tex && pdflatex main.tex
+%                 (ou : latexmk -pdf main.tex, ou la commande make)
+% =====================================================================
+\documentclass[11pt,a4paper,oneside]{book}
+
+\input{preamble.tex}
+
+\begin{document}
+
+% ------------------------------------------------------------------
+%  PAGES LIMINAIRES
+% ------------------------------------------------------------------
+\frontmatter
+\input{frontmatter.tex}
+
+\tableofcontents
+\pagevierge
+
+% ------------------------------------------------------------------
+%  CORPS DU LIVRE
+% ------------------------------------------------------------------
+\mainmatter
+
+% ===== PARTIE I — LE PLAN DE BATAILLE ==============================
+\part{Le plan de bataille : devenir vraiment bilingue en 12 mois}
+\input{parties/01-plan-12-mois.tex}
+\input{parties/02-methodes-et-outils.tex}
+
+% ===== PARTIE II — LES SONS DE L'ANGLAIS ===========================
+\part{Les sons de l'anglais : comprendre et être compris}
+\input{parties/03-sons-prononciation.tex}
+
+% ===== PARTIE III — GRAMMAIRE COMPLÈTE =============================
+\part{Grammaire complète, du niveau A1 au niveau B2}
+\input{parties/04-grammaire-a1-fondations.tex}
+\input{parties/05-grammaire-a2-temps.tex}
+\input{parties/06-grammaire-b1-structures.tex}
+\input{parties/07-grammaire-b2-finesse.tex}
+
+% ===== PARTIE IV — VOCABULAIRE =====================================
+\part{Vocabulaire : les mots qui servent vraiment}
+\input{parties/08-vocabulaire-strategie-themes.tex}
+\input{parties/09-phrasal-idiomes-faux-amis.tex}
+
+% ===== PARTIE V — PARLER ===========================================
+\part{Parler : 40 situations, des dialogues modèles, la fluidité}
+\input{parties/10-parler-dialogues.tex}
+\input{parties/11-techniques-oral.tex}
+
+% ===== PARTIE VI — ÉCOUTER, LIRE, ÉCRIRE ===========================
+\part{Écouter, lire, écrire}
+\input{parties/12-comprehension-orale.tex}
+\input{parties/13-lecture-ecriture.tex}
+\input{parties/14-erreurs-francophones.tex}
+
+% ===== PARTIE VII — TESTS ==========================================
+\part{Tests, suivi et certification}
+\input{parties/15-tests-autoevaluation.tex}
+
+% ------------------------------------------------------------------
+%  ANNEXES
+% ------------------------------------------------------------------
+\appendix
+\part*{Annexes \mdseries\small--- tout ce qu'il faut avoir sous la main}
+\addcontentsline{toc}{part}{Annexes}
+\input{annexes/A-verbes-irreguliers.tex}
+\input{annexes/B-phrases-utiles.tex}
+\input{annexes/C-fiches-revision.tex}
+\input{annexes/D-connecteurs-prepositions.tex}
+\input{annexes/E-ressources.tex}
+\input{annexes/F-journal-progression.tex}
+\input{annexes/G-glossaire-mot-final.tex}
+
+% ------------------------------------------------------------------
+%  FIN
+% ------------------------------------------------------------------
+\backmatter
+
+\end{document}

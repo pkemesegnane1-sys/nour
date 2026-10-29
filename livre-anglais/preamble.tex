@@ -1,0 +1,313 @@
+% =====================================================================
+%  PRÉAMBULE — « ANGLAIS : LE GRAND LIVRE D'AUTO-FORMATION »
+%  Méthode complète pour francophones — 12 mois, A1 -> B2/C1
+%
+%  > Moteur conseillé : pdfLaTeX (2 passes pour la table des matières)
+%  > Fonctionne sur Overleaf (TeX Live complet) et en local
+%    (TeX Live / MiKTeX). Aucun fichier image externe n'est requis.
+%  > Si un paquet manque, MiKTeX le télécharge automatiquement ;
+%    sur TeX Live :  sudo tlmgr install tcolorbox titlesec pifont
+% =====================================================================
+
+% ---------- Encodage et polices -------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{textcomp}
+\usepackage{pifont}
+
+% ---------- Langues : français (principal) + anglais ----------------
+\usepackage[english,french]{babel}
+% Typographie française correcte ; l'anglais est inséré via \en{} ou
+% \selectlanguage{english} pour les longs passages.
+\frenchbsetup{
+  AutoSpacePunctuation = true,
+  StandardItemizeEnv   = true,
+  StandardEnumerateEnv = true,
+  ThinSpaceInFrenchNumbers = true,
+  FrenchFootnotes      = false,
+  IndentFirst          = false
+}
+
+% ---------- Mise en page --------------------------------------------
+\usepackage[a4paper,top=2.2cm,bottom=2.2cm,left=2.1cm,right=2.1cm,
+            headheight=14pt,footskip=1.1cm]{geometry}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{multicol}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{ragged2e}
+\usepackage[usenames,dvipsnames,table]{xcolor}
+
+% ---------- Couleurs du livre ---------------------------------------
+\definecolor{bleuNuit}{HTML}{0F3D6E}
+\definecolor{bleuClair}{HTML}{E9F1FA}
+\definecolor{bleuMoyen}{HTML}{3D7EBF}
+\definecolor{vert}{HTML}{1B7A43}
+\definecolor{vertClair}{HTML}{E8F6EE}
+\definecolor{rouge}{HTML}{AE2B2B}
+\definecolor{rougeClair}{HTML}{FCECEC}
+\definecolor{orange}{HTML}{C4720A}
+\definecolor{orangeClair}{HTML}{FFF3E1}
+\definecolor{violet}{HTML}{5B3A8E}
+\definecolor{violetClair}{HTML}{F2ECFA}
+\definecolor{gris}{HTML}{5A5A5A}
+\definecolor{grisClair}{HTML}{F3F3F3}
+\definecolor{grisTresClair}{HTML}{FAFAFA}
+\definecolor{tabHead}{HTML}{0F3D6E}
+\definecolor{tabAlt}{HTML}{F4F7FB}
+
+% ---------- Symboles utilitaires ------------------------------------
+\newcommand{\ok}{\ding{51}\,}
+\newcommand{\ko}{\ding{55}\,}
+\newcommand{\etoile}{\ding{72}\,}
+\newcommand{\ra}{\textrightarrow\,}
+\newcommand{\Ra}{\ensuremath{\Rightarrow}\,}
+\newcommand{\cible}{\ding{119}\,}
+
+% ---------- Phonétique : IPA (si tipa est installé) ------------------
+\newif\ifavecTIPA
+\IfFileExists{tipa.sty}{\avecTIPAtrue}{\avecTIPAfalse}
+%  Voyelles :   \ipaee iː  \ipaiot ɪ  \ipaE ɛ/e  \ipae æ  \ipaa ɑː  \ipao ɔː
+%               \ipaups ʊ  \ipaoo uː  \ipalv ʌ  \ipaer ɜː  \ipeschwa ə
+%  Diphtongues: \ipaei eɪ  \ipaai aɪ  \ipaOi ɔɪ  \ipaau aʊ  \ipaou əʊ/oʊ
+%  Consonnes : \ipatheta θ  \ipadh ð  \ipash ʃ  \ipazh ʒ  \ipang ŋ
+%  Divers   :  \ipalong ː   \ipa{...} séquence libre (notation TIPA)
+\ifavecTIPA
+  \usepackage[safe]{tipa}
+  \newcommand{\ipash}{\textipa{S}}        % ʃ
+  \newcommand{\ipazh}{\textipa{Z}}        % ʒ
+  \newcommand{\ipang}{\textipa{N}}        % ŋ
+  \newcommand{\ipeschwa}{\textipa{@}}     % ə
+  \newcommand{\ipatheta}{\textipa{T}}     % θ
+  \newcommand{\ipadh}{\textipa{D}}        % ð
+  \newcommand{\ipae}{\ae}                 % æ
+  \newcommand{\ipaE}{\textipa{E}}         % ɛ
+  \newcommand{\ipaa}{\textipa{A}}         % ɑ
+  \newcommand{\ipao}{\textipa{O}}         % ɔ
+  \newcommand{\ipaer}{\textipa{3}}        % ɜ
+  \newcommand{\ipaups}{\textipa{U}}       % ʊ
+  \newcommand{\ipaiot}{\textipa{I}}       % ɪ
+  \newcommand{\ipalv}{\textipa{V}}        % ʌ
+  \newcommand{\ipaoo}{\textipa{u}}        % u
+  \newcommand{\ipaee}{\textipa{i}}        % i
+  \newcommand{\ipalong}{\textipa{:}}      % ː
+  \newcommand{\ipaei}{\textipa{eI}}       % eɪ
+  \newcommand{\ipaai}{\textipa{aI}}       % aɪ
+  \newcommand{\ipaOi}{\textipa{OI}}       % ɔɪ
+  \newcommand{\ipaau}{\textipa{aU}}       % aʊ
+  \newcommand{\ipaou}{\textipa{@U}}       % əʊ
+  \newcommand{\ipaoou}{\textipa{oU}}      % oʊ (AmE)
+  \newcommand{\ipa}[1]{\textipa{#1}}
+\else
+  % ---- Repli : transcription lisible si le paquet tipa est absent ----
+  \newcommand{\ipash}{ch}
+  \newcommand{\ipazh}{j}
+  \newcommand{\ipang}{ng}
+  \newcommand{\ipeschwa}{\textsf{@}}
+  \newcommand{\ipatheta}{\ensuremath{\theta}}
+  \newcommand{\ipadh}{dh}
+  \newcommand{\ipae}{\ae}
+  \newcommand{\ipaE}{\`e}
+  \newcommand{\ipaa}{a:}
+  \newcommand{\ipao}{o:}
+  \newcommand{\ipaer}{eu:}
+  \newcommand{\ipaups}{ou}
+  \newcommand{\ipaiot}{i}
+  \newcommand{\ipalv}{e}
+  \newcommand{\ipaoo}{ou:}
+  \newcommand{\ipaee}{i:}
+  \newcommand{\ipalong}{:}
+  \newcommand{\ipaei}{\'e-i}
+  \newcommand{\ipaai}{a-i}
+  \newcommand{\ipaOi}{o-i}
+  \newcommand{\ipaau}{a-ou}
+  \newcommand{\ipaou}{o-ou}
+  \newcommand{\ipaoou}{o-ou}
+  \newcommand{\ipa}[1]{#1}
+\fi
+
+% Prononciation « à la française » : toujours disponible, sans paquet
+\newcommand{\pron}[1]{{\color{violet}\sffamily\small[#1]}}
+
+% ---------- Anglais en ligne et blocs bilingues ---------------------
+% \en{}  : passage en anglais (typographie anglaise, pas d'espace avant ! ? :)
+% \enb{} : idem en gras   \eni{} : idem en italique
+\newcommand{\en}[1]{\foreignlanguage{english}{#1}}
+\newcommand{\enb}[1]{\foreignlanguage{english}{\textbf{#1}}}
+\newcommand{\eni}[1]{\foreignlanguage{english}{\textit{#1}}}
+
+% Exemple bilingue : anglais + traduction française en retrait
+\newcommand{\ex}[2]{%
+  \par\smallskip
+  {\selectlanguage{english}#1\par}%
+  \hspace*{1.2em}{\footnotesize\color{gris}\selectlanguage{french}\itshape #2}\par}
+
+% Phrase utile (tableaux) : anglais | français
+\newcommand{\phr}[2]{\en{#1} & \selectlanguage{french}#2 \tabularnewline}
+
+% Mot de vocabulaire : mot | prononciation française | sens
+\newcommand{\mot}[3]{\textbf{\en{#1}} & \pron{#2} & \selectlanguage{french}#3 \tabularnewline}
+
+% Ligne de dialogue : personnage, réplique anglaise, traduction
+\newcommand{\dial}[3]{%
+  \par\smallskip
+  {\bfseries\color{bleuNuit}\selectlanguage{french}#1}\enspace\textcolor{orange}{\textbullet}\enspace
+  {\selectlanguage{english}#2\par}%
+  \hspace*{1.6em}{\footnotesize\color{gris}\selectlanguage{french}\itshape #3}\par}
+
+% Réponse courte / variante dans un dialogue
+% Flèches d'intonation : sûres en mode texte comme en mode maths
+\newcommand{\monte}{\ensuremath{\nearrow}}
+\newcommand{\descend}{\ensuremath{\searrow}}
+
+\newcommand{\variante}[1]{\par\hspace*{1.6em}{\footnotesize\selectlanguage{english}\textcolor{bleuMoyen}{#1}}\par}
+
+% Trou à compléter dans les exercices
+\newcommand{\trou}[1][2.2cm]{\rule{#1}{0.4pt}}
+\newcommand{\troul}[1]{\underline{\hspace{#1}}}
+
+% ---------- Boîtes colorées (tcolorbox si disponible) ----------------
+\IfFileExists{tcolorbox.sty}{%
+  \usepackage[skins,breakable]{tcolorbox}
+  \tcbset{
+    boite/.style={enhanced jigsaw, breakable, boxrule=0pt,
+      leftrule=3pt, arc=0pt, outer arc=0pt, left=7pt, right=7pt,
+      top=6pt, bottom=6pt, toptitle=4pt, bottomtitle=4pt,
+      fonttitle=\bfseries\selectlanguage{french},
+      coltitle=white, fontupper=\small, fontlower=\small},
+    sansTitre/.style={enhanced jigsaw, breakable, boxrule=0.5pt, arc=2pt,
+      left=6pt, right=6pt, top=5pt, bottom=5pt, fontupper=\small}
+  }
+  \newtcolorbox{regle}[1][]{boite, colback=bleuClair, colframe=bleuClair,
+    borderline west={3pt}{0pt}{bleuNuit}, coltitle=white,
+    title={\selectlanguage{french}\ok RÈGLE #1}, colbacktitle=bleuNuit}
+  \newtcolorbox{piege}[1][]{boite, colback=rougeClair, colframe=rougeClair,
+    borderline west={3pt}{0pt}{rouge},
+    title={\selectlanguage{french}\ko PIÈGE FRANCOPHONE #1}, colbacktitle=rouge}
+  \newtcolorbox{astuce}[1][]{boite, colback=vertClair, colframe=vertClair,
+    borderline west={3pt}{0pt}{vert},
+    title={\selectlanguage{french}\etoile ASTUCE #1}, colbacktitle=vert}
+  \newtcolorbox{mission}[1][]{boite, colback=orangeClair, colframe=orangeClair,
+    borderline west={3pt}{0pt}{orange},
+    title={\selectlanguage{french}\cible MISSION DU JOUR #1}, colbacktitle=orange}
+  \newtcolorbox{memo}[1][]{boite, colback=violetClair, colframe=violetClair,
+    borderline west={3pt}{0pt}{violet},
+    title={\selectlanguage{french}\ding{46}\ À RETENIR #1}, colbacktitle=violet}
+  \newtcolorbox{dialoguebox}[1][]{sansTitre, colback=grisTresClair, colframe=bleuMoyen,
+    title={\selectlanguage{french}\bfseries DIALOGUE #1}, coltitle=white,
+    colbacktitle=bleuMoyen}
+  \newtcolorbox{exo}[1][]{sansTitre, colback=white, colframe=bleuNuit,
+    title={\selectlanguage{french}\bfseries EXERCICE #1}, coltitle=white,
+    colbacktitle=bleuNuit}
+  \newtcolorbox{corrige}[1][]{sansTitre, colback=vertClair, colframe=vert,
+    title={\selectlanguage{french}\bfseries CORRIGÉ #1}, coltitle=white,
+    colbacktitle=vert}
+  \newtcolorbox{tableau}[1][]{sansTitre, colback=white, colframe=gris,
+    title={\selectlanguage{french}\bfseries #1}, coltitle=white,
+    colbacktitle=gris}
+}{%
+  % -------- Repli sans tcolorbox : contenu toujours lisible ----------
+  \newenvironment{regle}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \color{bleuNuit}\bfseries\selectlanguage{french}\ok RÈGLE #1\par\normalcolor\small\selectlanguage{french}}
+      {\end{minipage}\par\medskip}
+  \newenvironment{piege}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \color{rouge}\bfseries\selectlanguage{french}\ko PIÈGE FRANCOPHONE #1\par\normalcolor\small\selectlanguage{french}}
+      {\end{minipage}\par\medskip}
+  \newenvironment{astuce}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \color{vert}\bfseries\selectlanguage{french}\etoile ASTUCE #1\par\normalcolor\small\selectlanguage{french}}
+      {\end{minipage}\par\medskip}
+  \newenvironment{mission}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \color{orange}\bfseries\selectlanguage{french}\cible MISSION DU JOUR #1\par\normalcolor\small\selectlanguage{french}}
+      {\end{minipage}\par\medskip}
+  \newenvironment{memo}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \color{violet}\bfseries\selectlanguage{french}\ding{46}\ À RETENIR #1\par\normalcolor\small\selectlanguage{french}}
+      {\end{minipage}\par\medskip}
+  \newenvironment{dialoguebox}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \bfseries\selectlanguage{french}DIALOGUE #1\par\mdseries\small}
+      {\end{minipage}\par\medskip}
+  \newenvironment{exo}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \bfseries\selectlanguage{french}EXERCICE #1\par\mdseries\small}
+      {\end{minipage}\par\medskip}
+  \newenvironment{corrige}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \bfseries\selectlanguage{french}CORRIGÉ #1\par\mdseries\small}
+      {\end{minipage}\par\medskip}
+  \newenvironment{tableau}[1][]{\par\medskip\noindent\begin{minipage}{\linewidth}
+      \bfseries\selectlanguage{french}#1\par\mdseries\small}
+      {\end{minipage}\par\medskip}
+}
+
+% ---------- Environnements simples (sans paquet) ---------------------
+% Bloc 100 % anglais (dialogues, textes, listes en anglais)
+\newenvironment{anglais}{\selectlanguage{english}\par\smallskip}{\par\smallskip\selectlanguage{french}}
+% Bloc de vocabulaire en trois colonnes
+\newenvironment{tabvocab}
+  {\par\smallskip\selectlanguage{french}\noindent
+   \begin{longtable}{@{}p{4.1cm}p{3.1cm}p{8.4cm}@{}}
+   \rowcolor{tabHead}\color{white}\bfseries Mot & \bfseries Prononciation & \bfseries Sens, exemple \\[2pt]
+   \endfirsthead
+   \rowcolor{tabHead}\color{white}\bfseries Mot & \bfseries Prononciation & \bfseries Sens, exemple \\[2pt]
+   \endhead}
+  {\end{longtable}\par\smallskip}
+
+% ---------- Titres (parties, chapitres, sections) --------------------
+\titleformat{\part}[display]
+  {\normalfont\sffamily\color{bleuNuit}}
+  {\filleft\huge\bfseries\partname\ \thepart}{12pt}
+  {\filcenter\Huge\bfseries}
+  [\vspace{6pt}{\color{orange}\titlerule[2pt]}]
+\titleformat{\chapter}[hang]
+  {\normalfont\sffamily\Huge\bfseries\color{bleuNuit}}
+  {\thechapter\enspace\textcolor{orange}{\vrule width 4pt height 24pt}\enspace}{0pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-18pt}{22pt}
+\titleformat{\section}
+  {\normalfont\sffamily\Large\bfseries\color{bleuNuit}}{\thesection}{0.8em}{}
+\titlespacing*{\section}{0pt}{16pt}{8pt}
+\titleformat{\subsection}
+  {\normalfont\sffamily\large\bfseries\color{orange}}{\thesubsection}{0.8em}{}
+\titlespacing*{\subsection}{0pt}{12pt}{6pt}
+\titleformat{\subsubsection}
+  {\normalfont\sffamily\normalsize\bfseries\color{gris}}{\thesubsubsection}{0.8em}{}
+\titlespacing*{\subsubsection}{0pt}{10pt}{4pt}
+
+% ---------- En-têtes et pieds de page --------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\footnotesize\sffamily\color{gris}\nouppercase{\rightmark}}
+\fancyhead[R]{\footnotesize\sffamily\color{bleuNuit}\thepage}
+\fancyfoot[L]{\footnotesize\sffamily\color{gris}Anglais --- le grand livre d'auto-formation}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{bleuMoyen}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}\fancyfoot[C]{\footnotesize\sffamily\thepage}%
+  \renewcommand{\headrulewidth}{0pt}}
+
+% ---------- Listes plus aérées ---------------------------------------
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=1.4em,itemsep=2pt,topsep=4pt,parsep=0pt}
+\setlist[enumerate]{leftmargin=1.8em,itemsep=2pt,topsep=4pt,parsep=0pt}
+
+% ---------- Tableaux : style par défaut ------------------------------
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.25}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\Centering\arraybackslash}p{#1}}
+\newcommand{\entete}[1]{\rowcolor{tabHead}\color{white}\bfseries #1}
+
+% ---------- Liens internes -------------------------------------------
+\usepackage[colorlinks=true,linkcolor=bleuNuit,urlcolor=bleuMoyen,
+            citecolor=vert,pdftitle={Anglais - le grand livre d'auto-formation},
+            pdfauthor={},pdfsubject={Methode complete d'anglais pour francophones},
+            bookmarksopen=true,bookmarksnumbered=true]{hyperref}
+
+% ---------- Divers ---------------------------------------------------
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\raggedbottom
+\sloppy
+\newcommand{\pagevierge}{\clearpage}
