@@ -2,18 +2,34 @@
 
 Source LaTeX du livre. Le PDF n'est pas versionné : il se construit en local.
 
+## Ouvrir le document
+
+Le dépôt ne contient que des sources `.tex` : il faut compiler pour obtenir un PDF.
+Trois voies, de la plus rapide à la plus autonome (détails ci-dessous).
+
+1. **Sans rien installer** : zipper le dossier `latex/`, l'envoyer sur
+   [Overleaf](https://fr.overleaf.com/) (*New Project → Upload Project*), remplacer le document
+   principal par `main.tex`, cliquer *Recompile*.
+2. **Dans le cloud, avec un vrai éditeur** : [GitHub Codespaces](https://github.com/codespaces)
+   sur la branche du dépôt → le conteneur a un bouton *Install LaTeX* → `latexmk -pdf -shell-escape latex/main.tex`.
+3. **Sur ta machine** : Tectonic ou TeX Live/MiKTeX (commandes plus bas).
+
 ## Compilation rapide
 
 ```bash
 cd latex
-# 1) Tectonic (le plus simple : télécharge les paquets à la volée)
-curl -fsSL https://git.io/uninstall-tectonic | sh   # ou : cargo install tectonic
-tectonic main.tex                # -> main.pdf + main.pdf (index via imakeidx)
+# Option 1 — Tectonic (un seul binaire, télécharge les paquets à la volée)
+curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustin.net | sh   # macOS/Linux
+#   ou : brew install tectonic / cargo install tectonic / scoop install tectonic (Windows)
+tectonic main.tex                                  # -> main.pdf (l'index est géré par tectonic)
 
-# 2) LaTeXmk / pdflatex (TeX Live ou MiKTeX complets)
+# Option 2 — TeX Live ou MiKTeX complets (le -shell-escape est indispensable pour l'index)
 latexmk -pdf -shell-escape main.tex
 #   ou à la main :
 pdflatex main.tex && makeindex main && pdflatex main.tex && pdflatex main.tex
+
+# Option 3 — LaTeX Workshop dans VS Code : Ctrl+Alt+B (ou "Build LaTeX project"),
+#   avec latexmk ; penser à acter "latex.build.withShellEscape": true dans settings.json.
 ```
 
 Paquets nécessaires : `texlive-latex-recommended`, `texlive-latex-extra`
