@@ -19,8 +19,11 @@ Trois voies, de la plus rapide à la plus autonome (détails ci-dessous).
 ```bash
 cd latex
 # Option 1 — Tectonic (un seul binaire, télécharge les paquets à la volée)
-curl --proto '=https' --tlsv1.2 -fsSL https://drop-sh.fullyjustin.net | sh   # macOS/Linux
-#   ou : brew install tectonic / cargo install tectonic / scoop install tectonic (Windows)
+# Linux : binaire statique depuis les releases GitHub (aucune dependance)
+curl -sSL https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/\
+  tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz | tar xz && sudo install tectonic /usr/local/bin/
+# macOS : brew install tectonic        Windows : scoop bucket add extras && scoop install tectonic
+# Partout : cargo install tectonic (si Rust est installe)
 tectonic main.tex                                  # -> main.pdf (l'index est géré par tectonic)
 
 # Option 2 — TeX Live ou MiKTeX complets (le -shell-escape est indispensable pour l'index)
