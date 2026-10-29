@@ -21,7 +21,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[french]{babel}
-\frenchsetup{SpaceGermandbls=no}
+% (aucune option babel particuliere : les defauts de babel-french conviennent)
 
 % ------------------------------ Mise en page ------------------------------
 \usepackage[left=2.1cm,right=2.1cm,top=2.3cm,bottom=2.4cm,headheight=15pt]{geometry}
@@ -35,6 +35,7 @@
 
 % ------------------------------ Liens / navigation ------------------------
 \usepackage{xcolor}
+\usepackage{hyperref}
 \definecolor{linkblue}{HTML}{0B4F8A}
 \definecolor{pathgreen}{HTML}{1F6B3A}
 \hypersetup{
@@ -205,7 +206,7 @@
 \newcommand{\rep}[1]{\texttt{\color{pathgreen}\#1/}}
 \newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{\#1}}}}
 \newcommand{\link}[2]{\href{#2}{\#1}}
-\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\$^[\ast]\$}}}
+\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[\textasteriskcentered]}}}}
 \newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
 \newcommand{\langphp}{\textcolor{phppurple}{\textbf{PHP}}}
 \newcommand{\langjava}{\textcolor{javared}{\textbf{Java}}}

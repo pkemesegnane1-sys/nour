@@ -1,0 +1,498 @@
+% ===========================================================================
+%  MANUEL COMPLET : JavaScript - PHP - Java
+%  Document d'auto-apprentissage, avec pratique, outils et liens.
+%
+%  Compilation (une seule commande suffit) :
+%     pdflatex main.tex
+%     pdflatex main.tex        <- 2e passage : table des matieres + ref croisees
+%  ou, mieux :
+%     latexmk -pdf -interaction=nonstopmode main.tex
+%  ou, sans TeX Live installe :
+%     tectonic main.tex
+%
+%  Si un paquet manque (erreur "File `xxx.sty' not found"), installe-le :
+%     sudo apt install texlive-latex-extra texlive-fonts-extra texlive-lang-french
+%     tlmgr install libertine inconsolata cleveref titletoc menu
+% ===========================================================================
+
+\documentclass[12pt,a4paper,twoside,openright]{book}
+
+% ------------------------------ Encodage / langue --------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+% (aucune option babel particuliere : les defauts de babel-french conviennent)
+
+% ------------------------------ Mise en page ------------------------------
+\usepackage[left=2.1cm,right=2.1cm,top=2.3cm,bottom=2.4cm,headheight=15pt]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+\onehalfspacing
+
+% ------------------------------ Polices -----------------------------------
+\usepackage[default,semibold]{libertine}   \% Tex Gyre Pagella-like, tres lisible
+\usepackage[scaled=0.92]{inconsolata}     \% police a chasse fixe (code)
+
+% ------------------------------ Liens / navigation ------------------------
+\usepackage{xcolor}
+\usepackage{hyperref}
+\definecolor{linkblue}{HTML}{0B4F8A}
+\definecolor{pathgreen}{HTML}{1F6B3A}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=linkblue,
+  filecolor=linkblue,
+  urlcolor=linkblue,
+  citecolor=linkblue,
+  pdftitle={Manuel complet : JavaScript, PHP et Java},
+  pdfauthor={Manuel d'auto-apprentissage},
+  pdfsubject={Programmation : JavaScript, PHP, Java},
+  pdfkeywords={JavaScript, Node.js, PHP, MySQL, Java, Spring Boot, tutoriel},
+  bookmarksnumbered=true,
+  bookmarksopen=true,
+  unicode=true
+}
+\usepackage[capitalise,nameinlink]{cleveref}
+
+% ------------------------------ Tableurs / listes -------------------------
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{ltablex}
+\usepackage{array}
+\usepackage{enumitem}
+\setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.5em}
+\setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
+\setlist[description]{topsep=3pt,itemsep=3pt,parsep=0pt,font=\bfseries}
+\usepackage{multicol}
+\usepackage{menukeys}   \% pour \keys{Ctrl + S}
+\usepackage{titletoc}
+\usepackage[totoc,columns=2]{imakeidx}
+\makeindex[intoc]
+\titlecontents{section}[3.2em]{\addvspace{2pt}\small}
+  {\contentslabel{2.0em}}{}{\titlerule*[0.75pc]{.}\contentspage}
+
+% ------------------------------ Couleurs du theme -------------------------
+\definecolor{codebg}{HTML}{F6F8FA}
+\definecolor{codeframe}{HTML}{D0D7DE}
+\definecolor{ctermbg}{HTML}{1B2430}
+\definecolor{ctermfg}{HTML}{E6EDF3}
+\definecolor{codekw}{HTML}{0550AE}
+\definecolor{codecom}{HTML}{5E7C40}
+\definecolor{codestr}{HTML}{A31515}
+\definecolor{codevar}{HTML}{7A3E9D}
+\definecolor{codefn}{HTML}{6639BA}
+\definecolor{themecolor}{HTML}{0B4F8A}
+\definecolor{jsyellow}{HTML}{F0DB4F}
+\definecolor{phppurple}{HTML}{777BB4}
+\definecolor{javared}{HTML}{E76F00}
+\definecolor{boxtitle}{HTML}{0B4F8A}
+\definecolor{objbg}{HTML}{EAF3FB}\definecolor{objfr}{HTML}{8FC1E8}
+\definecolor{notebg}{HTML}{EFF6EE}\definecolor{notefr}{HTML}{A7C9A0}
+\definecolor{tipbg}{HTML}{FFF6DE}\definecolor{tipfr}{HTML}{E3C06A}
+\definecolor{warnbg}{HTML}{FDECEC}\definecolor{warnfr}{HTML}{E6A0A0}
+\definecolor{exobg}{HTML}{F1EEFB}\definecolor{exofr}{HTML}{B7A6E0}
+\definecolor{linksbg}{HTML}{EEF3F7}\definecolor{linksfr}{HTML}{9BB8CE}
+\definecolor{theadbg}{HTML}{0B4F8A}
+\definecolor{tralight}{HTML}{F1F5F9}
+
+% ------------------------------ Code (listings) ---------------------------
+\usepackage{listings}
+\lstdefinestyle{base}{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  breakatwhitespace=true,
+  postbreak=\mbox{\textcolor{themecolor}{\$\hookrightarrow\$}\space},
+  showstringspaces=false,
+  tabsize=2,
+  numbers=none,
+  frame=none,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  aboveskip=2pt,
+  belowskip=2pt,
+  commentstyle=\color{codecom},
+  keywordstyle=\color{codekw}\bfseries,
+  stringstyle=\color{codestr},
+  identifierstyle=\color{black},
+  morecomment=[l][\color{codecom}]{\#},
+  captionpos=b
+}
+\lstdefinestyle{jscode}{style=base,language=JavaScript,morekeywords={async,await,of,as,static,let,const,yield,typeof,instanceof,void,delete,in,do,export,import,from,catch,finally,throw,undefined,NaN,Infinity,extends,super,get,set,Symbol,BigInt,arguments,debugger,with,switch,case,default,continue,break,function,class,return,try,new,this,null,true,false,if,else,while,for,var,=>}}
+\lstdefinestyle{phpcode}{style=base,language=[5.6]PHP,morekeywords={function,class,interface,trait,enum,abstract,final,extends,implements,namespace,use,const,public,protected,private,static,readonly,match,fn,global,instanceof,insteadof,as,print,unset,isset,echo,require,require\_once,include,include\_once,declare,endfor,endforeach,endif,while,do,switch,case,default,break,continue,catch,finally,throw,try,new,clone,this,null,true,false,yield,self,parent,\_\_DIR\_\_,\_\_FILE\_\_,\_\_LINE\_\_}}
+\lstdefinestyle{javacode}{style=base,language=Java,morekeywords={var,record,sealed,permits,non-sealed,yield,textblock,instanceof,enum,interface,class,abstract,final,static,public,protected,private,synchronized,volatile,transient,native,strictfp,implements,extends,package,import,throws,throw,try,catch,finally,super,this,null,true,false,assert,switch,default,case,do,while,for,if,else,new,return,boolean,char,byte,short,int,long,float,double,void},literate={<}{{\color{black}<}}1{>}{{\color{black}>}}1}
+\lstdefinestyle{confcode}{style=base,morecomment=[l][\color{codecom}]{\#},morecomment=[l]{//},morecomment=[l]{;}}
+\lstdefinestyle{sqlcode}{style=base,language=SQL,morekeywords={SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,TABLE,INDEX,VIEW,TRIGGER,PROCEDURE,FUNCTION,PRIMARY,KEY,FOREIGN,REFERENCES,UNIQUE,NOT,NULL,DEFAULT,AUTO\_INCREMENT,ENGINE,VARCHAR,INT,BIGINT,TEXT,BLOB,DATE,DATETIME,TIMESTAMP,DECIMAL,BOOLEAN,JOIN,INNER,LEFT,RIGHT,FULL,OUTER,ON,AS,WHERE,GROUP,ORDER,BY,HAVING,LIMIT,OFFSET,DISTINCT,AND,OR,IN,LIKE,BETWEEN,IS,COUNT,SUM,AVG,MIN,MAX,IF,EXISTS,UNION,ALL,VALUES,SET,TRANSACTION,COMMIT,ROLLBACK,GRANT,DESC,ASC,CASCADE,CONSTRAINT,CHECK,begin,end,show,use,database,from}}
+\lstdefinestyle{shellcode}{style=base,language=bash,morecomment=[l]\#}
+\lstdefinestyle{jsoncode}{style=base,morecomment=[l]{//}}
+\lstdefinestyle{ymlcode}{style=base,morecomment=[l]\#}
+
+\lstset{style=base}
+
+% ------------------------------ Bo\^ites (tcolorbox) -------------------------
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{listings,breakable,skins}
+
+\tcbset{
+  codestyle/.style={
+    enhanced, breakable, colback=codebg, colframe=codeframe,
+    boxrule=0.4pt, arc=1.5mm, left=2mm,right=2mm,top=1.6mm,bottom=1.6mm,
+    boxsep=0pt, fontupper=\ttfamily\small, listing only
+  }
+}
+
+% -- Blocs de code avec coloration syntaxique --
+\newtcblisting{codejs}[1][]{listing options={style=jscode,\#1},codestyle}
+\newtcblisting{codephp}[1][]{listing options={style=phpcode,\#1},codestyle}
+\newtcblisting{codejava}[1][]{listing options={style=javacode,\#1},codestyle}
+\newtcblisting{codesql}[1][]{listing options={style=sqlcode,\#1},codestyle}
+\newtcblisting{codeconf}[1][]{listing options={style=confcode,\#1},codestyle}
+\newtcblisting{codejson}[1][]{listing options={style=jsoncode,\#1},codestyle}
+\newtcblisting{codeyml}[1][]{listing options={style=ymlcode,\#1},codestyle}
+\newtcblisting{codeplain}[1][]{listing options={style=base,\#1},codestyle}
+% version "listing only" : le contenu n'est PAS verbatim, utile pour
+% colorer un mot. On prefere les versions verbatim ci-dessus.
+
+% -- Terminal : commandes a taper --
+\newtcblisting{terminal}{
+  enhanced, breakable, colback=ctermbg, colframe=ctermbg,
+  arc=1.5mm, boxrule=0pt, left=2.5mm,right=2mm,top=1.8mm,bottom=1.8mm,
+  boxsep=0pt, fontupper=\ttfamily\small\color{ctermfg},
+  listing only, listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
+}
+
+% -- Encarts pedagogiques --
+\newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
+  arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
+  fontupper=\scriptsize}
+
+\newtcolorbox{objectif}[1][]{enhanced, breakable, colback=objbg, colframe=objfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
+  title={Objectifs de la chapitre},\#1}
+
+\newtcolorbox{note}{enhanced, breakable, colback=notebg, colframe=notefr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  before upper={\small\textbf{Note.}\enspace}}
+
+\newtcolorbox{astuce}{enhanced, breakable, colback=tipbg, colframe=tipfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  before upper={\small\textbf{Astuce de pro.}\enspace}}
+
+\newtcolorbox{piege}{enhanced, breakable, colback=warnbg, colframe=warnfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  before upper={\small\textbf{Pi\`ege \`a \'eviter.}\enspace}}
+
+\newtcolorbox{exercice}[1][]{enhanced, breakable, colback=exobg, colframe=exofr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
+  title={Exercices guid\'es},\#1}
+
+\newtcolorbox{ressources}[1][]{enhanced, breakable, colback=linksbg, colframe=linksfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
+  title={Ressources et outils cit\'es},before upper=\small,\#1}
+
+\newtcolorbox{projet}[1][]{enhanced, breakable, colback=tipbg, colframe=tipfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=javared,
+  title={Projet \`a r\'ealiser},\#1}
+
+% ------------------------------ Macros pratiques ---------------------------
+\newcommand{\fichier}[1]{\texttt{\color{pathgreen}\#1}}
+\newcommand{\rep}[1]{\texttt{\color{pathgreen}\#1/}}
+\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{\#1}}}}
+\newcommand{\link}[2]{\href{#2}{\#1}}
+\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[\textasteriskcentered]}}}}
+\newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
+\newcommand{\langphp}{\textcolor{phppurple}{\textbf{PHP}}}
+\newcommand{\langjava}{\textcolor{javared}{\textbf{Java}}}
+\newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large \#1}\par\smallskip}
+\DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{\#1}}}
+% glyphes utilises dans les listings (arborescences, symbole euro) : encodage T1 -> on emprunte pifont
+\usepackage{pifont}
+\DeclareRobustCommand{\boxv}{\text{\ding{124}}}
+\DeclareRobustCommand{\boxh}{\text{\ding{141}}}
+\DeclareRobustCommand{\boxe}{\text{\ding{122}}}
+\DeclareRobustCommand{\euro}{\texteuro}
+\newcommand{\todo}[1]{\textcolor{javared}{\textbf{[TODO: \#1]}}}
+
+% tableaux : en-tetes colorees
+\usepackage{etoolbox}
+% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees + filets
+\newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}\%
+  \small\setlength{\tabcolsep}{5pt}\%
+  \begin{tabularx}{\textwidth}{@{}\#1@{}}\toprule}
+  {\bottomrule\end{tabularx}}
+\newcommand{\thd}[1]{\textbf{\color{white}\#1}}
+\newcommand{\headrow}{\rowcolor{theadbg}}
+\makeatletter
+\newenvironment{tablez}{\@ifnextchar[{\@tablezwith}{\@tablezwith[XXX]}}{\end{tabz}}
+\newcommand{\@tablezwith}[1]{\begin{tabz}{\#1}}
+\makeatother
+
+% ------------------------------ Doc ---------------------------------------
+\begin{document}
+\frontmatter
+
+% ------------------------------ Page de titre ------------------------------
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{0.6cm}
+  {\color{themecolor}\rule[-2pt]{0.86\textwidth}{1.5pt}}\\[6pt]
+  {\color{javared}\rule[-2pt]{0.86\textwidth}{1.5pt}}\\[6pt]
+  {\color{phppurple}\rule[-2pt]{0.86\textwidth}{1.5pt}}\\[26pt]
+  {\Huge\bfseries Manuel complet}\\[6pt]
+  {\large pour apprendre, pratiquer et ma\^itriser}\\[18pt]
+  {\fontsize{30}{34}\selectfont\bfseries
+    \textcolor{javared}{JavaScript}\quad\textcolor{phppurple}{PHP}\quad\textcolor{themecolor}{Java}}\\[24pt]
+  {\color{themecolor}\rule{0.86\textwidth}{0.8pt}}\\[22pt]
+  \large
+  De la premi\`ere ligne de code aux projets complets\\[4pt]
+  \normalsize 43 chapitres \textbullet\ 3 langages \textbullet\ tous les outils, liens et commandes\\[2pt]
+  Linux \textbullet\ macOS \textbullet\ Windows \textbullet\ \'EDiteur au choix \textbullet\ Pratique guid\'ee\\[26pt]
+  \small
+  \begin{tabular}{@{}ll@{}}
+    \textbf{Niveau} \& grand d\'ebutant \$\rightarrow\$ avanc\'e\\
+    \textbf{Pr\'erequis} \& savoir allumer un ordinateur et taper un chemin de fichier\\
+    \textbf{Dur\'ee conseill\'ee} \& 12 \`a 24 semaines, 1\`a 2 h par jour\\
+    \textbf{Format} \& cours + code complet + exercices + corrig\'es + liens officiels\\
+  \end{tabular}
+  \vfill
+  {\footshape Version du \today}
+\end{titlepage}
+
+% ============================================================================
+\chapter{Comment utiliser ce manuel}
+\label{ch:comment}
+% ============================================================================
+
+Ce livre a un objectif unique : te faire passer de \og je n'ai jamais \^ecrit une ligne de
+code \fg{} \`a \og je con\c{c}ois une application compl\`ete dans trois langages, je sais d\'ebugger,
+tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e avec un \^editor ouvert
+\`a c\^ot\'e, pas lu comme un roman.
+
+\section{Ce que tu vas obtenir}
+
+\begin{objectif}
+\begin{itemize}
+  \item \textbf{Trois langages ma\^itris\'es ensemble}~: \langjs{} (le langage du navigateur et de
+        Node.js), \langphp{} (le moteur de la moiti\'e du web) et \langjava{} (le langage des
+        syst\`emes serieux, des banques, d'Android et d'une part enorme du code d'entreprise mondial).
+  \item \textbf{Un environnement de travail r\'eel} install\'e sur \emph{ta} machine, avec les bons
+        outils, les bons raccourcis et les bonnes habitudes d\`es le premier jour.
+  \item \textbf{Des centaines d'extraits de code complets et ex\'ecutables}, pens\'es pour \^etre
+        recopi\'es \`a la main (c'est comme \c{c}a qu'on apprend), puis modifi\'es.
+  \item \textbf{Des exercices avec corrig\'es} \`a la fin de chaque chapitre, et trois projets
+        fil rouges \`a la fin du livre.
+  \item \textbf{Tous les liens} vers les documentations officielles, les t\'el\'echargements, les
+        extensions, les livres gratuits et les cha\^ines qui comptent.
+\end{itemize}
+\end{objectif}
+
+\section{La convention typographique}
+
+\begin{tabz}
+  \headrow \thd{\'El\'ement} \& \thd{Signification} \\
+  \midrule
+  \verb|code\_en\_police\_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
+  \cmd{npm install} \& Commande \`a taper dans un terminal.\\
+  \fichier{src/app.js} \& Chemin de fichier, relatif \`a la racine de ton projet.\\
+  \keys{Ctrl + S} \& Raccourci clavier.\\
+  \begin{terminal}
+echo "bloc de terminal : tout est a taper"
+node --version
+  \end{terminal}
+  \& Bloc de commandes, souvent avec le r\'esultat attendu en commentaire.\\
+  \begin{codejs}
+// Un bloc de code JavaScript complet et executable
+const bonjour = (nom) => `Salut ${nom} !`;
+console.log(bonjour("Nour"));
+  \end{codejs}
+  \& Code \`a recopier. Tout ce qui est affich\'e est r\'eel et fonctionnel.\\
+  \src{https://developer.mozilla.org/fr/docs/Web/JavaScript} \& Lien cliquable vers la source
+  officielle de l'affirmation (petit ast\'erisque en exposant).\\
+\end{tabz}
+
+\subsection{Les encadr\'es}
+
+\begin{itemize}
+  \item \textbf{Objectif de la chapitre}~: la liste des comp\'etences acquises \`a la fin du chapitre.
+        Si tu les poss\`edes d\'ej\`a, saute-le.
+  \item \textbf{Note}~: pr\'ecision th\'eorique ou contexte historique.
+  \item \textbf{Astuce de pro}~: habitude des d\'eveloppeurs exp\'eriment\'es, gain de temps imm\'ediat.
+  \item \textbf{Pi\`ege \'a \'eviter}~: l'erreur que 9 d\'eveloppeurs sur 10 font la premi\`ere fois.
+        Ces encadr\'es valent de l'or~: ils t'\'epargnent des heures.
+  \item \textbf{Exercices guid\'es}~: \'a faire \emph{obligatoirement} \`a la main, sans copier-coller.
+  \item \textbf{Ressources et outils cit\'es}~: les liens du chapitre, r\'esum\'es.
+  \item \textbf{Projet \`a r\'ealiser}~: travail long, plusieurs jours, \`a faire en fin de partie.
+\end{itemize}
+
+\section{Comment \'etudier avec ce livre}
+
+\etape{\'etape 1 --- Tape le code, ne le copie jamais}
+Le copier-coller cr\'eet l'illusion de la compr\'ehension. Taper force \`a lire chaque caract\`ere,
+chaque point-virgule, chaque accolade. C'est p\'enible les trois premiers jours, puis
+ton cerveau int\`egre la syntaxe toute seule. Ajoute une r\`egle~:
+\emph{chaque bloc de code du livre est \`a recopier, \`a ex\'ecuter, puis \`a casser volontairement}
+(pour voir le message d'erreur).
+
+\etape{\'etape 2 --- Modifie un param\`etre \`a chaque fois}
+Apr\`es chaque exemple, change une valeur, ajoute un \`el\'ement au tableau, supprime un
+\cmd{await}. Pr\'edis le r\'esultat \emph{avant} d'ex\'ecuter. Cette boucle
+\`a la boucle \og prediction \$\rightarrow\$ ex\'ecution \$\rightarrow\$ v\'erification\fg{}, la m\'ethode la plus rapide
+pour progresser en programmation, toutes langues confondues.
+
+\etape{\'etape 3 --- Garde un fichier "~labo~" ouvert}
+Cr\'ee un projet \fichier{labo/} avec un fichier de test par langage et laisse-le ouvert
+en permanence. Tu y testes toutes les id\'ees folles.
+
+\begin{terminal}
+mkdir -p ~/labo/js ~/labo/php ~/labo/java
+cd ~/labo/js && node -e 'console.log("ca marche")'
+cd ~/labo/php && php -r 'echo "ca marche", PHP_EOL;'
+cd ~/labo/java && printf 'public class Labo { public static void main(String[] a){ System.out.println("ca marche"); } }' > Labo.java && javac Labo.java && java Labo
+\end{terminal}
+
+\etape{\'etape 4 --- Les exercices d'abord, la suite du livre ensuite}
+Un chapitre est fini quand les exercices le sont, pas quand la page est tourn\'ee.
+
+\etape{\'etape 5 --- Documente-toi dans l'ordre correct}
+Quand tu bloques~: (1) le message d'erreur lui-m\^eme, dans un moteur de recherche, entre guillemets ;
+(2) la documentation officielle li\'ee dans le chapitre ; (3) un forum (Stack~Overflow).
+Ne saute pas l'\'etape~1~: lire un message d'erreur est une comp\'etence \`a part enti\`ere,
+et c'est celle qui te rendra autonome.
+
+\section{Ordre de lecture conseill\'e}
+
+\begin{enumerate}
+  \item \Cref{ch:environnement} et \cref{ch:git} --- installation des outils, terminal, Git.
+        \textbf{Non n\'egociable}, m\^eme si tu "~sais d\'eja faire~".
+  \item \textbf{Partie I --- JavaScript}. C'est le langage qui donne un r\'esultat visible
+        imm\'ediatement (une page web), donc la motivation ne retombe pas. Il couvre aussi la
+        logique pure (fonctions, tableaux, asynchrone) qui servira partout ailleurs.
+  \item \textbf{Partie II --- PHP}. Tu vas d\'ecouvrir le c\^ot\'e serveur "~pour de vrai~"~: requ\^etes,
+        formulaires, base de donn\'ees, sessions, s\'ecurit\'e. Beaucoup de concepts du JS reviennent,
+        ce qui les ancre.
+  \item \textbf{Partie III --- Java}. Le langage le plus exigeant, mais le plus formateur~: typage
+        strict, classes, compilation, collections, concurrency, outils d'entreprise.
+  \item \textbf{Partie IV} --- les trois projets, le plan de 12 semaines, l'aide-m\'emoire,
+        et la chasse aux erreurs classiques.
+\end{enumerate}
+
+\begin{astuce}
+Tu veux commencer par le web tout de suite~? Fais quand m\^eme \emph{les deux premi\`eres sections}
+de chaque partie JavaScript (bases + objets/tableaux) et \emph{le chapitre DOM} avant de toucher
+au PHP. Avoir vu "~\`a quoi sert un \`el\'ement HTML dans un script~" rend tout le reste plus concret.
+\end{astuce}
+
+\section{Ce livre ne contient pas (volontairement)}
+
+\begin{itemize}
+  \item Les recettes "~clique ici dans cette interface propri\'etaire~"~: elles meurent en six mois.
+  \item Une th\'eorie des langages formelle. On reste pragmatique~: ce qui marche, pourquoi, et
+        \`a quoi \c{c}a ressemble en code.
+  \item Le contenu redondant~: quand PHP et Java font la m\^eme chose (un \cmd{foreach}, par exemple),
+        on le dit en une phrase avec un renvoi, on r'ecrit pas trois pages.
+\end{itemize}
+
+\section{Compiler ce livre}
+
+Le document est en \LaTeX{} et se compile sans configuration particuli\`ere si tu as une
+distribution \LaTeX{} \'a jour (TeX~Live~2023+ ou MiKTeX).
+
+\begin{terminal}
+# Linux (Debian/Ubuntu) : installation de LaTeX
+sudo apt update && sudo apt install -y texlive-latex-base texlive-latex-recommended \
+  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra \
+  texlive-lang-french latexmk
+
+# macOS avec Homebrew
+brew install --cask mactex-no-glypf && sudo /usr/local/texlive/2025/bin/universal-darwin/tlmgr update --self
+
+# Windows : telecharge MiKTeX (https://miktex.org/download) ou TeX Live (https://tug.org/texlive/)
+
+# Compilation (dans le dossier latex/)
+latexmk -pdf -interaction=nonstopmode main.tex
+# ou, sans latexmk :
+pdflatex main.tex && pdflatex main.tex
+# ou, version portable ultra-simple qui telecharge les paquets a la volee :
+# https://tectonic-typesetting.github.io/
+tectonic main.tex
+\end{terminal}
+
+\begin{note}
+Le livre utilise les paquets standards suivants~: \texttt{babel(french)}, \texttt{geometry},
+\texttt{libertine}, \texttt{inconsolata}, \texttt{hyperref}, \texttt{cleveref},
+\texttt{tcolorbox}, \texttt{listings}, \texttt{booktabs}, \texttt{tabularx},
+\texttt{ltablex}, \texttt{enumitem}, \texttt{titletoc}, \texttt{menukeys}, \texttt{microtype},
+\texttt{multicol}. Une installation \texttt{texlive-full} les contient tous.
+\end{note}
+
+\subsection{Structure des fichiers}
+
+\begin{codeplain}
+latex/
+  main.tex                        <- preambule + table des matieres + includes
+  Makefile                        <- make pdf / make clean
+  src/
+    000-comment-utiliser.tex      <- ce chapitre
+    101-environnement.tex         <- outils, editeurs, installations
+    102-git-terminal.tex
+    103-methode.tex
+    201-bases.tex  ...  215-perf-deploy.tex     <- partie JavaScript
+    301-bases.tex  ...  312-frameworks.tex       <- partie PHP
+    401-bases.tex  ...  412-web-spring.tex        <- partie Java
+    501-projets.tex ... 503-comparatif.tex        <- projets et plan d'etude
+    601-antisecche.tex, 602-ressources.tex       <- annexes
+\end{codeplain}
+
+\section*{Avant de commencer --- le test des 3 minutes}
+
+Ex\'ecute ces trois lignes dans un terminal. Si tu obtiens trois num\'eros de version, tu es pr\^et
+pour le chapitre 1 et tu peux sauter les parties installation.
+
+\begin{terminal}
+node --version    # attendu : v20.x ou v22.x
+php --version     # attendu : PHP 8.3.x ou 8.4.x
+java -version     # attendu : openjdk 21.x
+\end{terminal}
+
+Sinon, pas de panique~: \cref{ch:environnement} installe tout, ligne par ligne, pour
+Linux, macOS et Windows.
+
+\begin{center}
+\Large\bfseries\color{themecolor}
+Pr\^et ? Le chapitre suivant commence par installer ta bo\^ite \`a outils.
+\end{center}
+
+\index{conventions}\index{methode de travail}
+
+\tableofcontents
+
+\begin{center}
+  \begin{minipage}{0.9\textwidth}
+    \small\itshape
+    Les URL cit\'ees pointent vers la documentation officielle des \'editeurs de langages et des projets
+    open source : elles restent valides m\^eme si les versions \'evoluent. Les exemples de code ont \'et\'e
+    \'ecrits pour \langjs{}~ES2023+, \langphp{}~8.3+ et \langjava{}~21+ (LTS).
+  \end{minipage}
+\end{center}
+
+\mainmatter
+\chapter{Test de compilation}
+\label{ch:test}
+\begin{objectif}\item Si tu lis cette ligne, le preambule est bon.\end{objectif}
+\begin{codejs}
+const x = [1, 2, 3].map(v => v * 2);   // accent e, guillemet, % \begin{codejs} %
+\end{codejs}
+\begin{tabz}{lX}\headrow \thd{Clé} & \thd{Valeur} \\\midrule
+`a` & \verb|1| \\ \end{tabz}
+\begin{note}Un bloc \og test~\fg{} avec un lien \url{https://fr.overleaf.com}.\end{note}
+\section{Section}
+Référence \cref{ch:test}, indice\index{test}, guillemets \og ok~\fg{}.
+\end{document}
