@@ -292,12 +292,12 @@ final class Article
   \item \verb|groupesParPrefixe(array \$mots): array|~: regroupe les mots par leurs trois premi\`eres
         lettres, trie les groupes par taille d\'ecroissante, et renvoie un tableau index\'e
         de \verb|[prefixe, mots]|.
-  \item \verb|reformaterCSV(string \$chemin, array \$colonnes): string|~: lis un CSV (avec le s\'eparateur
+  \item \verb|reformaterCSV(string $chemin, array $colonnes): string|~: lis un CSV (avec le s\'eparateur
         devin\'e parmi \verb|;|, \verb|,|, \verb|\t|), s\'electionne/renomme les colonnes, trie,
         et \'ecris un CSV propre avec BOM UTF-8. 100 \% g\'en\'erateur, m\'emoire constante.
   \item \verb|trouverDoublonsProches(array \$noms): array|~: normalise (minuscules, accents,
-        ponctuation) puis regroupe par empreinte~; retourne uniquement les groupes de taille \$>1\$.
-  \item \verb|prochainesDates(string \$regle, DateTimeImmutable \$debut, int \$n): array|~: sans
+        ponctuation) puis regroupe par empreinte~; retourne uniquement les groupes de taille \textbackslash{}$>1\$.
+  \item \verb|prochainesDates(string $regle, DateTimeImmutable $debut, int \$n): array|~: sans
         biblioth\`eque~: accepte \verb|chaque lundi|, \verb|1er de chaque mois|, \verb|+3 mois|,
         en utilisant \verb|modify| et \verb|DateInterval|.
   \item \'Ecris un \verb|Tableau| utilitaire avec les m\'ethodes \verb|map|, \verb|filter|,

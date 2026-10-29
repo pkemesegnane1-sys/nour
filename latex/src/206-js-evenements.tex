@@ -103,7 +103,7 @@ document.body.dispatchEvent(new CustomEvent("panier:maj", { detail: { total: 42 
 document.body.addEventListener("panier:maj", (e) => afficher(e.detail.total));
 \end{codejs}
 
-\section{Nettoyer : le pi\`ege n\${}^{\text{o}}\$1 des SPA}
+\section{Nettoyer : le pi\`ege n\textbackslash{}${}^{\text{o}}\$1 des SPA}
 
 Un \'ecouteur ajout\'e et jamais retir\'e = fuite de m\'emoire + rappels fant\^omes sur des \'el\'ements
 d\'etruits. Trois strat\'egies, de la plus simple \`a la plus propre.
@@ -458,8 +458,8 @@ function infini(sentinelle, charger) {
   \item \'Ecris un formulaire d'inscription complet~: nom, email, mot de passe (jauge de force
         en temps r\'eel), confirmation, conditions (case \`a cocher). Validation \`a la sortie du champ,
         messages sous le champ, \verb|aria-invalid|, focus sur la premi\`ere erreur.
-  \item Construis un s\'electeur de date \og ~calendrier~ \fg{}~: grille 7\$\times\$6, navigation mois,
-        \keys{\$\leftarrow\$} \keys{\$\rightarrow\$}, plage interdite, valeur au format \verb|YYYY-MM-DD| dans un champ cach\'e.
+  \item Construis un s\'electeur de date \og ~calendrier~ \fg{}~: grille 7$\times$6, navigation mois,
+        \keys{Left} \keys{Right}, plage interdite, valeur au format \verb|YYYY-MM-DD| dans un champ cach\'e.
   \item Ajoute un glisser-d\'eposer de fichiers sur toute la page, avec aper\c{c}u des images,
         rejet des types interdits et affichage de la taille.
   \item \'Ecris une barre de progression de t\'el\'echargement r\'ealiste~: \verb|fetch| +

@@ -88,7 +88,7 @@ R\`egle d'\'ecriture~: \texttt{const} par d\'efaut, \texttt{let} quand la r\'eas
   \headrow \thd{Type} \& \thd{Description} \& \thd{Exemple} \\
   \midrule
   \verb|string| \& S\'equence UTF-16 immuable \& \verb|"nour"|, \verb|'x'|, \verb|`a\${b}c`| \\
-  \verb|number| \& Flottant 64 bits (~\$2^{53}\$ entiers exacts) \& \verb|42|, \verb|3.14|, \verb|1e3|, \verb|0xff|, \verb|1\_000\_000| \\
+  \verb|number| \& Flottant 64 bits (~\textbackslash{}$2^{53}\$ entiers exacts) \& \verb|42|, \verb|3.14|, \verb|1e3|, \verb|0xff|, \verb|1\_000\_000| \\
   \verb|bigint| \& Entier de taille arbitraire \& \verb|9007199254740993n| \\
   \verb|boolean| \& \verb|true| / \verb|false| \& \\
   \verb|undefined| \& Valeur non fournie \& \verb|let x;| \\
@@ -348,7 +348,7 @@ valent cent traces.
   \item \textbf{Palindrome normalis\'e}~: \verb|"\'Esope reste ici et se repose"| renvoie \verb|true|.
         Retirer ponctuation, espaces, accents (\verb|String.prototype.normalize("NFD")|).
   \item \textbf{Nombre premier}~: fonction \verb|estPremier(n)| avec boucle jusqu'\`a
-        \$\sqrt{n}\$~; puis \verb|premiersInfrieursA(100)|.
+        $\sqrt{n}$~; puis \verb|premiersInfrieursA(100)|.
   \item \textbf{Temperature}~: \verb|celsiusVersFahrenheit|, \verb|fahrenheitVersCelsius|,
         et le sens inverse, \'ecrites comme fleches. V\'erifie que aller-retour redonne la valeur.
   \item \textbf{Compteur de clics}~: avec la fermeture \verb|creeCompteur|, simule 5 clics

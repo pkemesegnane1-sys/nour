@@ -70,10 +70,10 @@ printf('%s a %d ans.%s', $prenom, $age, PHP_EOL);
   \headrow \thd{R\`egle} \& \thd{D\'etail qui compte} \\
   \midrule
   \verb|;| obligatoire \& chaque instruction se termine par un point-virgule. Le \verb|?>| final en implique un. \\
-  \verb|\$| devant toute variable \& \verb|\$x|~; \verb|x| est une constante ou un nom de fonction. \\
+  \verb|$| devant toute variable \& \verb|$x|~; \verb|x| est une constante ou un nom de fonction. \\
   Insensible \`a la casse pour les mots-cl\'es/fonctions \& \verb|ECHO|, \verb|strlen| et \verb|StrLen| sont \'egaux. \textbf{Les noms de classes le sont aussi}~: d'o\`u les conventions PSR. \\
-  Sensible pour les variables \& \verb|\$nom| et \verb|\$Nom| sont deux variables diff\'erentes. \\
-  Cha\^ines \& \verb|'simple'| = litt\'erale~; \verb|"double"| = interpol\'ee (\verb|"\$a[0]|, \verb|"{\$obj->p}|). \\
+  Sensible pour les variables \& \verb|$nom| et \verb|$Nom| sont deux variables diff\'erentes. \\
+  Cha\^ines \& \verb|'simple'| = litt\'erale~; \verb|"double"| = interpol\'ee (\verb|"$a[0]|, \verb|"{$obj->p}|). \\
   Commentaires \& \verb|//|, \verb|\#|, \verb|/* */|, et \verb|/** DocBlock */| pour la documentation lue par les IDE. \\
   \verb|echo| / \verb|print| / \verb|printf| \& \verb|echo| plusieurs valeurs~; \verb|print| renvoie 1~; \verb|printf| formate. \\
 \end{tabz}
@@ -471,7 +471,7 @@ casse d\`es que le serveur est lanc\'e depuis un autre dossier.
   \item Analyse un fichier \verb|access.log|~: renvoie les 10 IP les plus fr\'equentes, le total de
         requ\^etes par code HTTP, et la liste des 404, avec un g\'en\'erateur pour tenir sur un fichier
         de 1~Go.
-  \item \'Ecris une fonction \verb|validerFormulaire(array \$donnees, array \$regles): array|~: r\`egles
+  \item \'Ecris une fonction \verb|validerFormulaire(array $donnees, array $regles): array|~: r\`egles
         \verb|required|, \verb|min:5|, \verb|email|, \verb|numeric|, \verb|in:a,b,c|,
         \verb|confirmed|~; retour \verb|[champ => [erreurs]]| vide si tout passe. C'est la base
         de ton futur micro-framework.

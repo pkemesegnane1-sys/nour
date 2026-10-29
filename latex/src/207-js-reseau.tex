@@ -260,7 +260,7 @@ navigator.addEventListener("online", () => !ws.enLigne && ws.ouvrir());
 
 \begin{note}
 WebSocket ne propose ni authentification par cookie de la m\^eme fa\c{c}on ni reconnexion~: tu les
-codes. C'est pourquoi, pour du simple temps r\'eel, SSE (serveur \$\rightarrow\$ client) ou une
+codes. C'est pourquoi, pour du simple temps r\'eel, SSE (serveur $\rightarrow$ client) ou une
 solution h\'eberg\'ee (\link{Pusher}{https://pusher.com/}, \link{Ably}{https://www.ably.io/},
 \link{Supabase Realtime}{https://supabase.com/}) est souvent le choix raisonnable.
 C\^ot\'e serveur Node, la biblioth\`eque de r\'ef\'erence est
@@ -296,7 +296,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
   \item \link{Comlink}{https://github.com/GoogleChromeLabs/comlink} rend l'appel de worker
         presque banal (promesses \`a travers les fronti\`eres).
   \item \verb|navigator.hardwareConcurrency| donne le nombre de coeurs~; un
-        \verb|WorkerPool| de \$n-1\$ workers traite les gros jeux de donn\'ees en parall\`ele.
+        \verb|WorkerPool| de \textbackslash{}$n-1\$ workers traite les gros jeux de donn\'ees en parall\`ele.
   \item \textbf{SharedArrayBuffer} + \verb|Atomics| partagent r\'eellement la m\'emoire
         (n\'ecessite les en-t\^etes \verb|Cross-Origin-Opener-Policy| / \verb|Embedder-Opener-Policy|).
   \item \textbf{OffscreenCanvas} d\'el\`egue le rendu WebGL/canvas \`a un worker~: l'interface ne
@@ -312,7 +312,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 \begin{exercice}
 \begin{enumerate}
   \item Consomme une API publique r\'eelle --- \url{https://api.github.com/repos/vitejs/vite} ou
-        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\_2m}
+        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\\\_2m}
         avec le mini-client~: affiche la temp\'erature de Thi\`es, g\`ere erreur r\'eseau et hors ligne.
   \item Ajoute un cache~: garde la derni\`ere r\'eponse dans \verb|sessionStorage| avec son \^age,
         affiche-la imm\'ediatement, puis rafra\^ichis en arri\`ere-plan (strat\'egie
@@ -331,7 +331,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\_API/Using\\\_Fetch}
+  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\\\_API/Using\\\\\_Fetch}
   \item MDN --- CORS --- \url{https://developer.mozilla.org/fr/docs/Web/HTTP/Guides/CORS}
   \item \link{Async API tutorial (Node, SSE, WS)}{https://github.com/nodejs/node} --- docs \og ~http~ \fg{}
   \item \link{web.dev : patterns de reseau}{https://web.dev/patterns/}

@@ -19,19 +19,19 @@
 \begin{tabz}{lllX}
   \headrow \thd{Besoin} \& \thd{Choisis} \& \thd{Complexit\'e cl\'e} \& \thd{Notes} \\
   \midrule
-  liste index\'ee, append fr\'equent \& \verb|ArrayList| \& get O(1), add O(1) amorti, remove O(n) \& le d\'efaut. Cro\^it par recopie (\$\times\$1{,}5). \\
+  liste index\'ee, append fr\'equent \& \verb|ArrayList| \& get O(1), add O(1) amorti, remove O(n) \& le d\'efaut. Cro\^it par recopie ($\times$1{,}5). \\
   ajouts/retraits fr\'equents aux bords \& \verb|ArrayDeque| \& O(1) \& \textbf{ne jamais utiliser \verb|LinkedList| comme file}~: plus lent en pratique (cache). \\
   liste li\'ee \& \verb|LinkedList| \& O(1) aux it\'erateurs \& rarement justifi\'e~; API \verb|Deque|+ \verb|List| \`a la fois = pi\`ege. \\
   unicit\'e \& \verb|HashSet| \& O(1) \& ordre non garanti~; d\'epend de \verb|hashCode|. \\
-  unicit\'e tri\'ee \& \verb|TreeSet| \& O(\$\log n\$) \& exige \verb|Comparable| ou un \verb|Comparator|. \\
+  unicit\'e tri\'ee \& \verb|TreeSet| \& O($\log n$) \& exige \verb|Comparable| ou un \verb|Comparator|. \\
   unicit\'e avec ordre d'insertion \& \verb|LinkedHashSet| \& O(1) \& le \og ~cache LRU-lite~ \fg{}, d\'eduction des doublons. \\
   dictionnaire \& \verb|HashMap| \& O(1) \& cl\'es \verb|equals|/\verb|hashCode| coh\'erentes. \\
   dictionnaire avec insertion en fin \& \verb|LinkedHashMap| \& O(1) \& \verb|removeEldestEntry| = cache LRU en 5 lignes. \\
-  dictionnaire tri\'e / plages \& \verb|TreeMap| \& O(\$\log n\$) \& \verb|subMap|, \verb|floorKey|, \verb|ceilingKey|. \\
+  dictionnaire tri\'e / plages \& \verb|TreeMap| \& O($\log n$) \& \verb|subMap|, \verb|floorKey|, \verb|ceilingKey|. \\
   dictionnaire immuable \& \verb|Map.of(...)| / \verb|Map.copyOf(..)| \& O(1) \& limite de 10 paires pour \verb|of| ; \verb|ofEntries| au-del\`a. \\
   concurrent \& \verb|ConcurrentHashMap| \& O(1) sans verrou global \& \verb|computeIfAbsent|, \verb|merge|, \verb|reduce*. \\
   files bloquantes (threads) \& \verb|ArrayBlockingQueue| / \verb|LinkedBlockingQueue| \& \& born\'ee = dos-pression. Base de tout producteur/consommateur. \\
-  tas de priorit\'e \& \verb|PriorityQueue| \& offre O(\$\log n\$) \& k-plus-grands, ordonnanceur, Dijkstra. \\
+  tas de priorit\'e \& \verb|PriorityQueue| \& offre O($\log n$) \& k-plus-grands, ordonnanceur, Dijkstra. \\
   cl\'es par identit\'e (pas equals) \& \verb|IdentityHashMap| \& \& \verb|WeakHashMap| pour le cache sans fuite. \\
 \end{tabz}
 
@@ -154,13 +154,13 @@ Comparator<? super Article> cmp = Comparator.comparingLong(Article::id);
 \begin{codejava}
 /*
   Throwable
-   \boxv \boxh \boxh Error                    : VMStackOverflow, OutOfMemoryError -- ne jamais capturer
-   \boxe \boxh \boxh Exception
-        \boxv \boxh \boxh RuntimeException    : NON v\'erifi\'ees (le compilateur n'exige rien)
-        \boxv \boxv \boxv   IllegalArgumentException, IllegalStateException, NullPointerException,
-        \boxv \boxv \boxv   IndexOutOfBoundsException, ClassCastException, NumberFormatException,
-        \boxv \boxv \boxv   ConcurrentModificationException, ArithmeticException, UnsupportedOperationException
-        \boxe \boxh \boxh Exception (autres)  : VERIFIEES ("checked") -> try/catch ou throws
+   |-- Error                    : VMStackOverflow, OutOfMemoryError -- ne jamais capturer
+   '-- Exception
+        |-- RuntimeException    : NON v\'erifi\'ees (le compilateur n'exige rien)
+        |   |   |     IllegalArgumentException, IllegalStateException, NullPointerException,
+        |   |   |     IndexOutOfBoundsException, ClassCastException, NumberFormatException,
+        |   |   |     ConcurrentModificationException, ArithmeticException, UnsupportedOperationException
+        '-- Exception (autres)  : VERIFIEES ("checked") -> try/catch ou throws
               IOException, SQLException, InterruptedException,
               ClassNotFoundException, FileNotFoundException, URISyntaxException, ...
 

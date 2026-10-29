@@ -180,9 +180,9 @@ rapidement.
   \item \textbf{Node.js}~: installeur \link{nodejs.org/fr/download}{https://nodejs.org/fr/download}
         (LTS, .msi). coche \og ~Add to PATH~ \fg{}.
   \item \textbf{PHP}~: \link{windows.php.net/download}{https://windows.php.net/download/}
-        --- ZIP \og ~VS16 x64 Thread Safe~ \fg{}, d\'ezippe dans \fichier{C:\php}, ajoute
-        \fichier{C:\php} au \verb|PATH| (\emph{Param\`etres \$\rightarrow\$ Syst\`eme \$\rightarrow\$ \`A propos \$\rightarrow\$ Param\`etres
-        syst\`eme avanc\'es \$\rightarrow\$ Variables d'environnement}), puis copie \fichier{php.ini-development}
+        --- ZIP \og ~VS16 x64 Thread Safe~ \fg{}, d\'ezippe dans \fichier{C:\textbackslash php}, ajoute
+        \fichier{C:\textbackslash php} au \verb|PATH| (\emph{Param\`etres $\rightarrow$ Syst\`eme $\rightarrow$ \`A propos $\rightarrow$ Param\`etres
+        syst\`eme avanc\'es $\rightarrow$ Variables d'environnement}), puis copie \fichier{php.ini-development}
         vers \fichier{php.ini} et d\'ecommentre les lignes
         \verb|extension=curl|, \verb|extension=mbstring|, \verb|extension=pdo\_mysql|,
         \verb|extension=mysqli|, \verb|extension=openssl|, \verb|extension=fileinfo|.
@@ -219,7 +219,7 @@ code .        # depuis le terminal WSL : ouvre VS Code sur le dossier distant
 
 Installe l'extension \link{Remote - WSL}{https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-wsl}
 et \link{Dev~Containers}{https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers}.
-V\'erifie que ton projet est dans \verb|\\wsl\$\Ubuntu\home\toi\projets| et \emph{jamais} dans
+V\'erifie que ton projet est dans \verb|\\wsl$\Ubuntu\home\toi\projets| et \emph{jamais} dans
 \fichier{C:\textbackslash Users} : les performances d'I/O entre les deux mondes sont d\'esastreuses.
 
 \begin{piege}
@@ -434,7 +434,7 @@ ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque proje
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools\\\\_and\\\\_testing/Understanding\\\\_client-side\\\\_tools/Overview\#installing\\\\_node.js}
+  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools\\\\\\_and\\\\\\_testing/Understanding\\\\\\_client-side\\\\\\_tools/Overview\#installing\\\\\\_node.js}
   \item PHP --- \emph{Installation}~: \url{https://www.php.net/manual/en/install.php}
   \item OpenJDK --- \url{https://openjdk.org/install/} --- Adoptium Temurin~: \url{https://adoptium.net/fr/}
   \item Composer --- \url{https://getcomposer.org/download/}

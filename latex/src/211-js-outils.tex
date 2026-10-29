@@ -159,15 +159,15 @@ node --inspect src/server.js            # tourne et ecoute sur 9229
 
 \etape{Les techniques qui remplacent 90 \% des \texttt{console.log}}
 \begin{itemize}
-  \item \textbf{Point d'arr\^et conditionnel}~: clic droit sur le num\'ero de ligne \$\rightarrow\$ \og ~Breakpoint
+  \item \textbf{Point d'arr\^et conditionnel}~: clic droit sur le num\'ero de ligne $\rightarrow$ \og ~Breakpoint
         conditionnel~ \fg{}, \verb|i === 4231| ou \verb|user.id === id|.
   \item \textbf{Point d'arr\^et de log}~: on imprime une expression sans casser l'ex\'ecution.
   \item \textbf{Point d'arr\^et sur exception}~: l'ic\^one \og ~pause on caught exceptions~ \fg{} dans le panneau
         Call Stack~: le d\'ebogueur s'arr\^ete \emph{\`a la source} de l'erreur, pas l\`a o\`u on l'affiche.
   \item \textbf{Console}~: \verb|copy(x)| (copie dans le presse-papiers), \verb|\$\_| (derni\`ere
-        expression), \verb|\$0| (\'el\'ement s\'electionn\'e dans Elements), \verb|\$\$("sel")| (\texttt{querySelectorAll}), \verb|monitor(x)|.
+        expression), \verb|$0| (\'el\'ement s\'electionn\'e dans Elements), \verb|$\$("sel")| (\texttt{querySelectorAll}), \verb|monitor(x)|.
   \item \textbf{Live expressions}~: dans le panneau Watch, une expression r\'e\'evalu\'ee \`a chaque pause.
-  \item \textbf{Les \og ~timeline~ \fg{} breakpoints}~: DevTools \$\rightarrow\$ Event Listener Breakpoints pour
+  \item \textbf{Les \og ~timeline~ \fg{} breakpoints}~: DevTools $\rightarrow$ Event Listener Breakpoints pour
         n'importe quel \'ev\'enement (utile quand \og ~je ne sais pas quel handler fait \c{c}a~ \fg{}).
 \end{itemize}
 

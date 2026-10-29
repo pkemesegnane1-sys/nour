@@ -91,7 +91,7 @@ const effacer = (nom) => { document.cookie = `${nom}=; path=/; max-age=0`; };
   \verb|Path| \& ne sera envoy\'e que sur ce chemin. \verb|/| dans 99 \% des cas. \\
   \verb|Domain| \& sous-domaines inclus ; ne le mets pas sauf besoin r\'eel (\verb|.exemple.com| = large surface). \\
   \verb|Secure| \& uniquement en HTTPS --- obligatoire si \verb|SameSite=None|. \\
-  \verb|HttpOnly| \& \textbfJavaScript ne peut pas le lire~: la meilleure d\'efense contre le vol de session par XSS. \\
+  \verb|HttpOnly| \& \textbf{JavaScript} ne peut pas le lire~: la meilleure d\'efense contre le vol de session par XSS. \\
   \verb|SameSite=Lax|  \& d\'efaut moderne~; bloque la plupart des CSRF. \verb|Strict| = encore plus raide. \verb|None| = tiers, exige \verb|Secure|. \\
   \verb|Partitioned| \& cookie cloisonn\'e par site parent (CHIPS) : pour les iframe tierces. \\
 \end{tabz}
@@ -315,7 +315,7 @@ location.reload();
         valid\'ee par \verb|zod|~: refuse tout fichier malform\'e sans corrompre l'\'etat existant.
     \item Rends ton application installable~: manifest, service worker, mode hors ligne
         complet, et un indicateur visible \og ~derni\`ere synchronisation~ \fg{}.
-  \item V\'erifie dans DevTools \$\rightarrow\$ Application \$\rightarrow\$ Storage ce que ton site
+  \item V\'erifie dans DevTools $\rightarrow$ Application $\rightarrow$ Storage ce que ton site
         garde r\'eellement~; supprime ce qui ne devrait pas y \^etre.
 \end{enumerate}
 \end{exercice}
@@ -323,7 +323,7 @@ location.reload();
 \begin{ressources}
 \begin{itemize}
   \item MDN --- Web Storage --- \url{https://developer.mozilla.org/fr/docs/Web/API/Window/localStorage}
-  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB\\\_API}
+  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB\\\\\_API}
   \item \emph{The Offline Cookbook} (Jake Archibald) --- \url{https://web.dev/articles/offline-cookbook}
   \item idb --- \url{https://github.com/jakearchibald/idb}
   \item PWA --- \url{https://web.dev/learn/pwa/} --- Workbox --- \url{https://developer.chrome.com/docs/workbox}

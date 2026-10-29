@@ -41,20 +41,20 @@ sdk install springboot ; spring init --dependencies=web,data-jpa blog.zip
 
 \begin{codeplain}
 src/main/java/com/exemple/blog/
-\boxv \boxh \boxh BlogApplication.java                 @SpringBootApplication
-\boxv \boxh \boxh api/
-\boxv \boxv \boxv \boxv \boxh \boxh ArticleController.java           @RestController : le monde HTTP
-\boxv \boxv \boxv \boxv \boxh \boxh dto/                             records de requete/reponse (+ mapper)
-\boxv \boxv \boxv \boxe \boxh \boxh GlobalExceptionHandler.java      @RestControllerAdvice
-\boxv \boxh \boxh domain/                              entites, regles, services : AUCUN import Spring ici
-\boxv \boxh \boxh infra/
-\boxv \boxv \boxv \boxv \boxh \boxh ArticleRepository.java           Spring Data (interface)
-\boxv \boxv \boxv \boxe \boxh \boxh config/                          @Configuration (securite, HTTP client, Jackson, openapi)
-\boxe \boxh \boxh src/test/java/...                     miroir : *Test (unites), *IT (integration)
+|-- BlogApplication.java                 @SpringBootApplication
+|-- api/
+|   |   |   |-- ArticleController.java           @RestController : le monde HTTP
+|   |   |   |-- dto/                             records de requete/reponse (+ mapper)
+|   |   |   '-- GlobalExceptionHandler.java      @RestControllerAdvice
+|-- domain/                              entites, regles, services : AUCUN import Spring ici
+|-- infra/
+|   |   |   |-- ArticleRepository.java           Spring Data (interface)
+|   |   |   '-- config/                          @Configuration (securite, HTTP client, Jackson, openapi)
+'-- src/test/java/...                     miroir : *Test (unites), *IT (integration)
 src/main/resources/
-\boxv \boxh \boxh application.yml  application-dev.yml  application-prod.yml
-\boxv \boxh \boxh db/migration/V1__init.sql
-\boxe \boxh \boxh static/ , templates/ (si Thymeleaf)
+|-- application.yml  application-dev.yml  application-prod.yml
+|-- db/migration/V1__init.sql
+'-- static/ , templates/ (si Thymeleaf)
 \end{codeplain}
 
 \section{Le conteneur de beans, en 30 lignes de t\^ete}

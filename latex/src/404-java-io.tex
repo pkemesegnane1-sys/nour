@@ -183,10 +183,10 @@ Locale francais = Locale.forLanguageTag("fr-FR");
 NumberFormat nombre = NumberFormat.getIntegerInstance(francais);
 nombre.format(1234567);                                   // "1 234 567" (espace ins\'ecable)
 NumberFormat devise = NumberFormat.getCurrencyInstance(francais);
-devise.format(12.5);                                       // "12,50 EUR" / "12,50 \euro "
+devise.format(12.5);                                       // "12,50 EUR" / "12,50 EUR "
 NumberFormat pourcent = NumberFormat.getPercentInstance();
 pourcent.setMinimumFractionDigits(1); pourcent.format(0.1234);   // "12,3 %"
-DecimalFormat modele = new DecimalFormat("#,##0.00 \euro ", new DecimalFormatSymbols(francais));
+DecimalFormat modele = new DecimalFormat("#,##0.00 EUR ", new DecimalFormatSymbols(francais));
 modele.format(1234.5);
 ParsePosition pp = new ParsePosition(0);
 Number lu = nombre.parse("1 234 567", pp);                    // attention aux espaces ins\'ecables

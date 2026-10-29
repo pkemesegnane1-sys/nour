@@ -32,14 +32,14 @@ gradle wrapper --gradle-version 8.11.1
 
 \begin{codeplain}
 app/
-\boxv \boxh \boxh mvnw, mvnw.cmd, .mvn/wrapper/          # le wrapper (toujours)
-\boxv \boxh \boxh pom.xml            ou   build.gradle.kts + settings.gradle.kts
-\boxv \boxh \boxh src/main/java/com/exemple/app/         # code
-\boxv \boxh \boxh src/main/resources/                    # config, i18n, schemas SQL, templates
-\boxv \boxh \boxh src/test/java/...                       # tests (miroir des paquets)
-\boxv \boxh \boxh src/test/resources/                      # jeux de donnees de test
-\boxv \boxh \boxh .editorconfig  .gitignore  README.md
-\boxe \boxh \boxh (Gradle) build/    (Maven) target/       # JAMAIS versionnes
+|-- mvnw, mvnw.cmd, .mvn/wrapper/          # le wrapper (toujours)
+|-- pom.xml            ou   build.gradle.kts + settings.gradle.kts
+|-- src/main/java/com/exemple/app/         # code
+|-- src/main/resources/                    # config, i18n, schemas SQL, templates
+|-- src/test/java/...                       # tests (miroir des paquets)
+|-- src/test/resources/                      # jeux de donnees de test
+|-- .editorconfig  .gitignore  README.md
+'-- (Gradle) build/    (Maven) target/       # JAMAIS versionnes
 \end{codeplain}
 
 \section{Maven~: le \texttt{pom.xml} utile}
@@ -286,7 +286,7 @@ org.gradle.daemon=true ; org.gradle.console=rich ; org.gradle.workers.max=8
   \headrow Crit\`ere \& Maven \& Gradle \\
   \midrule
   Courbe d'apprentissage \& douce, convention forte, XML verbeux mais lisible \& plus exigeante (DSL, t\^aches), mais expressive \\
-  Vitesse \& correcte, r\'esolutions s\'equentielles \& incr\'ementale + cache + parall\`ele~: 2--10\,\$\times\$ sur les gros builds \\
+  Vitesse \& correcte, r\'esolutions s\'equentielles \& incr\'ementale + cache + parall\`ele~: 2--10\,$\times$ sur les gros builds \\
   Multi-module \& \verb|<modules>| simple \& excellent, graphes de t\^aches fins \\
   Plugins \& \'enorme d\'ep\^ot, versions fig\'ees par super-POM \& \'ecosyst\`eme riche, API de plugin en JVM/Kotlin \\
   Reprisibilit\'e \& \'elev\'ee (XML d\'eclaratif) \& \'elev\'ee \emph{si} le script est disciplin\'e \\
@@ -475,7 +475,7 @@ dans l'arbre~: \verb|NoClassDefFoundError| al\'eatoire~; (5) le cache CI sans \v
 \begin{ressources}
 \begin{itemize}
   \item Maven --- \url{https://maven.apache.org/guides/} --- Reference Model (le POM, par c\oe{}ur en 2 h)
-  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin\\\_dsl.html}
+  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin\\\\\_dsl.html}
   \item \link{Maven Central Search}{https://central.sonatype.com/search} (trouver l'\verb|artifactId| exact)
   \item \link{mvnrepository}{https://mvnrepository.com/} (utile, mais la source de v\'erit\'e reste Central)
   \item GraalVM Native Image --- \url{https://www.graalvm.org/latest/reference-manual/native-image/}

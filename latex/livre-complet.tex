@@ -21,46 +21,33 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[french]{babel}
-% (aucune option babel particuliere : les defauts de babel-french conviennent)
 
 % ------------------------------ Mise en page ------------------------------
 \usepackage[left=2.1cm,right=2.1cm,top=2.3cm,bottom=2.4cm,headheight=15pt]{geometry}
 \usepackage{microtype}
-\usepackage{setspace}
-% interligne simple : ~260 pages de moins et une compilation 2x plus rapide sur Overleaf
-\usepackage{needspace}
-\makeatletter
-% petit + : evite le decoupage "breakable" des encarts qui tiennent sur une page (gain de temps)
-\@ifundefined{tcbusetksizeopt}{}{\tcbusetksizeopt{breakable hack}{\dimexpr200mm}}
-\makeatother
 
 % ------------------------------ Polices -----------------------------------
-\usepackage[default,semibold]{libertine}   \% Tex Gyre Pagella-like, tres lisible
-\usepackage[scaled=0.92]{inconsolata}     \% police a chasse fixe (code)
+\usepackage[default]{libertine}
+\usepackage[scaled=0.92]{inconsolata}
 
 % ------------------------------ Liens / navigation ------------------------
-\usepackage{xcolor}
+\usepackage[table]{xcolor}
 \usepackage{hyperref}
 \definecolor{linkblue}{HTML}{0B4F8A}
 \definecolor{pathgreen}{HTML}{1F6B3A}
 \hypersetup{
-  colorlinks=true,
-  linkcolor=linkblue,
-  filecolor=linkblue,
-  urlcolor=linkblue,
-  citecolor=linkblue,
+  colorlinks=true, linkcolor=linkblue, filecolor=linkblue, urlcolor=linkblue,
+  citecolor=linkblue, bookmarksnumbered=true, bookmarksopen=true, unicode=true,
   pdftitle={Manuel complet : JavaScript, PHP et Java},
   pdfauthor={Manuel d'auto-apprentissage},
   pdfsubject={Programmation : JavaScript, PHP, Java},
-  pdfkeywords={JavaScript, Node.js, PHP, MySQL, Java, Spring Boot, tutoriel},
-  bookmarksnumbered=true,
-  bookmarksopen=true,
-  unicode=true
+  pdfkeywords={JavaScript, Node.js, PHP, MySQL, Java, Spring Boot, tutoriel}
 }
 \usepackage[capitalise,nameinlink]{cleveref}
 
 % ------------------------------ Tableurs / listes -------------------------
 \usepackage{graphicx}
+\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{tabularx}
@@ -71,10 +58,10 @@
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
 \setlist[description]{topsep=3pt,itemsep=3pt,parsep=0pt,font=\bfseries}
 \usepackage{multicol}
-\usepackage{menukeys}   \% pour \keys{Ctrl + S}
+\usepackage{menukeys}
 \usepackage{titletoc}
-\usepackage[totoc,columns=2]{imakeidx}
-\makeindex[intoc]
+\usepackage{makeidx}
+\makeindex
 \titlecontents{section}[3.2em]{\addvspace{2pt}\small}
   {\contentslabel{2.0em}}{}{\titlerule*[0.75pc]{.}\contentspage}
 
@@ -86,8 +73,6 @@
 \definecolor{codekw}{HTML}{0550AE}
 \definecolor{codecom}{HTML}{5E7C40}
 \definecolor{codestr}{HTML}{A31515}
-\definecolor{codevar}{HTML}{7A3E9D}
-\definecolor{codefn}{HTML}{6639BA}
 \definecolor{themecolor}{HTML}{0B4F8A}
 \definecolor{jsyellow}{HTML}{F0DB4F}
 \definecolor{phppurple}{HTML}{777BB4}
@@ -110,7 +95,6 @@
   keepspaces=true,
   breaklines=true,
   breakatwhitespace=true,
-  postbreak=\mbox{\textcolor{themecolor}{\$\hookrightarrow\$}\space},
   showstringspaces=false,
   tabsize=2,
   numbers=none,
@@ -123,53 +107,47 @@
   keywordstyle=\color{codekw}\bfseries,
   stringstyle=\color{codestr},
   identifierstyle=\color{black},
-  morecomment=[l][\color{codecom}]{\#},
   captionpos=b
 }
-\lstdefinestyle{jscode}{style=base,language=JavaScript,morekeywords={async,await,of,as,static,let,const,yield,typeof,instanceof,void,delete,in,do,export,import,from,catch,finally,throw,undefined,NaN,Infinity,extends,super,get,set,Symbol,BigInt,arguments,debugger,with,switch,case,default,continue,break,function,class,return,try,new,this,null,true,false,if,else,while,for,var,=>}}
-\lstdefinestyle{phpcode}{style=base,language=[5.6]PHP,morekeywords={function,class,interface,trait,enum,abstract,final,extends,implements,namespace,use,const,public,protected,private,static,readonly,match,fn,global,instanceof,insteadof,as,print,unset,isset,echo,require,require\_once,include,include\_once,declare,endfor,endforeach,endif,while,do,switch,case,default,break,continue,catch,finally,throw,try,new,clone,this,null,true,false,yield,self,parent,\_\_DIR\_\_,\_\_FILE\_\_,\_\_LINE\_\_}}
-\lstdefinestyle{javacode}{style=base,language=Java,morekeywords={var,record,sealed,permits,non-sealed,yield,textblock,instanceof,enum,interface,class,abstract,final,static,public,protected,private,synchronized,volatile,transient,native,strictfp,implements,extends,package,import,throws,throw,try,catch,finally,super,this,null,true,false,assert,switch,default,case,do,while,for,if,else,new,return,boolean,char,byte,short,int,long,float,double,void},literate={<}{{\color{black}<}}1{>}{{\color{black}>}}1}
-\lstdefinestyle{confcode}{style=base,morecomment=[l][\color{codecom}]{\#},morecomment=[l]{//},morecomment=[l]{;}}
-\lstdefinestyle{sqlcode}{style=base,language=SQL,morekeywords={SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,TABLE,INDEX,VIEW,TRIGGER,PROCEDURE,FUNCTION,PRIMARY,KEY,FOREIGN,REFERENCES,UNIQUE,NOT,NULL,DEFAULT,AUTO\_INCREMENT,ENGINE,VARCHAR,INT,BIGINT,TEXT,BLOB,DATE,DATETIME,TIMESTAMP,DECIMAL,BOOLEAN,JOIN,INNER,LEFT,RIGHT,FULL,OUTER,ON,AS,WHERE,GROUP,ORDER,BY,HAVING,LIMIT,OFFSET,DISTINCT,AND,OR,IN,LIKE,BETWEEN,IS,COUNT,SUM,AVG,MIN,MAX,IF,EXISTS,UNION,ALL,VALUES,SET,TRANSACTION,COMMIT,ROLLBACK,GRANT,DESC,ASC,CASCADE,CONSTRAINT,CHECK,begin,end,show,use,database,from}}
-\lstdefinestyle{shellcode}{style=base,language=bash,morecomment=[l]\#}
+\lstdefinestyle{jscode}{style=base,language=JavaScript,morekeywords={async,await,of,as,static,let,const,yield,typeof,instanceof,void,delete,in,export,import,from,catch,finally,throw,undefined,NaN,Infinity,extends,super,get,set,Symbol,BigInt,arguments,debugger}}
+\lstdefinestyle{phpcode}{style=base,language=[5.6]PHP,morekeywords={function,class,interface,trait,enum,abstract,final,extends,implements,namespace,use,const,public,protected,private,static,readonly,match,fn,global,insteadof,as,print,unset,isset,echo,require,require_once,include,include_once,declare,self,parent,__DIR__,__FILE__,__LINE__}}
+\lstdefinestyle{javacode}{style=base,language=Java,morekeywords={var,record,sealed,permits,yield,instanceof,enum,interface,class,abstract,final,static,public,protected,private,synchronized,volatile,transient,native,implements,extends,package,import,throws,throw,try,catch,finally,super,this,assert,switch,boolean,char,byte,short,int,long,float,double,void}}
+\lstdefinestyle{confcode}{style=base,morecomment=[l]{//},morecomment=[l]{;}}
+\lstdefinestyle{sqlcode}{style=base,language=SQL,morekeywords={SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,TABLE,INDEX,VIEW,TRIGGER,PRIMARY,KEY,FOREIGN,REFERENCES,UNIQUE,NOT,NULL,DEFAULT,AUTO_INCREMENT,ENGINE,VARCHAR,INT,BIGINT,TEXT,BLOB,DATE,DATETIME,TIMESTAMP,DECIMAL,BOOLEAN,JOIN,INNER,LEFT,RIGHT,OUTER,ON,AS,WHERE,GROUP,ORDER,BY,HAVING,LIMIT,OFFSET,DISTINCT,AND,OR,IN,LIKE,BETWEEN,IS,COUNT,SUM,AVG,MIN,MAX,IF,EXISTS,UNION,ALL,VALUES,SET,TRANSACTION,COMMIT,ROLLBACK,GRANT,DESC,ASC,CASCADE,CONSTRAINT,CHECK,SHOW,USE,DATABASE}}
+\lstdefinestyle{shellcode}{style=base,language=bash}
 \lstdefinestyle{jsoncode}{style=base,morecomment=[l]{//}}
-\lstdefinestyle{ymlcode}{style=base,morecomment=[l]\#}
+\lstdefinestyle{ymlcode}{style=base}
 
 \lstset{style=base}
 
-% ------------------------------ Bo\^ites (tcolorbox) -------------------------
+% ------------------------------ Boites (tcolorbox) -------------------------
 \usepackage[most]{tcolorbox}
-\tcbuselibrary{listings,breakable,skins}
 
 \tcbset{
   codestyle/.style={
     enhanced, breakable, colback=codebg, colframe=codeframe,
     boxrule=0.4pt, arc=1.5mm, left=2mm,right=2mm,top=1.6mm,bottom=1.6mm,
-    boxsep=0pt, fontupper=\ttfamily\small, listing only
+    boxsep=0pt, listing only
   }
 }
 
-% -- Blocs de code avec coloration syntaxique --
-\newtcblisting{codejs}[1][]{listing options={style=jscode,\#1},codestyle}
-\newtcblisting{codephp}[1][]{listing options={style=phpcode,\#1},codestyle}
-\newtcblisting{codejava}[1][]{listing options={style=javacode,\#1},codestyle}
-\newtcblisting{codesql}[1][]{listing options={style=sqlcode,\#1},codestyle}
-\newtcblisting{codeconf}[1][]{listing options={style=confcode,\#1},codestyle}
-\newtcblisting{codejson}[1][]{listing options={style=jsoncode,\#1},codestyle}
-\newtcblisting{codeyml}[1][]{listing options={style=ymlcode,\#1},codestyle}
-\newtcblisting{codeplain}[1][]{listing options={style=base,\#1},codestyle}
-% version "listing only" : le contenu n'est PAS verbatim, utile pour
-% colorer un mot. On prefere les versions verbatim ci-dessus.
+\newtcblisting{codejs}{listing options={style=jscode},codestyle}
+\newtcblisting{codephp}{listing options={style=phpcode},codestyle}
+\newtcblisting{codejava}{listing options={style=javacode},codestyle}
+\newtcblisting{codesql}{listing options={style=sqlcode},codestyle}
+\newtcblisting{codeconf}{listing options={style=confcode},codestyle}
+\newtcblisting{codejson}{listing options={style=jsoncode},codestyle}
+\newtcblisting{codeyml}{listing options={style=ymlcode},codestyle}
+\newtcblisting{codeplain}{listing options={style=base},codestyle}
 
-% -- Terminal : commandes a taper --
 \newtcblisting{terminal}{
   enhanced, breakable, colback=ctermbg, colframe=ctermbg,
   arc=1.5mm, boxrule=0pt, left=2.5mm,right=2mm,top=1.8mm,bottom=1.8mm,
-  boxsep=0pt, fontupper=\ttfamily\small\color{ctermfg},
-  listing only, listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
+  boxsep=0pt, listing only,
+  listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},
+    keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
 }
 
-% -- Encarts pedagogiques --
 \newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
   arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
   fontupper=\scriptsize}
@@ -177,7 +155,7 @@
 \newtcolorbox{objectif}[1][]{enhanced, breakable, colback=objbg, colframe=objfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
-  title={Objectifs de la chapitre},\#1}
+  title={Objectifs du chapitre},#1}
 
 \newtcolorbox{note}{enhanced, breakable, colback=notebg, colframe=notefr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
@@ -189,54 +167,45 @@
 
 \newtcolorbox{piege}{enhanced, breakable, colback=warnbg, colframe=warnfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
-  before upper={\small\textbf{Pi\`ege \`a \'eviter.}\enspace}}
+  before upper={\small\textbf{Pi\`ege \`a \`eviter.}\enspace}}
 
 \newtcolorbox{exercice}[1][]{enhanced, breakable, colback=exobg, colframe=exofr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
-  title={Exercices guid\'es},\#1}
+  title={Exercices guid\'es},#1}
 
 \newtcolorbox{ressources}[1][]{enhanced, breakable, colback=linksbg, colframe=linksfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
-  title={Ressources et outils cit\'es},before upper=\small,\#1}
+  title={Ressources et outils cit\'es},before upper=\small,#1}
 
 \newtcolorbox{projet}[1][]{enhanced, breakable, colback=tipbg, colframe=tipfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=javared,
-  title={Projet \`a r\'ealiser},\#1}
+  title={Projet \`a r\'ealiser},#1}
 
 % ------------------------------ Macros pratiques ---------------------------
-\newcommand{\fichier}[1]{\texttt{\color{pathgreen}\#1}}
-\newcommand{\rep}[1]{\texttt{\color{pathgreen}\#1/}}
-\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{\#1}}}}
-\newcommand{\link}[2]{\href{#2}{\#1}}
-\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[\textasteriskcentered]}}}}
+\newcommand{\fichier}[1]{\texttt{\color{pathgreen}#1}}
+\newcommand{\rep}[1]{\texttt{\color{pathgreen}#1/}}
+\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
+\newcommand{\link}[2]{\href{#2}{#1}}
+\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[src]}}}}
 \newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
 \newcommand{\langphp}{\textcolor{phppurple}{\textbf{PHP}}}
-\newcommand{\langjava}{\textcolor{javared}{\textbf{Java}}}
-\newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large \#1}\par\smallskip}
-\DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{\#1}}}
-% glyphes utilises dans les listings (arborescences, symbole euro) : encodage T1 -> on emprunte pifont
-\usepackage{pifont}
-\DeclareRobustCommand{\boxv}{\text{\ding{124}}}
-\DeclareRobustCommand{\boxh}{\text{\ding{141}}}
-\DeclareRobustCommand{\boxe}{\text{\ding{122}}}
-\DeclareRobustCommand{\euro}{\texteuro}
-\newcommand{\todo}[1]{\textcolor{javared}{\textbf{[TODO: \#1]}}}
+\newcommand{\langjava}{\textcolor{themecolor}{\textbf{Java}}}
+\newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large #1}\par\smallskip}
+\DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{#1}}}
 
-% tableaux : en-tetes colorees
-\usepackage{etoolbox}
-% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees + filets
-\newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}\%
-  \small\setlength{\tabcolsep}{5pt}\%
-  \begin{tabularx}{\textwidth}{@{}\#1@{}}\toprule}
+% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees
+\newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}%
+  \small\setlength{\tabcolsep}{5pt}%
+  \begin{tabularx}{\textwidth}{@{}#1@{}}\toprule}
   {\bottomrule\end{tabularx}}
-\newcommand{\thd}[1]{\textbf{\color{white}\#1}}
+\newcommand{\thd}[1]{\textbf{\color{white}#1}}
 \newcommand{\headrow}{\rowcolor{theadbg}}
 \makeatletter
 \newenvironment{tablez}{\@ifnextchar[{\@tablezwith}{\@tablezwith[XXX]}}{\end{tabz}}
-\newcommand{\@tablezwith}[1]{\begin{tabz}{\#1}}
+\newcommand{\@tablezwith}[1]{\begin{tabz}{#1}}
 \makeatother
 
 % ------------------------------ Doc ---------------------------------------
@@ -262,13 +231,13 @@
   Linux \textbullet\ macOS \textbullet\ Windows \textbullet\ \'EDiteur au choix \textbullet\ Pratique guid\'ee\\[26pt]
   \small
   \begin{tabular}{@{}ll@{}}
-    \textbf{Niveau} \& grand d\'ebutant \$\rightarrow\$ avanc\'e\\
+    \textbf{Niveau} \& grand d\'ebutant $\rightarrow$ avanc\'e\\
     \textbf{Pr\'erequis} \& savoir allumer un ordinateur et taper un chemin de fichier\\
     \textbf{Dur\'ee conseill\'ee} \& 12 \`a 24 semaines, 1\`a 2 h par jour\\
     \textbf{Format} \& cours + code complet + exercices + corrig\'es + liens officiels\\
   \end{tabular}
   \vfill
-  {\footshape Version du \today}
+  {\footnotesize Version du \today}
 \end{titlepage}
 
 % ============================================================================
@@ -349,7 +318,7 @@ ton cerveau int\`egre la syntaxe toute seule. Ajoute une r\`egle~:
 \etape{\'etape 2 --- Modifie un param\`etre \`a chaque fois}
 Apr\`es chaque exemple, change une valeur, ajoute un \`el\'ement au tableau, supprime un
 \cmd{await}. Pr\'edis le r\'esultat \emph{avant} d'ex\'ecuter. Cette boucle
-\`a la boucle \og prediction \$\rightarrow\$ ex\'ecution \$\rightarrow\$ v\'erification\fg{}, la m\'ethode la plus rapide
+\`a la boucle \og prediction $\rightarrow$ ex\'ecution $\rightarrow$ v\'erification\fg{}, la m\'ethode la plus rapide
 pour progresser en programmation, toutes langues confondues.
 
 \etape{\'etape 3 --- Garde un fichier "~labo~" ouvert}
@@ -671,9 +640,9 @@ rapidement.
   \item \textbf{Node.js}~: installeur \link{nodejs.org/fr/download}{https://nodejs.org/fr/download}
         (LTS, .msi). coche \og ~Add to PATH~ \fg{}.
   \item \textbf{PHP}~: \link{windows.php.net/download}{https://windows.php.net/download/}
-        --- ZIP \og ~VS16 x64 Thread Safe~ \fg{}, d\'ezippe dans \fichier{C:\php}, ajoute
-        \fichier{C:\php} au \verb|PATH| (\emph{Param\`etres \$\rightarrow\$ Syst\`eme \$\rightarrow\$ \`A propos \$\rightarrow\$ Param\`etres
-        syst\`eme avanc\'es \$\rightarrow\$ Variables d'environnement}), puis copie \fichier{php.ini-development}
+        --- ZIP \og ~VS16 x64 Thread Safe~ \fg{}, d\'ezippe dans \fichier{C:\textbackslash php}, ajoute
+        \fichier{C:\textbackslash php} au \verb|PATH| (\emph{Param\`etres $\rightarrow$ Syst\`eme $\rightarrow$ \`A propos $\rightarrow$ Param\`etres
+        syst\`eme avanc\'es $\rightarrow$ Variables d'environnement}), puis copie \fichier{php.ini-development}
         vers \fichier{php.ini} et d\'ecommentre les lignes
         \verb|extension=curl|, \verb|extension=mbstring|, \verb|extension=pdo\_mysql|,
         \verb|extension=mysqli|, \verb|extension=openssl|, \verb|extension=fileinfo|.
@@ -710,7 +679,7 @@ code .        # depuis le terminal WSL : ouvre VS Code sur le dossier distant
 
 Installe l'extension \link{Remote - WSL}{https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-wsl}
 et \link{Dev~Containers}{https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers}.
-V\'erifie que ton projet est dans \verb|\\wsl\$\Ubuntu\home\toi\projets| et \emph{jamais} dans
+V\'erifie que ton projet est dans \verb|\\wsl$\Ubuntu\home\toi\projets| et \emph{jamais} dans
 \fichier{C:\textbackslash Users} : les performances d'I/O entre les deux mondes sont d\'esastreuses.
 
 \begin{piege}
@@ -925,7 +894,7 @@ ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque proje
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools\\\\_and\\\\_testing/Understanding\\\\_client-side\\\\_tools/Overview\#installing\\\\_node.js}
+  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools\\\\\\_and\\\\\\_testing/Understanding\\\\\\_client-side\\\\\\_tools/Overview\#installing\\\\\\_node.js}
   \item PHP --- \emph{Installation}~: \url{https://www.php.net/manual/en/install.php}
   \item OpenJDK --- \url{https://openjdk.org/install/} --- Adoptium Temurin~: \url{https://adoptium.net/fr/}
   \item Composer --- \url{https://getcomposer.org/download/}
@@ -952,8 +921,8 @@ ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque proje
 \section{Le terminal en 20 commandes}
 
 Tout ce livre se d\'eroule dans un terminal. Ouvre-le maintenant~:
-\keys{Ctrl+Alt+T} (Ubuntu), \clic{Applications \$\rightarrow\$ Utilitaires \$\rightarrow\$ Terminal} (macOS),
-\clic{Windows + X \$\rightarrow\$ Terminal} (Windows).
+\keys{Ctrl+Alt+T} (Ubuntu), \clic{Applications $\rightarrow$ Utilitaires $\rightarrow$ Terminal} (macOS),
+\clic{Windows + X $\rightarrow$ Terminal} (Windows).
 
 \begin{terminal}
 pwd                       # ou suis-je ? affiche le chemin absolu courant
@@ -1033,10 +1002,10 @@ Fichiers de configuration du shell (\`a \'editer une fois, puis \cmd{source})~:
 \begin{tabz}{llX}
   \headrow \thd{Shell} \& \thd{Fichier} \& \thd{Quand} \\
   \midrule
-  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\\\\\_profile} \& interactif / connexion \\
+  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\\\\\\\_profile} \& interactif / connexion \\
   zsh (macOS par d\'efaut) \& \fichier{\textasciitilde/.zshrc} \& les deux \\
   fish \& \fichier{\textasciitilde/.config/fish/config.fish} \& syntaxe diff\'erente, tr\`es convivial \\
-  PowerShell \& \cmd{Notepad \$PROFILE} \& Windows \\
+  PowerShell \& \cmd{Notepad $PROFILE} \& Windows \\
 \end{tabz}
 
 Les variables d'environnement d'\textbf{un projet} ne vont pas dans le shell mais dans un
@@ -1086,7 +1055,7 @@ git log --oneline --graph
 Convention de message \link{Conventional~Commits}{https://www.conventionalcommits.org/fr/v1.0.0/}~:
 \verb|type(scope): description imp\'erative|. Types~: \verb|feat|, \verb|fix|, \verb|docs|,
 \verb|style|, \verb|refactor|, \verb|perf|, \verb|test|, \verb|chore|. Un historique propre est
-un outil de debugging~: \cmd{git bisect} trouve la commit fautive en \$\log\_2(n)\$ \'etapes.
+un outil de debugging~: \cmd{git bisect} trouve la commit fautive en $\log_2(n)$ \'etapes.
 
 \etape{Travailler avec GitHub / GitLab}
 \begin{terminal}
@@ -1234,7 +1203,7 @@ pas seulement le r\'esultat.
 \begin{itemize}
   \item Pro Git (livre complet, gratuit, en fran\c{c}ais) --- \url{https://git-scm.com/book/fr/v2}
   \item GitHub Skills (cours officiels gratuits) --- \url{https://skills.github.com/}
-  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr\\\\_FR}
+  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr\\\\\\_FR}
   \item The Missing Semester (MIT) --- \url{https://missing.csail.mit.edu/2020/course-material/}
   \item Shellcheck (analyse tes scripts bash) --- \url{https://www.shellcheck.net/}
 \end{itemize}
@@ -1488,7 +1457,7 @@ R\`egle d'\'ecriture~: \texttt{const} par d\'efaut, \texttt{let} quand la r\'eas
   \headrow \thd{Type} \& \thd{Description} \& \thd{Exemple} \\
   \midrule
   \verb|string| \& S\'equence UTF-16 immuable \& \verb|"nour"|, \verb|'x'|, \verb|`a\${b}c`| \\
-  \verb|number| \& Flottant 64 bits (~\$2^{53}\$ entiers exacts) \& \verb|42|, \verb|3.14|, \verb|1e3|, \verb|0xff|, \verb|1\_000\_000| \\
+  \verb|number| \& Flottant 64 bits (~\textbackslash{}$2^{53}\$ entiers exacts) \& \verb|42|, \verb|3.14|, \verb|1e3|, \verb|0xff|, \verb|1\_000\_000| \\
   \verb|bigint| \& Entier de taille arbitraire \& \verb|9007199254740993n| \\
   \verb|boolean| \& \verb|true| / \verb|false| \& \\
   \verb|undefined| \& Valeur non fournie \& \verb|let x;| \\
@@ -1748,7 +1717,7 @@ valent cent traces.
   \item \textbf{Palindrome normalis\'e}~: \verb|"\'Esope reste ici et se repose"| renvoie \verb|true|.
         Retirer ponctuation, espaces, accents (\verb|String.prototype.normalize("NFD")|).
   \item \textbf{Nombre premier}~: fonction \verb|estPremier(n)| avec boucle jusqu'\`a
-        \$\sqrt{n}\$~; puis \verb|premiersInfrieursA(100)|.
+        $\sqrt{n}$~; puis \verb|premiersInfrieursA(100)|.
   \item \textbf{Temperature}~: \verb|celsiusVersFahrenheit|, \verb|fahrenheitVersCelsius|,
         et le sens inverse, \'ecrites comme fleches. V\'erifie que aller-retour redonne la valeur.
   \item \textbf{Compteur de clics}~: avec la fermeture \verb|creeCompteur|, simule 5 clics
@@ -2048,7 +2017,7 @@ Deux erreurs fr\'equentes~: (1) oublier le drapeau \verb|g| avec \verb|replace| 
 occurrence est remplac\'ee ; (2) une regex construite avec une entr\'ee utilisateur peut
 provoquer un d\'eni de service catastrophique (\emph{ReDoS}). Ne passe jamais une saisie
 brute dans un \verb|new RegExp()| sans la neutraliser avec
-\verb|s.replace(/[.*+?^\${}()|[\]\\]/g, "\\\$\&")|~; et garde les motifs simples.
+\verb|s.replace(/[.*+?^${}()|[\]\\]/g, "\\\$\&")|~; et garde les motifs simples.
 \end{piege}
 
 \section{D\'estructuration, valeurs par d\'efaut, objets et tableaux}
@@ -2159,8 +2128,8 @@ afficher(p);
         g\'erant les tableaux et en \'evitant les cycles (Map \og ~vu~ \fg{}).
   \item \verb|chunk(tab, taille)|, \verb|zip(a, b)|, \verb|sans(tab, ...valeurs)|,
         \verb|intersection(a, b)|, \verb|difference(a, b)|~: les utilitaires que tout projet contient.
-  \item \verb|masquerEmail("nour.diop@example.com")| \$\rightarrow\$ \verb|"no***@example.com"| (regex + slice).
-  \item \textbf{Slugifieur}~: \og ~L'\'Ev\'enement de l'ann\'ee, \`a Thies !~ \fg{} \$\rightarrow\$ \verb|evenement-annee-thies|
+  \item \verb|masquerEmail("nour.diop@example.com")| $\rightarrow$ \verb|"no***@example.com"| (regex + slice).
+  \item \textbf{Slugifieur}~: \og ~L'\'Ev\'enement de l'ann\'ee, \`a Thies !~ \fg{} $\rightarrow$ \verb|evenement-annee-thies|
         (minuscules, accents retir\'es, non-alphanum\'eriques en tirets, tirets dupliqu\'es retir\'es).
   \item \textbf{Validation}~: \'ecris un module \verb|validate.js| exportant \verb|email|,
         \verb|tel|, \verb|motDePasse| (avec message d'erreur humain) et \verb|formulaire(donnees)|
@@ -2170,7 +2139,7 @@ afficher(p);
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\_Objects/Array}
+  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\\_Objects/Array}
   \item Tableau comparatif des m\'ethodes de tableaux --- \url{https://javascript.info/array-methods}
   \item Constructeur et visualiseur de regex --- \url{https://regex101.com/} et \url{https://regexper.com/}
   \item \verb|lodash| (\`a lire pour les noms de m\'ethodes, pas pour d\'ependre de lui) --- \url{https://lodash.com/docs/}
@@ -2489,9 +2458,9 @@ cop.liste.push(3);                  // src.liste vaut [1,2,3] !
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- Heritage et prototypes --- \url{https://developer.mozilla.org/fr/docs/Learn/JavaScript/Objects/Object\\\_prototypes}
+  \item MDN --- Heritage et prototypes --- \url{https://developer.mozilla.org/fr/docs/Learn/JavaScript/Objects/Object\\\\\_prototypes}
   \item MDN --- Classes --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Classes}
-  \item MDN --- Proxy / Reflect --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\_Objects/Proxy}
+  \item MDN --- Proxy / Reflect --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\_Objects/Proxy}
   \item JavaScript.info --- \url{https://javascript.info/prototype-inheritance} (chapitres 8 et 21)
   \item \emph{Prototype pollution} (article de r\'ef\'erence) --- \url{https://medium.com/intrinsic/attacking-javascripts-prototype-pollution-7d2b66d64790}
 \end{itemize}
@@ -2826,8 +2795,8 @@ console.log("G");
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\_Objects/Promise}
-  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML\\\\_DOM\\\\_API/Microtask\\\\_guide}
+  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\\_Objects/Promise}
+  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML\\\\\\_DOM\\\\\\_API/Microtask\\\\\\_guide}
   \item Visualiseur interactif de la boucle d'\'ev\'enements --- \url{https://www.jsv9000.app/}
   \item Node --- Streams --- \url{https://nodejs.org/api/stream.html}
   \item Jake Archibald --- \emph{In The Loop} (la r\'ef\'erence sur l'ordre d'ex\'ecution) --- \url{https://jakearchibald.com/2015/events-based-runtimes/}
@@ -3039,8 +3008,8 @@ Sur une liste de mille lignes, c'est plusieurs secondes de g\^ach\'ees. Utilise
 
 \section{Performance : ce que le navigateur paie}
 
-Le pipeline est~: JavaScript \$\rightarrow\$ styles (recalcul) \$\rightarrow\$ layout (g\'eom\'etrie)
-\$\rightarrow\$ paint (pixels) \$\rightarrow\$ composite (GPU). Tout changement de
+Le pipeline est~: JavaScript $\rightarrow$ styles (recalcul) $\rightarrow$ layout (g\'eom\'etrie)
+$\rightarrow$ paint (pixels) $\rightarrow$ composite (GPU). Tout changement de
 \texttt{width/top/left/height} relance layout~; tout changement de
 \texttt{transform/opacity} peut rester sur le compositeur~: c'est le chemin rapide.
 
@@ -3252,7 +3221,7 @@ rendre();
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- R\'ef\'erence DOM --- \url{https://developer.mozilla.org/fr/docs/Web/API/Document\\\_Object\\\_Model}
+  \item MDN --- R\'ef\'erence DOM --- \url{https://developer.mozilla.org/fr/docs/Web/API/Document\\\\\_Object\\\\\_Model}
   \item web.dev Learn CSS / Learn Performance (Google, gratuit, excellent) --- \url{https://web.dev/learn/}
   \item Chrome DevTools, formation officielle --- \url{https://developer.chrome.com/docs/devtools/learn}
   \item Check-list d'accessibilit\'e --- \url{https://www.a11yproject.com/checklist/}
@@ -3366,7 +3335,7 @@ document.body.dispatchEvent(new CustomEvent("panier:maj", { detail: { total: 42 
 document.body.addEventListener("panier:maj", (e) => afficher(e.detail.total));
 \end{codejs}
 
-\section{Nettoyer : le pi\`ege n\${}^{\text{o}}\$1 des SPA}
+\section{Nettoyer : le pi\`ege n\textbackslash{}${}^{\text{o}}\$1 des SPA}
 
 Un \'ecouteur ajout\'e et jamais retir\'e = fuite de m\'emoire + rappels fant\^omes sur des \'el\'ements
 d\'etruits. Trois strat\'egies, de la plus simple \`a la plus propre.
@@ -3721,8 +3690,8 @@ function infini(sentinelle, charger) {
   \item \'Ecris un formulaire d'inscription complet~: nom, email, mot de passe (jauge de force
         en temps r\'eel), confirmation, conditions (case \`a cocher). Validation \`a la sortie du champ,
         messages sous le champ, \verb|aria-invalid|, focus sur la premi\`ere erreur.
-  \item Construis un s\'electeur de date \og ~calendrier~ \fg{}~: grille 7\$\times\$6, navigation mois,
-        \keys{\$\leftarrow\$} \keys{\$\rightarrow\$}, plage interdite, valeur au format \verb|YYYY-MM-DD| dans un champ cach\'e.
+  \item Construis un s\'electeur de date \og ~calendrier~ \fg{}~: grille 7$\times$6, navigation mois,
+        \keys{Left} \keys{Right}, plage interdite, valeur au format \verb|YYYY-MM-DD| dans un champ cach\'e.
   \item Ajoute un glisser-d\'eposer de fichiers sur toute la page, avec aper\c{c}u des images,
         rejet des types interdits et affichage de la taille.
   \item \'Ecris une barre de progression de t\'el\'echargement r\'ealiste~: \verb|fetch| +
@@ -4005,7 +3974,7 @@ navigator.addEventListener("online", () => !ws.enLigne && ws.ouvrir());
 
 \begin{note}
 WebSocket ne propose ni authentification par cookie de la m\^eme fa\c{c}on ni reconnexion~: tu les
-codes. C'est pourquoi, pour du simple temps r\'eel, SSE (serveur \$\rightarrow\$ client) ou une
+codes. C'est pourquoi, pour du simple temps r\'eel, SSE (serveur $\rightarrow$ client) ou une
 solution h\'eberg\'ee (\link{Pusher}{https://pusher.com/}, \link{Ably}{https://www.ably.io/},
 \link{Supabase Realtime}{https://supabase.com/}) est souvent le choix raisonnable.
 C\^ot\'e serveur Node, la biblioth\`eque de r\'ef\'erence est
@@ -4041,7 +4010,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
   \item \link{Comlink}{https://github.com/GoogleChromeLabs/comlink} rend l'appel de worker
         presque banal (promesses \`a travers les fronti\`eres).
   \item \verb|navigator.hardwareConcurrency| donne le nombre de coeurs~; un
-        \verb|WorkerPool| de \$n-1\$ workers traite les gros jeux de donn\'ees en parall\`ele.
+        \verb|WorkerPool| de \textbackslash{}$n-1\$ workers traite les gros jeux de donn\'ees en parall\`ele.
   \item \textbf{SharedArrayBuffer} + \verb|Atomics| partagent r\'eellement la m\'emoire
         (n\'ecessite les en-t\^etes \verb|Cross-Origin-Opener-Policy| / \verb|Embedder-Opener-Policy|).
   \item \textbf{OffscreenCanvas} d\'el\`egue le rendu WebGL/canvas \`a un worker~: l'interface ne
@@ -4057,7 +4026,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 \begin{exercice}
 \begin{enumerate}
   \item Consomme une API publique r\'eelle --- \url{https://api.github.com/repos/vitejs/vite} ou
-        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\_2m}
+        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\\\_2m}
         avec le mini-client~: affiche la temp\'erature de Thi\`es, g\`ere erreur r\'eseau et hors ligne.
   \item Ajoute un cache~: garde la derni\`ere r\'eponse dans \verb|sessionStorage| avec son \^age,
         affiche-la imm\'ediatement, puis rafra\^ichis en arri\`ere-plan (strat\'egie
@@ -4076,7 +4045,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\_API/Using\\\_Fetch}
+  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\\\_API/Using\\\\\_Fetch}
   \item MDN --- CORS --- \url{https://developer.mozilla.org/fr/docs/Web/HTTP/Guides/CORS}
   \item \link{Async API tutorial (Node, SSE, WS)}{https://github.com/nodejs/node} --- docs \og ~http~ \fg{}
   \item \link{web.dev : patterns de reseau}{https://web.dev/patterns/}
@@ -4214,8 +4183,8 @@ Dans \texttt{package.json}~:
 \begin{tabz}{clX}
   \headrow \thd{Pr\'efixe} \& \thd{Exemple} \& \thd{Ce que l'installateur accepte} \\
   \midrule
-  \verb|^| (d\'efaut de \cmd{npm i}) \& \verb|^3.1.0| \& \$\geq\$3.1.0 \verb|<|4.0.0 --- mineures et patchs \\
-  \verb|~| \& \verb|~3.1.0| \& \$\geq\$3.1.0 \verb|<|3.2.0 --- patchs seulement \\
+  \verb|^| (d\'efaut de \cmd{npm i}) \& \verb|^3.1.0| \& $\geq$3.1.0 \verb|<|4.0.0 --- mineures et patchs \\
+  \verb|~| \& \verb|~3.1.0| \& $\geq$3.1.0 \verb|<|3.2.0 --- patchs seulement \\
   \verb|>|, \verb|>=|, \verb|<|, \verb|=| \& \verb|>=3.1 <3.3| \& plages explicites \\
   \verb|*| \& \verb|3.x| \& tout ce qui commence par 3 \\
   aucun \& \verb|3.1.4| \& fig\'e exactement \\
@@ -4271,9 +4240,9 @@ npm deprecate mon-paquet "Utilise @nour/outils a la place"
 \begin{tabz}{lXl}
   \headrow \thd{Outil} \& \thd{Pourquoi lui} \& \thd{Vitesse (relative)} \\
   \midrule
-  \link{npm}{https://docs.npmjs.com/} \& livr\'e avec Node, standard, suffisant. \& 1\$\times\$ \\
-  \link{pnpm}{https://pnpm.io/fr/} \& store global + liens durs~: disque divis\'e par 3, monorepo naturel, \texttt{node\_modules} strict (moins de bugs d'imports fant\^omes). \textbf{Mon choix par d\'efaut.} \& 2--3\$\times\$ plus rapide \\
-  \link{yarn}{https://yarnpkg.com/} \& m\^ur, PnP (z\'ero \texttt{node\_modules}), bien en monorepo. \& \$\approx\$ pnpm \\
+  \link{npm}{https://docs.npmjs.com/} \& livr\'e avec Node, standard, suffisant. \& 1$\times$ \\
+  \link{pnpm}{https://pnpm.io/fr/} \& store global + liens durs~: disque divis\'e par 3, monorepo naturel, \texttt{node\_modules} strict (moins de bugs d'imports fant\^omes). \textbf{Mon choix par d\'efaut.} \& 2--3$\times$ plus rapide \\
+  \link{yarn}{https://yarnpkg.com/} \& m\^ur, PnP (z\'ero \texttt{node\_modules}), bien en monorepo. \& $\approx$ pnpm \\
   \link{bun}{https://bun.sh/docs/install/} \& le gestionnaire est int\'egr\'e au runtime~: tr\`es rapide, API diff\'erente. \& tr\`es rapide \\
 \end{tabz}
 
@@ -4705,7 +4674,7 @@ route.post("/avatar", upload.single("fichier"), asyncHandler(async (req, res) =>
   \headrow \thd{Cadre} \& \thd{Id\'ee directrice} \& \thd{Lien} \\
   \midrule
   \link{Hono}{https://hono.dev/} \& ultra-l\'eger, tourne sur Node, Bun, Deno, Cloudflare Workers, navigateur. Mon choix pour une API neuve. \& 14 kB \\
-  \link{Fastify}{https://fastify.dev/} \& plus rapide qu'Express, sch\'emas JSON int\'egr\'es, plugins. \& \$\approx\$2x \\
+  \link{Fastify}{https://fastify.dev/} \& plus rapide qu'Express, sch\'emas JSON int\'egr\'es, plugins. \& $\approx$2x \\
   \link{Koa}{https://koajs.com/} \& le \og ~Express repens\'e~ \fg{} par les auteurs d'Express. \& minimaliste \\
   \link{NestJS}{https://nestjs.com/} \& architecture d\'ecorateurs/injection, tr\`es TypeScript, \'equipes Java qui passent au Node. \& complet \\
   \link{Next.js}{https://nextjs.org/} \& React fullstack~: pages, API routes, rendu serveur. \& cadre UI \\
@@ -4923,7 +4892,7 @@ const effacer = (nom) => { document.cookie = `${nom}=; path=/; max-age=0`; };
   \verb|Path| \& ne sera envoy\'e que sur ce chemin. \verb|/| dans 99 \% des cas. \\
   \verb|Domain| \& sous-domaines inclus ; ne le mets pas sauf besoin r\'eel (\verb|.exemple.com| = large surface). \\
   \verb|Secure| \& uniquement en HTTPS --- obligatoire si \verb|SameSite=None|. \\
-  \verb|HttpOnly| \& \textbfJavaScript ne peut pas le lire~: la meilleure d\'efense contre le vol de session par XSS. \\
+  \verb|HttpOnly| \& \textbf{JavaScript} ne peut pas le lire~: la meilleure d\'efense contre le vol de session par XSS. \\
   \verb|SameSite=Lax|  \& d\'efaut moderne~; bloque la plupart des CSRF. \verb|Strict| = encore plus raide. \verb|None| = tiers, exige \verb|Secure|. \\
   \verb|Partitioned| \& cookie cloisonn\'e par site parent (CHIPS) : pour les iframe tierces. \\
 \end{tabz}
@@ -5147,7 +5116,7 @@ location.reload();
         valid\'ee par \verb|zod|~: refuse tout fichier malform\'e sans corrompre l'\'etat existant.
     \item Rends ton application installable~: manifest, service worker, mode hors ligne
         complet, et un indicateur visible \og ~derni\`ere synchronisation~ \fg{}.
-  \item V\'erifie dans DevTools \$\rightarrow\$ Application \$\rightarrow\$ Storage ce que ton site
+  \item V\'erifie dans DevTools $\rightarrow$ Application $\rightarrow$ Storage ce que ton site
         garde r\'eellement~; supprime ce qui ne devrait pas y \^etre.
 \end{enumerate}
 \end{exercice}
@@ -5155,7 +5124,7 @@ location.reload();
 \begin{ressources}
 \begin{itemize}
   \item MDN --- Web Storage --- \url{https://developer.mozilla.org/fr/docs/Web/API/Window/localStorage}
-  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB\\\_API}
+  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB\\\\\_API}
   \item \emph{The Offline Cookbook} (Jake Archibald) --- \url{https://web.dev/articles/offline-cookbook}
   \item idb --- \url{https://github.com/jakearchibald/idb}
   \item PWA --- \url{https://web.dev/learn/pwa/} --- Workbox --- \url{https://developer.chrome.com/docs/workbox}
@@ -5324,15 +5293,15 @@ node --inspect src/server.js            # tourne et ecoute sur 9229
 
 \etape{Les techniques qui remplacent 90 \% des \texttt{console.log}}
 \begin{itemize}
-  \item \textbf{Point d'arr\^et conditionnel}~: clic droit sur le num\'ero de ligne \$\rightarrow\$ \og ~Breakpoint
+  \item \textbf{Point d'arr\^et conditionnel}~: clic droit sur le num\'ero de ligne $\rightarrow$ \og ~Breakpoint
         conditionnel~ \fg{}, \verb|i === 4231| ou \verb|user.id === id|.
   \item \textbf{Point d'arr\^et de log}~: on imprime une expression sans casser l'ex\'ecution.
   \item \textbf{Point d'arr\^et sur exception}~: l'ic\^one \og ~pause on caught exceptions~ \fg{} dans le panneau
         Call Stack~: le d\'ebogueur s'arr\^ete \emph{\`a la source} de l'erreur, pas l\`a o\`u on l'affiche.
   \item \textbf{Console}~: \verb|copy(x)| (copie dans le presse-papiers), \verb|\$\_| (derni\`ere
-        expression), \verb|\$0| (\'el\'ement s\'electionn\'e dans Elements), \verb|\$\$("sel")| (\texttt{querySelectorAll}), \verb|monitor(x)|.
+        expression), \verb|$0| (\'el\'ement s\'electionn\'e dans Elements), \verb|$\$("sel")| (\texttt{querySelectorAll}), \verb|monitor(x)|.
   \item \textbf{Live expressions}~: dans le panneau Watch, une expression r\'e\'evalu\'ee \`a chaque pause.
-  \item \textbf{Les \og ~timeline~ \fg{} breakpoints}~: DevTools \$\rightarrow\$ Event Listener Breakpoints pour
+  \item \textbf{Les \og ~timeline~ \fg{} breakpoints}~: DevTools $\rightarrow$ Event Listener Breakpoints pour
         n'importe quel \'ev\'enement (utile quand \og ~je ne sais pas quel handler fait \c{c}a~ \fg{}).
 \end{itemize}
 
@@ -5451,7 +5420,7 @@ plus fr\'equente en d\'eveloppement Node.
 \begin{objectif}
 \begin{itemize}
   \item D\'emarrer un projet avec Vite et comprendre ce qu'un bundler fait pour toi.
-  \item Saisir le mod\`ele \og ~\'etat \$\rightarrow\$ rendu~ \fg{} commun aux frameworks, et les hooks React.
+  \item Saisir le mod\`ele \og ~\'etat $\rightarrow$ rendu~ \fg{} commun aux frameworks, et les hooks React.
   \item Choisir un cadre en connaissance de cause, sans religion.
   \item G\'erer \'etat, routes, donn\'ees serveur et styles dans une vraie application.
   \item Savoir quand \emph{ne pas} mettre de framework.
@@ -5632,16 +5601,16 @@ watchEffect(() => localStorage.setItem("courses", JSON.stringify(articles.value)
 \begin{tabz}{lXlX}
   \headrow \thd{Cadre} \& \thd{Id\'ee forte} \& \thd{Taille (gzipp\'ee, app. vide)} \& \thd{Doc} \\
   \midrule
-  \link{React~19}{https://react.dev/} \& le plus d'emplois, \'ecosyst\`eme immense, rendu par fonction \& \$\approx\$45~Ko \& \url{https://react.dev/learn} \\
-  \link{Vue~3.5}{https://fr.vuejs.org/} \& la meilleure mont\'ee en charge du d\'ebutant au projet moyen, templates clairs \& \$\approx\$35~Ko \& \url{https://fr.vuejs.org/guide/introduction.html} \\
-  \link{Svelte~5 / SvelteKit}{https://svelte.dev/} \& compilateur, peu de code, performances par d\'efaut \& \$\approx\$7~Ko \& \url{https://learn.svelte.dev/} \\
-  \link{Solid}{https://www.solidjs.com/} \& signaux fins, syntaxe JSX, rapidit\'e maximale \& \$\approx\$8~Ko \& \url{https://docs.solidjs.com/} \\
+  \link{React~19}{https://react.dev/} \& le plus d'emplois, \'ecosyst\`eme immense, rendu par fonction \& $\approx$45~Ko \& \url{https://react.dev/learn} \\
+  \link{Vue~3.5}{https://fr.vuejs.org/} \& la meilleure mont\'ee en charge du d\'ebutant au projet moyen, templates clairs \& $\approx$35~Ko \& \url{https://fr.vuejs.org/guide/introduction.html} \\
+  \link{Svelte~5 / SvelteKit}{https://svelte.dev/} \& compilateur, peu de code, performances par d\'efaut \& $\approx$7~Ko \& \url{https://learn.svelte.dev/} \\
+  \link{Solid}{https://www.solidjs.com/} \& signaux fins, syntaxe JSX, rapidit\'e maximale \& $\approx$8~Ko \& \url{https://docs.solidjs.com/} \\
   \link{Qwik}{https://qwik.dev/} \& reprise d'hydratation~: ne charge que ce que l'utilisateur touche \& minuscule \& \url{https://qwik.dev/learn/} \\
   \link{Angular~19+}{https://angular.dev/} \& tout int\'egr\'e (routes, HTTP, formulaires, DI), signals, standalone \& lourd mais complet \& \url{https://angular.dev/tutorials} \\
   \link{Astro~5}{https://astro.build/} \& sites centr\'es contenu~: z\'ero JS par d\'efaut, \^ilots d'interactive \& 0~Ko \& \url{https://docs.astro.build/fr/getting-started/} \\
   \link{HTMX}{https://htmx.org/} \& l'interactive dans les attributs HTML, le serveur renvoie du HTML \& 14~Ko \& \url{https://htmx.org/docs/} \\
-  \link{Lit}{https://lit.dev/} \& web components natifs et durables, multi-cadres \& \$\approx\$17~Ko \& \url{https://lit.dev/docs/} \\
-  \link{Alpine.js}{https://alpinejs.dev/} \& du \og ~jQuery propre~ \fg{} pour les petites pages \& \$\approx\$15~Ko \& \url{https://alpinejs.dev/start-here} \\
+  \link{Lit}{https://lit.dev/} \& web components natifs et durables, multi-cadres \& $\approx$17~Ko \& \url{https://lit.dev/docs/} \\
+  \link{Alpine.js}{https://alpinejs.dev/} \& du \og ~jQuery propre~ \fg{} pour les petites pages \& $\approx$15~Ko \& \url{https://alpinejs.dev/start-here} \\
   \link{jQuery}{https://jquery.com/} \& \`a conna\^itre pour maintenir l'existant, pas pour d\'emarrer \& 30~Ko \& \url{https://api.jquery.com/} \\
 \end{tabz}
 
@@ -6409,7 +6378,7 @@ d\'ecorative. Pour les frameworks qui exigent du style inline, utilise
 \begin{itemize}
   \item G\'en\'erateur et validateur~: \link{CSP~Evaluator}{https://csp-evaluator.withgoogle.com/}.
   \item \texttt{Trusted Types} (Chrome/Edge/Firefox r\'ecents) rend \texttt{innerHTML} refus\'e sans
-        une politique explicite~: \url{https://developer.mozilla.org/en-US/docs/Web/API/Trusted\\\_Types\\\_API}.
+        une politique explicite~: \url{https://developer.mozilla.org/en-US/docs/Web/API/Trusted\\\\\_Types\\\\\_API}.
   \item \texttt{SRI} pour les scripts tiers~: \verb|<script src="..." integrity="sha384-..." crossorigin>|.
 \end{itemize}
 
@@ -7032,10 +7001,10 @@ printf('%s a %d ans.%s', $prenom, $age, PHP_EOL);
   \headrow \thd{R\`egle} \& \thd{D\'etail qui compte} \\
   \midrule
   \verb|;| obligatoire \& chaque instruction se termine par un point-virgule. Le \verb|?>| final en implique un. \\
-  \verb|\$| devant toute variable \& \verb|\$x|~; \verb|x| est une constante ou un nom de fonction. \\
+  \verb|$| devant toute variable \& \verb|$x|~; \verb|x| est une constante ou un nom de fonction. \\
   Insensible \`a la casse pour les mots-cl\'es/fonctions \& \verb|ECHO|, \verb|strlen| et \verb|StrLen| sont \'egaux. \textbf{Les noms de classes le sont aussi}~: d'o\`u les conventions PSR. \\
-  Sensible pour les variables \& \verb|\$nom| et \verb|\$Nom| sont deux variables diff\'erentes. \\
-  Cha\^ines \& \verb|'simple'| = litt\'erale~; \verb|"double"| = interpol\'ee (\verb|"\$a[0]|, \verb|"{\$obj->p}|). \\
+  Sensible pour les variables \& \verb|$nom| et \verb|$Nom| sont deux variables diff\'erentes. \\
+  Cha\^ines \& \verb|'simple'| = litt\'erale~; \verb|"double"| = interpol\'ee (\verb|"$a[0]|, \verb|"{$obj->p}|). \\
   Commentaires \& \verb|//|, \verb|\#|, \verb|/* */|, et \verb|/** DocBlock */| pour la documentation lue par les IDE. \\
   \verb|echo| / \verb|print| / \verb|printf| \& \verb|echo| plusieurs valeurs~; \verb|print| renvoie 1~; \verb|printf| formate. \\
 \end{tabz}
@@ -7433,7 +7402,7 @@ casse d\`es que le serveur est lanc\'e depuis un autre dossier.
   \item Analyse un fichier \verb|access.log|~: renvoie les 10 IP les plus fr\'equentes, le total de
         requ\^etes par code HTTP, et la liste des 404, avec un g\'en\'erateur pour tenir sur un fichier
         de 1~Go.
-  \item \'Ecris une fonction \verb|validerFormulaire(array \$donnees, array \$regles): array|~: r\`egles
+  \item \'Ecris une fonction \verb|validerFormulaire(array $donnees, array $regles): array|~: r\`egles
         \verb|required|, \verb|min:5|, \verb|email|, \verb|numeric|, \verb|in:a,b,c|,
         \verb|confirmed|~; retour \verb|[champ => [erreurs]]| vide si tout passe. C'est la base
         de ton futur micro-framework.
@@ -7748,12 +7717,12 @@ final class Article
   \item \verb|groupesParPrefixe(array \$mots): array|~: regroupe les mots par leurs trois premi\`eres
         lettres, trie les groupes par taille d\'ecroissante, et renvoie un tableau index\'e
         de \verb|[prefixe, mots]|.
-  \item \verb|reformaterCSV(string \$chemin, array \$colonnes): string|~: lis un CSV (avec le s\'eparateur
+  \item \verb|reformaterCSV(string $chemin, array $colonnes): string|~: lis un CSV (avec le s\'eparateur
         devin\'e parmi \verb|;|, \verb|,|, \verb|\t|), s\'electionne/renomme les colonnes, trie,
         et \'ecris un CSV propre avec BOM UTF-8. 100 \% g\'en\'erateur, m\'emoire constante.
   \item \verb|trouverDoublonsProches(array \$noms): array|~: normalise (minuscules, accents,
-        ponctuation) puis regroupe par empreinte~; retourne uniquement les groupes de taille \$>1\$.
-  \item \verb|prochainesDates(string \$regle, DateTimeImmutable \$debut, int \$n): array|~: sans
+        ponctuation) puis regroupe par empreinte~; retourne uniquement les groupes de taille \textbackslash{}$>1\$.
+  \item \verb|prochainesDates(string $regle, DateTimeImmutable $debut, int \$n): array|~: sans
         biblioth\`eque~: accepte \verb|chaque lundi|, \verb|1er de chaque mois|, \verb|+3 mois|,
         en utilisant \verb|modify| et \verb|DateInterval|.
   \item \'Ecris un \verb|Tableau| utilitaire avec les m\'ethodes \verb|map|, \verb|filter|,
@@ -8246,7 +8215,7 @@ DDD) est de la broderie sur ces trois points, utile \`a conna\^itre mais raremen
 
 \begin{objectif}
 \begin{itemize}
-  \item Lire une requ\^ete proprement~: m\'ethodes, en-t\^etes, \verb|\$\_GET|, \verb|\$\_POST|, corps JSON.
+  \item Lire une requ\^ete proprement~: m\'ethodes, en-t\^etes, \verb|$_GET|, \verb|$\_POST|, corps JSON.
   \item Envoyer une r\'eponse correcte~: codes, en-t\^etes, redirections, streaming.
   \item Construire un formulaire robuste~: valeurs conserv\'ees, erreurs, protection CSRF.
   \item G\'erer une session et un mot de passe de bout en bout~: connexion, d\'econnexion,
@@ -10000,7 +9969,7 @@ vendor/bin/phpunit --order-by=defects --reverse-list    # les echecs d'abord
   \item PHP-FIG --- \url{https://www.php-fig.org/psr/}
   \item PHPStan --- \url{https://phpstan.org/} --- Psalm --- \url{https://psalm.dev/} --- Rector --- \url{https://getrector.com/}
   \item PHPUnit --- \url{https://docs.phpunit.de/} --- Pest --- \url{https://pestphp.com/}
-  \item Xdebug --- \url{https://xdebug.org/docs/step\\\_debug} --- PHP-FPM tuning --- \url{https://php.watch/configuration/php-fpm}
+  \item Xdebug --- \url{https://xdebug.org/docs/step\\\\\_debug} --- PHP-FPM tuning --- \url{https://php.watch/configuration/php-fpm}
   \item \link{PHP~The~Right~Way}{https://phptherightway.com/} --- relis la partie \og ~Dependencies~ \fg{} et \og ~Tooling~ \fg{}.
 \end{itemize}
 \end{ressources}
@@ -10625,7 +10594,7 @@ puis utiliser l'outil.
   \link{Symfony}{https://symfony.com/} \& les composants r\'eutilisables + un cadre~: rigueur, DI explicite, long support LTS, tr\`es pr\'esent en France/Europe et dans le secteur public. \& 7.x (6.4 LTS) \& \url{https://symfony.com/doc/current/index.html} \\
   \link{Slim}{https://www.slimframework.com/} \& un routeur + PSR-7/15, rien d'autre~: id\'eal pour une API l\'eg\`ere. \& 4.x \& \url{https://www.slimframework.com/docs/} \\
   \link{Laminas / Mezzio}{https://mezzio.dev/} \& PSR pur, modulaire, tr\`es typ\'e entreprise. \& --- \& \url{https://docs.laminas.dev/} \\
-  \link{CodeIgniter~4}{https://codeigniter.com/} \& l\'eger, simple, h\'eritage du mutualis\'e. \& 4.x \& \url{https://codeigniter.com/user\\\_guide/} \\
+  \link{CodeIgniter~4}{https://codeigniter.com/} \& l\'eger, simple, h\'eritage du mutualis\'e. \& 4.x \& \url{https://codeigniter.com/user\\\\\_guide/} \\
   \link{Yii~2}{https://www.yiiframework.com/} \& Gii (g\'en\'eration de CRUD), tr\`es rapide, populaire en Asie. \& 2.0 \& \url{https://www.yiiframework.com/doc/} \\
   \link{Phalcon}{https://phalcon.io/} \& extension C~: performances brutes \'elev\'ees. \& 5.x \& \url{https://docs.phalcon.io/} \\
   \link{CakePHP}{https://book.cakephp.org/} \& \og ~convention over configuration~ \fg{}, le doyen. \& 5.x \& \\
@@ -10925,7 +10894,7 @@ int\'eressante depuis longtemps, et elle marche avec Laravel (Octane), Symfony e
 \begin{ressources}
 \begin{itemize}
   \item Laravel --- docs, Laracasts, News --- \url{https://laravel.com/docs/12.x}, \url{https://laracasts.com/}, \url{https://laravel-news.com/}
-  \item Symfony --- les guides (excellents, en fran\c{c}ais partiel) --- \url{https://symfony.com/doc/current/page\\\_blocks.html} \\
+  \item Symfony --- les guides (excellents, en fran\c{c}ais partiel) --- \url{https://symfony.com/doc/current/page\\\\\_blocks.html} \\
         et la formation gratuite Open Classrooms --- \url{https://openclassrooms.com/fr/search?query=symfony}
   \item \link{Symfony~Casts}{https://symfonycasts.com/} (les meilleures vid\'eos de l'\'ecosyst\`eme, beaucoup sont gratuites)
   \item \link{Laravel~Daily~Learn}{https://laraveldaily.com/learn}, \link{Relay}{https://laravelrelay.app/}
@@ -11400,7 +11369,7 @@ enum Statut {
   (aucun, \og ~package-private~ \fg{}) \& oui \& non \& oui \& non \\
   \verb|protected| \& oui \& oui \& oui \& non \\
   \verb|public| \& oui \& oui \& oui \& oui \\
-  \verb|module| (Java~9, \verb|exports|) \& \multicolumn{4}{X}{uniquement avec \verb|module-info.java| : contr\^ole entre modules} \\
+  \verb|module| (Java~9, \verb|exports|) \& \multicolumn{4}{p{0.6\textwidth}}{uniquement avec \verb|module-info.java| : contr\^ole entre modules} \\
 \end{tabz}
 
 Les trois r\'eflexes qui rendent une conception saine~: (1) \verb|final| sur les classes et les
@@ -11692,19 +11661,19 @@ ne pas exposer la collection~: renvoyer un \verb|Stream|, une taille, ou un acce
 \begin{tabz}{lllX}
   \headrow \thd{Besoin} \& \thd{Choisis} \& \thd{Complexit\'e cl\'e} \& \thd{Notes} \\
   \midrule
-  liste index\'ee, append fr\'equent \& \verb|ArrayList| \& get O(1), add O(1) amorti, remove O(n) \& le d\'efaut. Cro\^it par recopie (\$\times\$1{,}5). \\
+  liste index\'ee, append fr\'equent \& \verb|ArrayList| \& get O(1), add O(1) amorti, remove O(n) \& le d\'efaut. Cro\^it par recopie ($\times$1{,}5). \\
   ajouts/retraits fr\'equents aux bords \& \verb|ArrayDeque| \& O(1) \& \textbf{ne jamais utiliser \verb|LinkedList| comme file}~: plus lent en pratique (cache). \\
   liste li\'ee \& \verb|LinkedList| \& O(1) aux it\'erateurs \& rarement justifi\'e~; API \verb|Deque|+ \verb|List| \`a la fois = pi\`ege. \\
   unicit\'e \& \verb|HashSet| \& O(1) \& ordre non garanti~; d\'epend de \verb|hashCode|. \\
-  unicit\'e tri\'ee \& \verb|TreeSet| \& O(\$\log n\$) \& exige \verb|Comparable| ou un \verb|Comparator|. \\
+  unicit\'e tri\'ee \& \verb|TreeSet| \& O($\log n$) \& exige \verb|Comparable| ou un \verb|Comparator|. \\
   unicit\'e avec ordre d'insertion \& \verb|LinkedHashSet| \& O(1) \& le \og ~cache LRU-lite~ \fg{}, d\'eduction des doublons. \\
   dictionnaire \& \verb|HashMap| \& O(1) \& cl\'es \verb|equals|/\verb|hashCode| coh\'erentes. \\
   dictionnaire avec insertion en fin \& \verb|LinkedHashMap| \& O(1) \& \verb|removeEldestEntry| = cache LRU en 5 lignes. \\
-  dictionnaire tri\'e / plages \& \verb|TreeMap| \& O(\$\log n\$) \& \verb|subMap|, \verb|floorKey|, \verb|ceilingKey|. \\
+  dictionnaire tri\'e / plages \& \verb|TreeMap| \& O($\log n$) \& \verb|subMap|, \verb|floorKey|, \verb|ceilingKey|. \\
   dictionnaire immuable \& \verb|Map.of(...)| / \verb|Map.copyOf(..)| \& O(1) \& limite de 10 paires pour \verb|of| ; \verb|ofEntries| au-del\`a. \\
   concurrent \& \verb|ConcurrentHashMap| \& O(1) sans verrou global \& \verb|computeIfAbsent|, \verb|merge|, \verb|reduce*. \\
   files bloquantes (threads) \& \verb|ArrayBlockingQueue| / \verb|LinkedBlockingQueue| \& \& born\'ee = dos-pression. Base de tout producteur/consommateur. \\
-  tas de priorit\'e \& \verb|PriorityQueue| \& offre O(\$\log n\$) \& k-plus-grands, ordonnanceur, Dijkstra. \\
+  tas de priorit\'e \& \verb|PriorityQueue| \& offre O($\log n$) \& k-plus-grands, ordonnanceur, Dijkstra. \\
   cl\'es par identit\'e (pas equals) \& \verb|IdentityHashMap| \& \& \verb|WeakHashMap| pour le cache sans fuite. \\
 \end{tabz}
 
@@ -11827,13 +11796,13 @@ Comparator<? super Article> cmp = Comparator.comparingLong(Article::id);
 \begin{codejava}
 /*
   Throwable
-   \boxv \boxh \boxh Error                    : VMStackOverflow, OutOfMemoryError -- ne jamais capturer
-   \boxe \boxh \boxh Exception
-        \boxv \boxh \boxh RuntimeException    : NON v\'erifi\'ees (le compilateur n'exige rien)
-        \boxv \boxv \boxv   IllegalArgumentException, IllegalStateException, NullPointerException,
-        \boxv \boxv \boxv   IndexOutOfBoundsException, ClassCastException, NumberFormatException,
-        \boxv \boxv \boxv   ConcurrentModificationException, ArithmeticException, UnsupportedOperationException
-        \boxe \boxh \boxh Exception (autres)  : VERIFIEES ("checked") -> try/catch ou throws
+   |-- Error                    : VMStackOverflow, OutOfMemoryError -- ne jamais capturer
+   '-- Exception
+        |-- RuntimeException    : NON v\'erifi\'ees (le compilateur n'exige rien)
+        |   |   |     IllegalArgumentException, IllegalStateException, NullPointerException,
+        |   |   |     IndexOutOfBoundsException, ClassCastException, NumberFormatException,
+        |   |   |     ConcurrentModificationException, ArithmeticException, UnsupportedOperationException
+        '-- Exception (autres)  : VERIFIEES ("checked") -> try/catch ou throws
               IOException, SQLException, InterruptedException,
               ClassNotFoundException, FileNotFoundException, URISyntaxException, ...
 
@@ -12141,10 +12110,10 @@ Locale francais = Locale.forLanguageTag("fr-FR");
 NumberFormat nombre = NumberFormat.getIntegerInstance(francais);
 nombre.format(1234567);                                   // "1 234 567" (espace ins\'ecable)
 NumberFormat devise = NumberFormat.getCurrencyInstance(francais);
-devise.format(12.5);                                       // "12,50 EUR" / "12,50 \euro "
+devise.format(12.5);                                       // "12,50 EUR" / "12,50 EUR "
 NumberFormat pourcent = NumberFormat.getPercentInstance();
 pourcent.setMinimumFractionDigits(1); pourcent.format(0.1234);   // "12,3 %"
-DecimalFormat modele = new DecimalFormat("#,##0.00 \euro ", new DecimalFormatSymbols(francais));
+DecimalFormat modele = new DecimalFormat("#,##0.00 EUR ", new DecimalFormatSymbols(francais));
 modele.format(1234.5);
 ParsePosition pp = new ParsePosition(0);
 Number lu = nombre.parse("1 234 567", pp);                    // attention aux espaces ins\'ecables
@@ -12883,14 +12852,14 @@ gradle wrapper --gradle-version 8.11.1
 
 \begin{codeplain}
 app/
-\boxv \boxh \boxh mvnw, mvnw.cmd, .mvn/wrapper/          # le wrapper (toujours)
-\boxv \boxh \boxh pom.xml            ou   build.gradle.kts + settings.gradle.kts
-\boxv \boxh \boxh src/main/java/com/exemple/app/         # code
-\boxv \boxh \boxh src/main/resources/                    # config, i18n, schemas SQL, templates
-\boxv \boxh \boxh src/test/java/...                       # tests (miroir des paquets)
-\boxv \boxh \boxh src/test/resources/                      # jeux de donnees de test
-\boxv \boxh \boxh .editorconfig  .gitignore  README.md
-\boxe \boxh \boxh (Gradle) build/    (Maven) target/       # JAMAIS versionnes
+|-- mvnw, mvnw.cmd, .mvn/wrapper/          # le wrapper (toujours)
+|-- pom.xml            ou   build.gradle.kts + settings.gradle.kts
+|-- src/main/java/com/exemple/app/         # code
+|-- src/main/resources/                    # config, i18n, schemas SQL, templates
+|-- src/test/java/...                       # tests (miroir des paquets)
+|-- src/test/resources/                      # jeux de donnees de test
+|-- .editorconfig  .gitignore  README.md
+'-- (Gradle) build/    (Maven) target/       # JAMAIS versionnes
 \end{codeplain}
 
 \section{Maven~: le \texttt{pom.xml} utile}
@@ -13137,7 +13106,7 @@ org.gradle.daemon=true ; org.gradle.console=rich ; org.gradle.workers.max=8
   \headrow Crit\`ere \& Maven \& Gradle \\
   \midrule
   Courbe d'apprentissage \& douce, convention forte, XML verbeux mais lisible \& plus exigeante (DSL, t\^aches), mais expressive \\
-  Vitesse \& correcte, r\'esolutions s\'equentielles \& incr\'ementale + cache + parall\`ele~: 2--10\,\$\times\$ sur les gros builds \\
+  Vitesse \& correcte, r\'esolutions s\'equentielles \& incr\'ementale + cache + parall\`ele~: 2--10\,$\times$ sur les gros builds \\
   Multi-module \& \verb|<modules>| simple \& excellent, graphes de t\^aches fins \\
   Plugins \& \'enorme d\'ep\^ot, versions fig\'ees par super-POM \& \'ecosyst\`eme riche, API de plugin en JVM/Kotlin \\
   Reprisibilit\'e \& \'elev\'ee (XML d\'eclaratif) \& \'elev\'ee \emph{si} le script est disciplin\'e \\
@@ -13326,7 +13295,7 @@ dans l'arbre~: \verb|NoClassDefFoundError| al\'eatoire~; (5) le cache CI sans \v
 \begin{ressources}
 \begin{itemize}
   \item Maven --- \url{https://maven.apache.org/guides/} --- Reference Model (le POM, par c\oe{}ur en 2 h)
-  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin\\\_dsl.html}
+  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin\\\\\_dsl.html}
   \item \link{Maven Central Search}{https://central.sonatype.com/search} (trouver l'\verb|artifactId| exact)
   \item \link{mvnrepository}{https://mvnrepository.com/} (utile, mais la source de v\'erit\'e reste Central)
   \item GraalVM Native Image --- \url{https://www.graalvm.org/latest/reference-manual/native-image/}
@@ -13669,7 +13638,7 @@ public class ParsingBench {
 \begin{itemize}
   \item \'Ecrire du JDBC correct~: \texttt{DataSource}, requ\^etes pr\'epar\'ees, cl\'es g\'en\'er\'ees, lots,
         transactions, isolation.
-  \item Cartographier proprement ResultSet \$\rightarrow\$ objets, sans ORM et sans N+1.
+  \item Cartographier proprement ResultSet $\rightarrow$ objets, sans ORM et sans N+1.
   \item Comprendre ce que Hibernate fait pour toi~: unit\'e de travail, cache de premier niveau,
         \og d\'etachement~\fg{}, et le pi\`ege N+1.
   \item Versionner le sch\'ema avec Flyway/Liquibase~: la migration est du code.
@@ -14285,7 +14254,7 @@ jstat -gcutil 1 1s 10            # old gen qui ne redescend pas = fuite : heap d
   \item Conteneur non-root, \verb|readOnlyRootFilesystem|, \verb|drop ALL capabilities|, limites CPU/RAM~;
   \item sonde \verb|/health| (liveness~: le processus vit) et \verb|/ready| (readiness~: pool,
         migration, d\'ependances pr\^etes)~: deux endpoints diff\'erents, jamais un seul~;
-  \item arr\^et gracieux~: SIGTERM \$\rightarrow\$ stop accepting, attendre 15 s, rendre les connexions BDD, sortir.
+  \item arr\^et gracieux~: SIGTERM $\rightarrow$ stop accepting, attendre 15 s, rendre les connexions BDD, sortir.
         En Kubernetes~: \verb|terminationGracePeriodSeconds: 30|, sinon tu perds des requ\^etes \`a chaque rollout.
   \item Secrets hors de l'image~: variables d'environnement, fichiers mont\'es, Vault/Sealed Secrets.
   \item Migration de sch\'ema \emph{avant} le d\'eploiement du code~: backwards-compatible toujours
@@ -14379,20 +14348,20 @@ sdk install springboot ; spring init --dependencies=web,data-jpa blog.zip
 
 \begin{codeplain}
 src/main/java/com/exemple/blog/
-\boxv \boxh \boxh BlogApplication.java                 @SpringBootApplication
-\boxv \boxh \boxh api/
-\boxv \boxv \boxv \boxv \boxh \boxh ArticleController.java           @RestController : le monde HTTP
-\boxv \boxv \boxv \boxv \boxh \boxh dto/                             records de requete/reponse (+ mapper)
-\boxv \boxv \boxv \boxe \boxh \boxh GlobalExceptionHandler.java      @RestControllerAdvice
-\boxv \boxh \boxh domain/                              entites, regles, services : AUCUN import Spring ici
-\boxv \boxh \boxh infra/
-\boxv \boxv \boxv \boxv \boxh \boxh ArticleRepository.java           Spring Data (interface)
-\boxv \boxv \boxv \boxe \boxh \boxh config/                          @Configuration (securite, HTTP client, Jackson, openapi)
-\boxe \boxh \boxh src/test/java/...                     miroir : *Test (unites), *IT (integration)
+|-- BlogApplication.java                 @SpringBootApplication
+|-- api/
+|   |   |   |-- ArticleController.java           @RestController : le monde HTTP
+|   |   |   |-- dto/                             records de requete/reponse (+ mapper)
+|   |   |   '-- GlobalExceptionHandler.java      @RestControllerAdvice
+|-- domain/                              entites, regles, services : AUCUN import Spring ici
+|-- infra/
+|   |   |   |-- ArticleRepository.java           Spring Data (interface)
+|   |   |   '-- config/                          @Configuration (securite, HTTP client, Jackson, openapi)
+'-- src/test/java/...                     miroir : *Test (unites), *IT (integration)
 src/main/resources/
-\boxv \boxh \boxh application.yml  application-dev.yml  application-prod.yml
-\boxv \boxh \boxh db/migration/V1__init.sql
-\boxe \boxh \boxh static/ , templates/ (si Thymeleaf)
+|-- application.yml  application-dev.yml  application-prod.yml
+|-- db/migration/V1__init.sql
+'-- static/ , templates/ (si Thymeleaf)
 \end{codeplain}
 
 \section{Le conteneur de beans, en 30 lignes de t\^ete}
@@ -14851,7 +14820,7 @@ mode hors-ligne complet, th\`eme sombre.
 Recharger la page ne perd aucune donn\'ee~; supprimer la derni\`ere t\^ache d'un projet vide ne casse
 rien~; l'application fonctionne sans r\'eseau~; un fichier JSON corrompu au d\'emarrage est ignor\'e
 avec un message~; le clique sur \og ~terminer~ \fg{} est possible au clavier~; Lighthouse Performance
-\$\geq\$ 95 et Accessibilit\'e \$=\$ 100~; \verb|npm test| passe~; le README explique les 8 livrables.
+$\geq$ 95 et Accessibilit\'e $=$ 100~; \verb|npm test| passe~; le README explique les 8 livrables.
 
 \etape{Extensions}
 Sync multi-onglets via \verb|BroadcastChannel|~; statistiques (t\^aches/jour, heatmap) dessin\'ees en
@@ -14910,7 +14879,7 @@ C\^ot\'e admin~: gestion des utilisateurs et des r\^oles, mod\'eration, journal 
 \etape{Architecture}
 Un mini-MVC en 250 lignes~: un point d'entr\'ee unique \verb|public/index.php|, un routeur,
 des contr\^oleurs fins, une couche d\'ep\^ot en PDO, un conteneur de services minuscule, un moteur de
-template (\verb|extract| interdit~: une m\'ethode \verb|render(\$vue, \$donn\'ees)|), et
+template (\verb|extract| interdit~: une m\'ethode \verb|render($vue, $donn\'ees)|), et
 l'autoloader PSR-4 de Composer. Les composants maison~: \verb|Requ\^ete|, \verb|R\'eponse|,
 \verb|S\'eance|, \verb|Authentification|, \verb|Validation|, \verb|Journal|, \verb|Cache| (fichiers).
 
@@ -15124,7 +15093,7 @@ vraiment}~?
   D\'eveloppeur web g\'en\'eraliste \& PHP ou Node c\^ot\'e serveur~: SQL \'ecrit \`a la main~: un framework choisi pour ses id\'ees~: d\'eploiement~: journaux. Java en troisi\`eme langue pour la rigueur. \\
   D\'eveloppeur back-end / services \& Java (ou Go)~: mod\'elisation~: transactions~: messagerie~: observabilit\'e~: s\'ecurit\'e~: chargement. TypeScript pour lire les fronts. \\
   DevOps/SRE \& les trois~; et surtout Linux~: r\'eseau~: conteneurs~: Terraform~: CI~: et le go\^ut des post-mortems. \\
-  Freelance \& un p\'erim\`etre clair~: un contrat~: la capacit\'e \`a dire non~; et la sp\'ecialisation (ex. \og ~migrations PHP 5 \$\rightarrow\$ 8~ \fg{} ou \og ~perf WordPress~ \fg{}). \\
+  Freelance \& un p\'erim\`etre clair~: un contrat~: la capacit\'e \`a dire non~; et la sp\'ecialisation (ex. \og ~migrations PHP 5 $\rightarrow$ 8~ \fg{} ou \og ~perf WordPress~ \fg{}). \\
 \end{tablez}
 
 \etape{R\'emun\'eration et march\'e~: ordres de grandeur honn\^etes (2025--2026)}
@@ -15308,7 +15277,7 @@ System.out.printf("%-8s %6.2f%n", s, d); Scanner sc = new Scanner(System.in, Sta
   \verb|unhandledRejection: ...| \& promesse non attendue dans une \verb|forEach|/ un handler \& \verb|for...of| + \verb|await|, ou \verb|Promise.all(map)| \\
   \verb|CORS policy: No 'Access-Control-Allow-Origin'| \& le serveur n'autorise pas l'origine~; ou \verb|withCredentials| sans \verb|Allow-Credentials| \& corriger le serveur (jamais le front)~; v\'erifier \verb|preflight| en 401 \\
   PHP \verb|Undefined array key "x"| \& cl\'e absente, ou nom de champ different du SQL \& \verb|??| / \verb|array\_key\_exists|~; var\_dump l\'eger de \verb|array\_keys| \\
-  PHP \verb|Cannot use a scalar value as an array| \& \verb|\$x[0] = 1| alors que \verb|\$x| est un scalaire \& initialiser \verb|\$x = []| explicitement \\
+  PHP \verb|Cannot use a scalar value as an array| \& \verb|$x[0] = 1| alors que \verb|$x| est un scalaire \& initialiser \verb|\$x = []| explicitement \\
   PHP \verb|SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry| \& unicit\'e~; ou deux clics sur le bouton \& \verb|INSERT ... ON DUPLICATE|/ \verb|upsert|~; idempotence c\^ot\'e requ\^ete \\
   PHP \verb|headers already sent| \& un espace/une BOM avant \verb|<?php|, ou un \verb|echo| pr\'ealable \& supprimer la sortie~; pas de \verb|?>| final dans un fichier de classe \\
   PHP \verb|Allowed memory size of ... bytes exhausted| \& boucle qui accumule, \verb|fetchall| d'un million de lignes \& \verb|LIMIT|~; curseur~;/streaming~; mesurer avant d'augmenter la limite \\
@@ -15422,5 +15391,5 @@ de celui qui a simplement appris \`a lire les diagnostics.
 
 \index{antis\`eche}\index{messages d'erreur}\index{checklist}\index{Git}
 
-\printindex
+\IfFileExists{\jobname.ind}{\printindex}{\typeout{Index non genere (latexmk le creera au prochain passage)}}
 \end{document}

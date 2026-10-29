@@ -143,7 +143,7 @@ System.out.printf("%-8s %6.2f%n", s, d); Scanner sc = new Scanner(System.in, Sta
   \verb|unhandledRejection: ...| \& promesse non attendue dans une \verb|forEach|/ un handler \& \verb|for...of| + \verb|await|, ou \verb|Promise.all(map)| \\
   \verb|CORS policy: No 'Access-Control-Allow-Origin'| \& le serveur n'autorise pas l'origine~; ou \verb|withCredentials| sans \verb|Allow-Credentials| \& corriger le serveur (jamais le front)~; v\'erifier \verb|preflight| en 401 \\
   PHP \verb|Undefined array key "x"| \& cl\'e absente, ou nom de champ different du SQL \& \verb|??| / \verb|array\_key\_exists|~; var\_dump l\'eger de \verb|array\_keys| \\
-  PHP \verb|Cannot use a scalar value as an array| \& \verb|\$x[0] = 1| alors que \verb|\$x| est un scalaire \& initialiser \verb|\$x = []| explicitement \\
+  PHP \verb|Cannot use a scalar value as an array| \& \verb|$x[0] = 1| alors que \verb|$x| est un scalaire \& initialiser \verb|\$x = []| explicitement \\
   PHP \verb|SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry| \& unicit\'e~; ou deux clics sur le bouton \& \verb|INSERT ... ON DUPLICATE|/ \verb|upsert|~; idempotence c\^ot\'e requ\^ete \\
   PHP \verb|headers already sent| \& un espace/une BOM avant \verb|<?php|, ou un \verb|echo| pr\'ealable \& supprimer la sortie~; pas de \verb|?>| final dans un fichier de classe \\
   PHP \verb|Allowed memory size of ... bytes exhausted| \& boucle qui accumule, \verb|fetchall| d'un million de lignes \& \verb|LIMIT|~; curseur~;/streaming~; mesurer avant d'augmenter la limite \\

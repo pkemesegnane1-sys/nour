@@ -276,7 +276,7 @@ Deux erreurs fr\'equentes~: (1) oublier le drapeau \verb|g| avec \verb|replace| 
 occurrence est remplac\'ee ; (2) une regex construite avec une entr\'ee utilisateur peut
 provoquer un d\'eni de service catastrophique (\emph{ReDoS}). Ne passe jamais une saisie
 brute dans un \verb|new RegExp()| sans la neutraliser avec
-\verb|s.replace(/[.*+?^\${}()|[\]\\]/g, "\\\$\&")|~; et garde les motifs simples.
+\verb|s.replace(/[.*+?^${}()|[\]\\]/g, "\\\$\&")|~; et garde les motifs simples.
 \end{piege}
 
 \section{D\'estructuration, valeurs par d\'efaut, objets et tableaux}
@@ -387,8 +387,8 @@ afficher(p);
         g\'erant les tableaux et en \'evitant les cycles (Map \og ~vu~ \fg{}).
   \item \verb|chunk(tab, taille)|, \verb|zip(a, b)|, \verb|sans(tab, ...valeurs)|,
         \verb|intersection(a, b)|, \verb|difference(a, b)|~: les utilitaires que tout projet contient.
-  \item \verb|masquerEmail("nour.diop@example.com")| \$\rightarrow\$ \verb|"no***@example.com"| (regex + slice).
-  \item \textbf{Slugifieur}~: \og ~L'\'Ev\'enement de l'ann\'ee, \`a Thies !~ \fg{} \$\rightarrow\$ \verb|evenement-annee-thies|
+  \item \verb|masquerEmail("nour.diop@example.com")| $\rightarrow$ \verb|"no***@example.com"| (regex + slice).
+  \item \textbf{Slugifieur}~: \og ~L'\'Ev\'enement de l'ann\'ee, \`a Thies !~ \fg{} $\rightarrow$ \verb|evenement-annee-thies|
         (minuscules, accents retir\'es, non-alphanum\'eriques en tirets, tirets dupliqu\'es retir\'es).
   \item \textbf{Validation}~: \'ecris un module \verb|validate.js| exportant \verb|email|,
         \verb|tel|, \verb|motDePasse| (avec message d'erreur humain) et \verb|formulaire(donnees)|
@@ -398,7 +398,7 @@ afficher(p);
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\_Objects/Array}
+  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\\_Objects/Array}
   \item Tableau comparatif des m\'ethodes de tableaux --- \url{https://javascript.info/array-methods}
   \item Constructeur et visualiseur de regex --- \url{https://regex101.com/} et \url{https://regexper.com/}
   \item \verb|lodash| (\`a lire pour les noms de m\'ethodes, pas pour d\'ependre de lui) --- \url{https://lodash.com/docs/}

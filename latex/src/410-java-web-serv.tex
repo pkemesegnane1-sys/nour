@@ -212,7 +212,7 @@ jstat -gcutil 1 1s 10            # old gen qui ne redescend pas = fuite : heap d
   \item Conteneur non-root, \verb|readOnlyRootFilesystem|, \verb|drop ALL capabilities|, limites CPU/RAM~;
   \item sonde \verb|/health| (liveness~: le processus vit) et \verb|/ready| (readiness~: pool,
         migration, d\'ependances pr\^etes)~: deux endpoints diff\'erents, jamais un seul~;
-  \item arr\^et gracieux~: SIGTERM \$\rightarrow\$ stop accepting, attendre 15 s, rendre les connexions BDD, sortir.
+  \item arr\^et gracieux~: SIGTERM $\rightarrow$ stop accepting, attendre 15 s, rendre les connexions BDD, sortir.
         En Kubernetes~: \verb|terminationGracePeriodSeconds: 30|, sinon tu perds des requ\^etes \`a chaque rollout.
   \item Secrets hors de l'image~: variables d'environnement, fichiers mont\'es, Vault/Sealed Secrets.
   \item Migration de sch\'ema \emph{avant} le d\'eploiement du code~: backwards-compatible toujours

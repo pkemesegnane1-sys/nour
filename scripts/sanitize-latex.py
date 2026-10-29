@@ -108,7 +108,7 @@ def replace_unicode(text: str) -> tuple[str, list[str]]:
     return "".join(out), unknown
 
 
-def escape_prose(line: str) -> str:
+def _escape_chunk(line: str) -> str:
     r"""Protege % # _ $ & dans le texte courant.
 
     Les accolades ne sont JAMAIS touchees quand elles ferment une commande (\textbf{x}),
@@ -138,6 +138,28 @@ def escape_prose(line: str) -> str:
     return "".join(out)
 
 
+PROSE_MATH = re.compile(r"\$[^$\n]+\$")
+VERB_SPAN = re.compile(r"\b(?:verb|lstinline|verbatim)\b\*?\s*([^a-zA-Z0-9\s])(?:(?!(?:\d|\D)\1).)*?\1", re.S)
+
+
+def escape_prose(line: str) -> str:
+    """Echappe les caracteres speciaux du texte courant, JAMAIS a l'interieur
+    d'un span de maths en ligne $...$ (sinon $\\rightarrow$ devient \$\\rightarrow\$,
+    ce qui casse le document a la compilation)."""
+    spans = sorted([m.span() for m in PROSE_MATH.finditer(line)] +
+                   [m.span() for m in VERB_SPAN.finditer(line)])
+    out: list[str] = []
+    pos = 0
+    for a, b in spans:
+        if a < pos:
+            continue
+        out.append(_escape_chunk(line[pos:a]))
+        out.append(line[a:b])
+        pos = b
+    out.append(_escape_chunk(line[pos:]))
+    return "".join(out)
+
+
 def process_text_part(text: str) -> tuple[str, list[str]]:
     """Ordre important : d'abord les accents (qui injectent du LaTeX), puis l'echappement."""
     mapped, unknown = replace_unicode(text)
@@ -146,6 +168,22 @@ def process_text_part(text: str) -> tuple[str, list[str]]:
 
 def sanitize(path: pathlib.Path, write: bool = True) -> tuple[bool, list[str]]:
     src = path.read_text(encoding="utf-8")
+    # Le preambule (documentclass -> begin{document}) contient les definitions de macros :
+    # les echapper casserait chaque tableau, encart et bloc de code. On n'y touche jamais.
+    if "\\documentclass" in src and "\\begin{document}" in src:
+        head, sep, body = src.partition("\\begin{document}")
+        changed_head = False
+        sub = path.with_suffix(".body.tmp")
+        sub.write_text(body, encoding="utf-8")
+        try:
+            changed_body, unknown = sanitize(sub, write=True)
+            body2 = sub.read_text(encoding="utf-8")
+        finally:
+            sub.unlink(missing_ok=True)
+        new_src = head + sep + body2
+        if new_src != src and write:
+            path.write_text(new_src, encoding="utf-8")
+        return (new_src != src), unknown
     result: list[str] = []
     unknown: list[str] = []
     inside = False

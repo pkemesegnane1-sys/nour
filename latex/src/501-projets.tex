@@ -55,7 +55,7 @@ mode hors-ligne complet, th\`eme sombre.
 Recharger la page ne perd aucune donn\'ee~; supprimer la derni\`ere t\^ache d'un projet vide ne casse
 rien~; l'application fonctionne sans r\'eseau~; un fichier JSON corrompu au d\'emarrage est ignor\'e
 avec un message~; le clique sur \og ~terminer~ \fg{} est possible au clavier~; Lighthouse Performance
-\$\geq\$ 95 et Accessibilit\'e \$=\$ 100~; \verb|npm test| passe~; le README explique les 8 livrables.
+$\geq$ 95 et Accessibilit\'e $=$ 100~; \verb|npm test| passe~; le README explique les 8 livrables.
 
 \etape{Extensions}
 Sync multi-onglets via \verb|BroadcastChannel|~; statistiques (t\^aches/jour, heatmap) dessin\'ees en
@@ -114,7 +114,7 @@ C\^ot\'e admin~: gestion des utilisateurs et des r\^oles, mod\'eration, journal 
 \etape{Architecture}
 Un mini-MVC en 250 lignes~: un point d'entr\'ee unique \verb|public/index.php|, un routeur,
 des contr\^oleurs fins, une couche d\'ep\^ot en PDO, un conteneur de services minuscule, un moteur de
-template (\verb|extract| interdit~: une m\'ethode \verb|render(\$vue, \$donn\'ees)|), et
+template (\verb|extract| interdit~: une m\'ethode \verb|render($vue, $donn\'ees)|), et
 l'autoloader PSR-4 de Composer. Les composants maison~: \verb|Requ\^ete|, \verb|R\'eponse|,
 \verb|S\'eance|, \verb|Authentification|, \verb|Validation|, \verb|Journal|, \verb|Cache| (fichiers).
 

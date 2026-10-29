@@ -21,46 +21,33 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[french]{babel}
-% (aucune option babel particuliere : les defauts de babel-french conviennent)
 
 % ------------------------------ Mise en page ------------------------------
 \usepackage[left=2.1cm,right=2.1cm,top=2.3cm,bottom=2.4cm,headheight=15pt]{geometry}
 \usepackage{microtype}
-\usepackage{setspace}
-% interligne simple : ~260 pages de moins et une compilation 2x plus rapide sur Overleaf
-\usepackage{needspace}
-\makeatletter
-% petit + : evite le decoupage "breakable" des encarts qui tiennent sur une page (gain de temps)
-\@ifundefined{tcbusetksizeopt}{}{\tcbusetksizeopt{breakable hack}{\dimexpr200mm}}
-\makeatother
 
 % ------------------------------ Polices -----------------------------------
-\usepackage[default,semibold]{libertine}   \% Tex Gyre Pagella-like, tres lisible
-\usepackage[scaled=0.92]{inconsolata}     \% police a chasse fixe (code)
+\usepackage[default]{libertine}
+\usepackage[scaled=0.92]{inconsolata}
 
 % ------------------------------ Liens / navigation ------------------------
-\usepackage{xcolor}
+\usepackage[table]{xcolor}
 \usepackage{hyperref}
 \definecolor{linkblue}{HTML}{0B4F8A}
 \definecolor{pathgreen}{HTML}{1F6B3A}
 \hypersetup{
-  colorlinks=true,
-  linkcolor=linkblue,
-  filecolor=linkblue,
-  urlcolor=linkblue,
-  citecolor=linkblue,
+  colorlinks=true, linkcolor=linkblue, filecolor=linkblue, urlcolor=linkblue,
+  citecolor=linkblue, bookmarksnumbered=true, bookmarksopen=true, unicode=true,
   pdftitle={Manuel complet : JavaScript, PHP et Java},
   pdfauthor={Manuel d'auto-apprentissage},
   pdfsubject={Programmation : JavaScript, PHP, Java},
-  pdfkeywords={JavaScript, Node.js, PHP, MySQL, Java, Spring Boot, tutoriel},
-  bookmarksnumbered=true,
-  bookmarksopen=true,
-  unicode=true
+  pdfkeywords={JavaScript, Node.js, PHP, MySQL, Java, Spring Boot, tutoriel}
 }
 \usepackage[capitalise,nameinlink]{cleveref}
 
 % ------------------------------ Tableurs / listes -------------------------
 \usepackage{graphicx}
+\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{tabularx}
@@ -71,10 +58,10 @@
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
 \setlist[description]{topsep=3pt,itemsep=3pt,parsep=0pt,font=\bfseries}
 \usepackage{multicol}
-\usepackage{menukeys}   \% pour \keys{Ctrl + S}
+\usepackage{menukeys}
 \usepackage{titletoc}
-\usepackage[totoc,columns=2]{imakeidx}
-\makeindex[intoc]
+\usepackage{makeidx}
+\makeindex
 \titlecontents{section}[3.2em]{\addvspace{2pt}\small}
   {\contentslabel{2.0em}}{}{\titlerule*[0.75pc]{.}\contentspage}
 
@@ -86,8 +73,6 @@
 \definecolor{codekw}{HTML}{0550AE}
 \definecolor{codecom}{HTML}{5E7C40}
 \definecolor{codestr}{HTML}{A31515}
-\definecolor{codevar}{HTML}{7A3E9D}
-\definecolor{codefn}{HTML}{6639BA}
 \definecolor{themecolor}{HTML}{0B4F8A}
 \definecolor{jsyellow}{HTML}{F0DB4F}
 \definecolor{phppurple}{HTML}{777BB4}
@@ -110,7 +95,6 @@
   keepspaces=true,
   breaklines=true,
   breakatwhitespace=true,
-  postbreak=\mbox{\textcolor{themecolor}{\$\hookrightarrow\$}\space},
   showstringspaces=false,
   tabsize=2,
   numbers=none,
@@ -123,53 +107,47 @@
   keywordstyle=\color{codekw}\bfseries,
   stringstyle=\color{codestr},
   identifierstyle=\color{black},
-  morecomment=[l][\color{codecom}]{\#},
   captionpos=b
 }
-\lstdefinestyle{jscode}{style=base,language=JavaScript,morekeywords={async,await,of,as,static,let,const,yield,typeof,instanceof,void,delete,in,do,export,import,from,catch,finally,throw,undefined,NaN,Infinity,extends,super,get,set,Symbol,BigInt,arguments,debugger,with,switch,case,default,continue,break,function,class,return,try,new,this,null,true,false,if,else,while,for,var,=>}}
-\lstdefinestyle{phpcode}{style=base,language=[5.6]PHP,morekeywords={function,class,interface,trait,enum,abstract,final,extends,implements,namespace,use,const,public,protected,private,static,readonly,match,fn,global,instanceof,insteadof,as,print,unset,isset,echo,require,require\_once,include,include\_once,declare,endfor,endforeach,endif,while,do,switch,case,default,break,continue,catch,finally,throw,try,new,clone,this,null,true,false,yield,self,parent,\_\_DIR\_\_,\_\_FILE\_\_,\_\_LINE\_\_}}
-\lstdefinestyle{javacode}{style=base,language=Java,morekeywords={var,record,sealed,permits,non-sealed,yield,textblock,instanceof,enum,interface,class,abstract,final,static,public,protected,private,synchronized,volatile,transient,native,strictfp,implements,extends,package,import,throws,throw,try,catch,finally,super,this,null,true,false,assert,switch,default,case,do,while,for,if,else,new,return,boolean,char,byte,short,int,long,float,double,void},literate={<}{{\color{black}<}}1{>}{{\color{black}>}}1}
-\lstdefinestyle{confcode}{style=base,morecomment=[l][\color{codecom}]{\#},morecomment=[l]{//},morecomment=[l]{;}}
-\lstdefinestyle{sqlcode}{style=base,language=SQL,morekeywords={SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,TABLE,INDEX,VIEW,TRIGGER,PROCEDURE,FUNCTION,PRIMARY,KEY,FOREIGN,REFERENCES,UNIQUE,NOT,NULL,DEFAULT,AUTO\_INCREMENT,ENGINE,VARCHAR,INT,BIGINT,TEXT,BLOB,DATE,DATETIME,TIMESTAMP,DECIMAL,BOOLEAN,JOIN,INNER,LEFT,RIGHT,FULL,OUTER,ON,AS,WHERE,GROUP,ORDER,BY,HAVING,LIMIT,OFFSET,DISTINCT,AND,OR,IN,LIKE,BETWEEN,IS,COUNT,SUM,AVG,MIN,MAX,IF,EXISTS,UNION,ALL,VALUES,SET,TRANSACTION,COMMIT,ROLLBACK,GRANT,DESC,ASC,CASCADE,CONSTRAINT,CHECK,begin,end,show,use,database,from}}
-\lstdefinestyle{shellcode}{style=base,language=bash,morecomment=[l]\#}
+\lstdefinestyle{jscode}{style=base,language=JavaScript,morekeywords={async,await,of,as,static,let,const,yield,typeof,instanceof,void,delete,in,export,import,from,catch,finally,throw,undefined,NaN,Infinity,extends,super,get,set,Symbol,BigInt,arguments,debugger}}
+\lstdefinestyle{phpcode}{style=base,language=[5.6]PHP,morekeywords={function,class,interface,trait,enum,abstract,final,extends,implements,namespace,use,const,public,protected,private,static,readonly,match,fn,global,insteadof,as,print,unset,isset,echo,require,require_once,include,include_once,declare,self,parent,__DIR__,__FILE__,__LINE__}}
+\lstdefinestyle{javacode}{style=base,language=Java,morekeywords={var,record,sealed,permits,yield,instanceof,enum,interface,class,abstract,final,static,public,protected,private,synchronized,volatile,transient,native,implements,extends,package,import,throws,throw,try,catch,finally,super,this,assert,switch,boolean,char,byte,short,int,long,float,double,void}}
+\lstdefinestyle{confcode}{style=base,morecomment=[l]{//},morecomment=[l]{;}}
+\lstdefinestyle{sqlcode}{style=base,language=SQL,morekeywords={SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,TABLE,INDEX,VIEW,TRIGGER,PRIMARY,KEY,FOREIGN,REFERENCES,UNIQUE,NOT,NULL,DEFAULT,AUTO_INCREMENT,ENGINE,VARCHAR,INT,BIGINT,TEXT,BLOB,DATE,DATETIME,TIMESTAMP,DECIMAL,BOOLEAN,JOIN,INNER,LEFT,RIGHT,OUTER,ON,AS,WHERE,GROUP,ORDER,BY,HAVING,LIMIT,OFFSET,DISTINCT,AND,OR,IN,LIKE,BETWEEN,IS,COUNT,SUM,AVG,MIN,MAX,IF,EXISTS,UNION,ALL,VALUES,SET,TRANSACTION,COMMIT,ROLLBACK,GRANT,DESC,ASC,CASCADE,CONSTRAINT,CHECK,SHOW,USE,DATABASE}}
+\lstdefinestyle{shellcode}{style=base,language=bash}
 \lstdefinestyle{jsoncode}{style=base,morecomment=[l]{//}}
-\lstdefinestyle{ymlcode}{style=base,morecomment=[l]\#}
+\lstdefinestyle{ymlcode}{style=base}
 
 \lstset{style=base}
 
-% ------------------------------ Bo\^ites (tcolorbox) -------------------------
+% ------------------------------ Boites (tcolorbox) -------------------------
 \usepackage[most]{tcolorbox}
-\tcbuselibrary{listings,breakable,skins}
 
 \tcbset{
   codestyle/.style={
     enhanced, breakable, colback=codebg, colframe=codeframe,
     boxrule=0.4pt, arc=1.5mm, left=2mm,right=2mm,top=1.6mm,bottom=1.6mm,
-    boxsep=0pt, fontupper=\ttfamily\small, listing only
+    boxsep=0pt, listing only
   }
 }
 
-% -- Blocs de code avec coloration syntaxique --
-\newtcblisting{codejs}[1][]{listing options={style=jscode,\#1},codestyle}
-\newtcblisting{codephp}[1][]{listing options={style=phpcode,\#1},codestyle}
-\newtcblisting{codejava}[1][]{listing options={style=javacode,\#1},codestyle}
-\newtcblisting{codesql}[1][]{listing options={style=sqlcode,\#1},codestyle}
-\newtcblisting{codeconf}[1][]{listing options={style=confcode,\#1},codestyle}
-\newtcblisting{codejson}[1][]{listing options={style=jsoncode,\#1},codestyle}
-\newtcblisting{codeyml}[1][]{listing options={style=ymlcode,\#1},codestyle}
-\newtcblisting{codeplain}[1][]{listing options={style=base,\#1},codestyle}
-% version "listing only" : le contenu n'est PAS verbatim, utile pour
-% colorer un mot. On prefere les versions verbatim ci-dessus.
+\newtcblisting{codejs}{listing options={style=jscode},codestyle}
+\newtcblisting{codephp}{listing options={style=phpcode},codestyle}
+\newtcblisting{codejava}{listing options={style=javacode},codestyle}
+\newtcblisting{codesql}{listing options={style=sqlcode},codestyle}
+\newtcblisting{codeconf}{listing options={style=confcode},codestyle}
+\newtcblisting{codejson}{listing options={style=jsoncode},codestyle}
+\newtcblisting{codeyml}{listing options={style=ymlcode},codestyle}
+\newtcblisting{codeplain}{listing options={style=base},codestyle}
 
-% -- Terminal : commandes a taper --
 \newtcblisting{terminal}{
   enhanced, breakable, colback=ctermbg, colframe=ctermbg,
   arc=1.5mm, boxrule=0pt, left=2.5mm,right=2mm,top=1.8mm,bottom=1.8mm,
-  boxsep=0pt, fontupper=\ttfamily\small\color{ctermfg},
-  listing only, listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
+  boxsep=0pt, listing only,
+  listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},
+    keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
 }
 
-% -- Encarts pedagogiques --
 \newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
   arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
   fontupper=\scriptsize}
@@ -177,7 +155,7 @@
 \newtcolorbox{objectif}[1][]{enhanced, breakable, colback=objbg, colframe=objfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
-  title={Objectifs de la chapitre},\#1}
+  title={Objectifs du chapitre},#1}
 
 \newtcolorbox{note}{enhanced, breakable, colback=notebg, colframe=notefr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
@@ -189,54 +167,45 @@
 
 \newtcolorbox{piege}{enhanced, breakable, colback=warnbg, colframe=warnfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
-  before upper={\small\textbf{Pi\`ege \`a \'eviter.}\enspace}}
+  before upper={\small\textbf{Pi\`ege \`a \`eviter.}\enspace}}
 
 \newtcolorbox{exercice}[1][]{enhanced, breakable, colback=exobg, colframe=exofr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
-  title={Exercices guid\'es},\#1}
+  title={Exercices guid\'es},#1}
 
 \newtcolorbox{ressources}[1][]{enhanced, breakable, colback=linksbg, colframe=linksfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
-  title={Ressources et outils cit\'es},before upper=\small,\#1}
+  title={Ressources et outils cit\'es},before upper=\small,#1}
 
 \newtcolorbox{projet}[1][]{enhanced, breakable, colback=tipbg, colframe=tipfr,
   boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
   fonttitle=\bfseries, coltitle=white, colbacktitle=javared,
-  title={Projet \`a r\'ealiser},\#1}
+  title={Projet \`a r\'ealiser},#1}
 
 % ------------------------------ Macros pratiques ---------------------------
-\newcommand{\fichier}[1]{\texttt{\color{pathgreen}\#1}}
-\newcommand{\rep}[1]{\texttt{\color{pathgreen}\#1/}}
-\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{\#1}}}}
-\newcommand{\link}[2]{\href{#2}{\#1}}
-\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[\textasteriskcentered]}}}}
+\newcommand{\fichier}[1]{\texttt{\color{pathgreen}#1}}
+\newcommand{\rep}[1]{\texttt{\color{pathgreen}#1/}}
+\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
+\newcommand{\link}[2]{\href{#2}{#1}}
+\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[src]}}}}
 \newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
 \newcommand{\langphp}{\textcolor{phppurple}{\textbf{PHP}}}
-\newcommand{\langjava}{\textcolor{javared}{\textbf{Java}}}
-\newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large \#1}\par\smallskip}
-\DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{\#1}}}
-% glyphes utilises dans les listings (arborescences, symbole euro) : encodage T1 -> on emprunte pifont
-\usepackage{pifont}
-\DeclareRobustCommand{\boxv}{\text{\ding{124}}}
-\DeclareRobustCommand{\boxh}{\text{\ding{141}}}
-\DeclareRobustCommand{\boxe}{\text{\ding{122}}}
-\DeclareRobustCommand{\euro}{\texteuro}
-\newcommand{\todo}[1]{\textcolor{javared}{\textbf{[TODO: \#1]}}}
+\newcommand{\langjava}{\textcolor{themecolor}{\textbf{Java}}}
+\newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large #1}\par\smallskip}
+\DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{#1}}}
 
-% tableaux : en-tetes colorees
-\usepackage{etoolbox}
-% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees + filets
-\newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}\%
-  \small\setlength{\tabcolsep}{5pt}\%
-  \begin{tabularx}{\textwidth}{@{}\#1@{}}\toprule}
+% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees
+\newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}%
+  \small\setlength{\tabcolsep}{5pt}%
+  \begin{tabularx}{\textwidth}{@{}#1@{}}\toprule}
   {\bottomrule\end{tabularx}}
-\newcommand{\thd}[1]{\textbf{\color{white}\#1}}
+\newcommand{\thd}[1]{\textbf{\color{white}#1}}
 \newcommand{\headrow}{\rowcolor{theadbg}}
 \makeatletter
 \newenvironment{tablez}{\@ifnextchar[{\@tablezwith}{\@tablezwith[XXX]}}{\end{tabz}}
-\newcommand{\@tablezwith}[1]{\begin{tabz}{\#1}}
+\newcommand{\@tablezwith}[1]{\begin{tabz}{#1}}
 \makeatother
 
 % ------------------------------ Doc ---------------------------------------
@@ -262,13 +231,13 @@
   Linux \textbullet\ macOS \textbullet\ Windows \textbullet\ \'EDiteur au choix \textbullet\ Pratique guid\'ee\\[26pt]
   \small
   \begin{tabular}{@{}ll@{}}
-    \textbf{Niveau} \& grand d\'ebutant \$\rightarrow\$ avanc\'e\\
+    \textbf{Niveau} \& grand d\'ebutant $\rightarrow$ avanc\'e\\
     \textbf{Pr\'erequis} \& savoir allumer un ordinateur et taper un chemin de fichier\\
     \textbf{Dur\'ee conseill\'ee} \& 12 \`a 24 semaines, 1\`a 2 h par jour\\
     \textbf{Format} \& cours + code complet + exercices + corrig\'es + liens officiels\\
   \end{tabular}
   \vfill
-  {\footshape Version du \today}
+  {\footnotesize Version du \today}
 \end{titlepage}
 
 \input{src/000-comment-utiliser}
@@ -338,5 +307,5 @@
 \backmatter
 \input{src/601-antisecche}
 
-\printindex
+\IfFileExists{\jobname.ind}{\printindex}{\typeout{Index non genere (latexmk le creera au prochain passage)}}
 \end{document}
