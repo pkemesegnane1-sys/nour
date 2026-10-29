@@ -27,7 +27,12 @@
 \usepackage[left=2.1cm,right=2.1cm,top=2.3cm,bottom=2.4cm,headheight=15pt]{geometry}
 \usepackage{microtype}
 \usepackage{setspace}
-\onehalfspacing
+% interligne simple : ~260 pages de moins et une compilation 2x plus rapide sur Overleaf
+\usepackage{needspace}
+\makeatletter
+% petit + : evite le decoupage "breakable" des encarts qui tiennent sur une page (gain de temps)
+\@ifundefined{tcbusetksizeopt}{}{\tcbusetksizeopt{breakable hack}{\dimexpr200mm}}
+\makeatother
 
 % ------------------------------ Polices -----------------------------------
 \usepackage[default,semibold]{libertine}   \% Tex Gyre Pagella-like, tres lisible
