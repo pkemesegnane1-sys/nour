@@ -1,0 +1,280 @@
+% ============================================================================
+\chapter{Outillage : formatage, analyse, d\'ebogage, structure}
+\label{ch:js-outils}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Formater et analyser ton code automatiquement, sans y penser, sur chaque sauvegarde.
+  \item Configurer le d\'ebogueur pas \`a pas dans VS~Code (Node et navigateur).
+  \item Choisir une structure de dossiers qui tient \`a 20 000 lignes comme \`a 200.
+  \item Conna\^itre les outils officiels (Vite, ESLint~9 flat config, Biome) et leurs liens.
+\end{itemize}
+\end{objectif}
+
+\section{Formater~: Prettier ou Biome}
+
+Un formateur n'est pas une opinion~: c'est la fin des discussions d'\'equipe sur les espaces.
+Ne configure que le minimum, laisse l'outil d\'ecider.
+
+\begin{terminal}
+npm i -D prettier prettier-plugin-tailwindcss
+npx prettier --write .
+npm i -D @biomejs/biome          # alternative Rust : formatage + linting en un binaire, tres rapide
+npx biome init
+\end{terminal}
+
+\begin{codejson}
+{
+  "$schema": "https://json.schemastore.org/prettierrc",
+  "printWidth": 100,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "plugins": ["prettier-plugin-tailwindcss"],
+  "overrides": [
+    { "files": ["*.md"], "options": { "proseWrap": "preserve" } },
+    { "files": ["*.json"], "options": { "printWidth": 200 } }
+  ]
+}
+\end{codejson}
+
+\begin{note}
+Le point de friction classique~: un formateur et ESLint qui se battent (l'un remet les guillemets
+simples, l'autre les doubles). La r\`egle est~: \textbf{Prettier d\'ecide du style, ESLint ne d\'ecide
+que de la correction}. Pour cela on installe
+\link{eslint-config-prettier}{https://github.com/prettier/eslint-config-prettier} en derni\`ere
+position et on met \verb|formatOnSave|.
+\end{note}
+
+\section{Analyser~: ESLint~9 (config plate)}
+
+Le fichier est \fichier{eslint.config.js}~; l'ancien \fichier{.eslintrc.json} est abandonn\'e.
+
+\begin{codejs}
+// eslint.config.js
+import js from "@eslint/js";
+import globals from "globals";
+import prettierRecommended from "eslint-plugin-prettier/recommended";
+import reactHooks from "eslint-plugin-react-hooks";
+
+export default [
+  { ignores: ["dist/**", "node_modules/**", "coverage/**", "public/sw.js"] },
+  js.configs.recommended,
+  {
+    files: ["**/*.{js,jsx,mjs,cjs}"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: { ...globals.browser, ...globals.node },
+    },
+    rules: {
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      eqeqeq: ["error", "always", { null: "ignore" }],
+      "prefer-const": "error",
+      "no-var": "error",
+      "object-shorthand": "error",
+      curly: ["error", "all"],
+      "no-param-reassign": ["error", { props: false }],
+      complexity: ["warn", 12],
+      "max-depth": ["warn", 4],
+      "no-nested-ternary": "warn",
+      "require-await": "error",
+      "no-promise-executor-return": "error",
+      "no-async-promise-executor": "error",
+      "consistent-return": "off",
+      "import/order": "off",
+    },
+  },
+  { files: ["src/ui/**"], plugins: { "react-hooks": reactHooks }, rules: reactHooks.configs.recommended.rules },
+  prettierRecommended,
+];
+\end{codejs}
+
+\begin{terminal}
+npx eslint . --fix
+npx eslint . --max-warnings=0 --format=stylish        # en CI : echoue au premier avertissement
+npx eslint src --format=json > rapport.json
+# Regles de securite cote node : npm i -D @eslint-community/eslint-plugin-security
+# Analyse de la surete de tes regex : npm i -D eslint-plugin-security + eslint-plugin-redos
+\end{terminal}
+
+\subsection{Les autres v\'erificateurs \`a brancher une fois}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Outil} \& \thd{Ce qu'il trouve} \& \thd{Lancer} \\
+  \midrule
+  \link{TypeScript}{https://www.typescriptlang.org/} (\cmd{tsc --noEmit}) \& types, propri\'et\'es inexistantes, appels faux \& \cmd{npm run typecheck} \\
+  \link{Knip}{https://knip.dev/} \& fichiers, exports et d\'ependances inutilis\'es \& \cmd{npx knip} \\
+  \link{Depcheck}{https://github.com/dpinies/depcheck} \& d\'ependances du \verb|package.json| jamais import\'ees \& \cmd{npx depcheck} \\
+  \link{madge}{https://github.com/pahen/madge} \& d\'ependances circulaires entre modules \& \cmd{npx madge --circular src} \\
+  \link{source-map-explorer}{https://github.com/danvk/source-map-explorer} \& qui occupe l'espace dans ton bundle \& \cmd{npx source-map-explorer dist/\/*.js} \\
+  \link{rollup-plugin-visualizer}{https://github.com/btd/rollup-plugin-visualizer} \& idem, int\'egr\'e au build \& \cmd{vite build --mode analyse} \\
+  \link{npm-check-updates}{https://github.com/tjun/ncu} \& mises \`a jour en conservant semver \& \cmd{npx npm-check-updates -u} \\
+  \link{Knip/Snyk/Socket}{https://socket.dev/} \& paquets suspects, typosquatting \& \cmd{npx socket scan .} \\
+  \link{shellcheck}{https://www.shellcheck.net/} \& bugs dans tes scripts bash \& \cmd{shellcheck scripts/*} \\
+\end{tabz}
+
+\section{D\'eboguer pour de vrai}
+
+\etape{Node, dans VS~Code}
+\begin{codejson}
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "API (avec .env)",
+      "program": "${workspaceFolder}/src/server.js",
+      "envFile": "${workspaceFolder}/.env",
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal",
+      "restart": true
+    },
+    {
+      "type": "node",
+      "request": "attach",
+      "name": "Brancher sur node --inspect",
+      "port": 9229
+    },
+    {
+      "type": "chrome",
+      "request": "launch",
+      "name": "Chrome + source maps",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src"
+    }
+  ]
+}
+\end{codejson}
+
+\begin{terminal}
+node --inspect-brk src/server.js        # s'arrete sur la premiere ligne, en attente du debogueur
+node --inspect src/server.js            # tourne et ecoute sur 9229
+\end{terminal}
+
+\etape{Les techniques qui remplacent 90 \% des \texttt{console.log}}
+\begin{itemize}
+  \item \textbf{Point d'arr\^et conditionnel}~: clic droit sur le num\'ero de ligne \$\rightarrow\$ \og ~Breakpoint
+        conditionnel~ \fg{}, \verb|i === 4231| ou \verb|user.id === id|.
+  \item \textbf{Point d'arr\^et de log}~: on imprime une expression sans casser l'ex\'ecution.
+  \item \textbf{Point d'arr\^et sur exception}~: l'ic\^one \og ~pause on caught exceptions~ \fg{} dans le panneau
+        Call Stack~: le d\'ebogueur s'arr\^ete \emph{\`a la source} de l'erreur, pas l\`a o\`u on l'affiche.
+  \item \textbf{Console}~: \verb|copy(x)| (copie dans le presse-papiers), \verb|\$\_| (derni\`ere
+        expression), \verb|\$0| (\'el\'ement s\'electionn\'e dans Elements), \verb|\$\$("sel")| (\texttt{querySelectorAll}), \verb|monitor(x)|.
+  \item \textbf{Live expressions}~: dans le panneau Watch, une expression r\'e\'evalu\'ee \`a chaque pause.
+  \item \textbf{Les \og ~timeline~ \fg{} breakpoints}~: DevTools \$\rightarrow\$ Event Listener Breakpoints pour
+        n'importe quel \'ev\'enement (utile quand \og ~je ne sais pas quel handler fait \c{c}a~ \fg{}).
+\end{itemize}
+
+\section{Structurer un projet qui vieillit bien}
+
+\etape{Petit projet (jusqu'\`a ~2 000 lignes)~: par type}
+\begin{codeplain}
+projet/
+  public/          index.html, assets statiques
+  src/
+    main.js        point d'entree (20 lignes max)
+    ui/            un fichier par vue/composant
+    lib/           fonctions pures, sans DOM, sans reseau  <-- testables gratuitement
+    api/           toute sortie reseau, un seul endroit
+    state.js       etat global et ses transitions
+    styles/        css
+  tests/           miroir de src/
+\end{codeplain}
+
+\etape{Projet moyen/gros~: par domaine (feature-first)}
+\begin{codeplain}
+src/
+  noyau/            config, erreurs, journalisation, utilitaires transverses
+  articles/         une fonctionnalite = un dossier autonome
+    modele.js       regles metier (aucune dependance web)
+    depot.js        acces aux donnees
+    service.js      cas d'utilisation ("publier article", "facturer")
+    controleur.js   entrees HTTP / CLI
+    vues/           composants d'interface
+    index.js        export public (le "package" interne)
+  reseau/
+  tests/            unitaires a cote du code, integration a part
+\end{codeplain}
+
+Les trois r\`egles qui comptent~: (1) la logique m\'etier ne conna\^it ni le DOM ni HTTP~;
+(2) un module ne d\'epend que des \verb|index.js| des autres~; (3) les d\'ependances vont des
+couches techniques vers le m\'etier, jamais l'inverse.
+
+\subsection{\texttt{.editorconfig}, \texttt{.nvmrc}, \texttt{docker-compose} de d\'eveloppement}
+
+\begin{codeplain}
+# .nvmrc --- la version exacte de Node du projet
+22.12.0
+# les outils la lisent : nvm use, fnm, mise, asdf, devcontainers
+
+# .dockerignore
+node_modules
+.git
+dist
+coverage
+*.log
+\end{codeplain}
+
+\begin{codeyml}
+# docker-compose.yml --- tout ce dont une equipe a besoin, en une commande
+services:
+  api:
+    build: { context: ., dockerfile: Dockerfile.dev }
+    command: npm run dev
+    environment:
+      DATABASE_URL: postgres://nour:nour@db:5432/carnet
+      JWT_SECRET: change-moi-en-production
+    ports: ["3000:3000"]
+    volumes: [".:/app", "/app/node_modules"]
+    depends_on: { db: { condition: service_healthy } }
+  db:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: nour, POSTGRES_PASSWORD: nour, POSTGRES_DB: carnet }
+    volumes: ["pg:/var/lib/postgresql/data"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U nour"], interval: 5s, retries: 10 }
+  mailpit:
+    image: axllent/mailpit        # boite de reception locale : rien n'est reellement envoye
+    ports: ["8025:8025"]
+volumes: { pg: {} }
+\end{codeyml}
+
+\begin{note}
+Le volume \verb|/app/node\_modules| anonyme \'evite que le \verb|node\_modules| de ta machine
+(Windows/macOS, binaire diff\'erent) n'\'ecrase celui du conteneur. C'est l'erreur de Docker la
+plus fr\'equente en d\'eveloppement Node.
+\end{note}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Installe Prettier et ESLint sur ton dernier projet ; mets \verb|formatOnSave|~; lance
+        \verb|eslint . --fix| et lis chaque correction avant d'accepter.
+  \item Ajoute \verb|husky| + \verb|lint-staged| pour que le commit refuse un fichier non format\'e.
+  \item Configure un point d'arr\^et conditionnel sur une boucle de 100 000 tours et observe le
+        panneau Call Stack. Ensuite, utilise \og ~logpoint~ \fg{} sur la m\^eme ligne et compare.
+  \item Ex\'ecute \verb|npx knip| et \verb|npx depcheck| sur un de tes projets : supprime ce qui
+        est mort. Note le poids gagn\'e sur le bundle.
+  \item Restructure ton projet de la semaine pr\'ec\'edente en \emph{feature folders}, avec une
+        couche \verb|lib/| sans aucune d\'ependance au DOM. V\'erifie que tu peux tester \verb|lib/|
+        sans navigateur.
+  \item \'Ecris un \verb|docker-compose.yml| qui d\'emarre l'API + Postgres + Mailpit, et un
+        \verb|Makefile| avec les cibles \verb|up|, \verb|down|, \verb|migrate|, \verb|test|, \verb|logs|.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Prettier options --- \url{https://prettier.io/docs/configuration}
+  \item ESLint 9 configuration --- \url{https://eslint.org/docs/latest/use/configure/configuration-files}
+  \item Biome --- \url{https://biomejs.dev/fr/}
+  \item VS Code debugging (Node) --- \url{https://code.visualstudio.com/docs/nodejs/nodejs-debugging}
+  \item DevTools --- \url{https://developer.chrome.com/docs/devtools/}
+\end{itemize}
+\end{ressources}
+
+\index{Prettier}\index{ESLint}\index{debogage}\index{structure de projet}

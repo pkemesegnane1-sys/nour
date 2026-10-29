@@ -1,0 +1,152 @@
+% ============================================================================
+\chapter{Comparatif JS / PHP / Java, et comment construire ta carri\`ere avec}
+\label{ch:cheminement}
+% ============================================================================
+
+Tu as trois langages dans les mains. Ce chapitre r\'epond aux trois questions qui reviennent~:
+\emph{lequel pour quoi}~? \emph{comment les combiner}~? \emph{qu'est-ce qu'un employeur regarde
+vraiment}~?
+
+\section{Le comparatif, sans caricature}
+
+\begin{tablez}[p{0.15\textwidth}p{0.28\textwidth}p{0.28\textwidth}X]
+  \headrow \thd{Dimension} \& \thd{JavaScript} \& \thd{PHP} \& \thd{Java} \\
+  \midrule
+  Nature \& langage du navigateur \emph{et} serveur polyglotte \& langage de script serveur, orient\'e web \& langage \`a typage statique, compil\'e, JVM \\
+  Ex\'ecution \& interpr\'et\'e/JIT (V8) ; un thread + boucle d'\'ev\'enements \& JIT \`a la demande, un process par requ\^ete (mod\`ele \og ~share-nothing~ \fg{}) \& bytecode compil\'e, JIT longue dur\'ee, multithread r\'eel \\
+  Type \& dynamique, optionnellement TS \& dynamique, optionnellement strict/types \& statique, nominal, generics \\
+  Points forts \& l'interface, le temps r\'eel, l'\'ecosyst\`eme npm, le full-stack d'un seul langage \& le d\'eploiement trivial, l'\'ecosyst\`eme CMS, le co\^ut d'entr\'ee, le TTFB \& la robustesse \`a l'\'echelle, les outils, la typing-detector, le long-running \\
+  Points faibles \& outillage mouvant, fatigue \'ecosyst\'emique, single-thread \& incoh\'erences historiques, moins adapt\'e au long-running \& verbosit\'e, d\'emarrage, m\'emoire, cycles de release d'entreprise \\
+  D\'eploiement \& statique (CDN) ou Node dans un conteneur \& \verb|rsync| + Nginx, ou serveur manag\'e \& conteneur/JAR, image native, JVM manag\'ee \\
+  Co\^ut d'entr\'ee \& tr\`es bas \& tr\`es bas \& moyen (JDK, build, IDE, concepts) \\
+  Mont\'ee en comp\'etence \& rapide puis exponentielle (tooling, frameworks) \& rapide puis plate puis raide (archi, tests, PHP moderne) \& lente puis continue (les fondations servent 15 ans) \\
+\end{tablez}
+
+\subsection{Performance---ce qu'il faut retenir des benchmarks}
+
+\begin{itemize}
+  \item \textbf{Une requ\^ete web se joue \`a 90 \% sur la base de donn\'ees et le r\'eseau}, pas sur le langage.
+        Un PHP avec un bon index bat un Java avec un N+1.
+  \item L\`a o\`u Java gagne~: les calculs longs en m\'emoire, les connexions maintenues (WebSocket,
+        flux, caches applicatifs), la mise en cache JIT apr\`es \'echauffement~; et les threads
+        virtuels qui rendent le mod\`ele bloquant concurrentiel face \`a Node.
+  \item L\`a o\`u Node gagne~: le fan-out d'appels I/O (un agr\'egateur, un proxy BFF) et le co\^ut
+        marginal d'une connexion tenue.
+  \item L\`a o\`u PHP reste tr\`es bon~: le rendu de pages classiques~: aucun \'etat \`a maintenir, la
+        latence est celle d'un script~; et son profil m\'emoire par requ\^ete est imbattable en
+        mutualis\'e.
+  \item Ne crois aucun tableau de chiffres sans~: version du runtime, warmup, concurrency, type de
+        charge, mat\'eriel. \verb|web.dev|, \link{TechEmpower}{https://www.techempowerbenchmarks.org/}
+        et \link{Bun vs Node}{https://benchmark.js.org/} sont des points de d\'epart, pas des verdicts.
+\end{itemize}
+
+\subsection{\'Ecosyst\`eme~: les briques \'equivalentes}
+
+\begin{tablez}[p{0.16\textwidth}p{0.26\textwidth}p{0.26\textwidth}X]
+  \headrow Domaine \& JS \& PHP \& Java \\
+  \midrule
+  Gestionnaire de paquets \& npm / pnpm \url{https://www.npmjs.com/} \& Composer \url{https://packagist.org/} \& Maven Central / Gradle \\
+  Cadre web majeur \& React, Vue, Svelte, Next.js \& Laravel, Symfony, Slim \& Spring Boot, Quarkus, Micronaut \\
+  ORM / donn\'ees \& Prisma, Drizzle, Kysely \& Eloquent, Doctrine, Illuminate/Database \& Hibernate, jOOQ, Jdbi \\
+  Validation \& Zod, Yup \& Respect/Validation, Symfony Validator \& Jakarta Bean Validation (Hibernate Validator) \\
+  Tests \& Vitest, Playwright, Testing Library \& PHPUnit, Pest, Behat \& JUnit 5, AssertJ, Testcontainers \\
+  Mise en forme \& Prettier, ESLint \& PHP-CS-Fixer, PHPStan, Rector \& Spotless, Checkstyle, Error Prone \\
+  Journalisation \& pino, winston \& Monolog \& SLF4J + Logback \\
+  HTTP client \& fetch natif, axios \& Guzzle, curl, HttpClient de Symfony \& \verb|java.net.http|, OkHttp, RestClient de Spring \\
+  Temps r\'eel \& ws, Socket.IO, SSE \& Ratchet, Swoole/FrankenPHP + Mercure \& Quarkus WebSocket, Netty \\
+  File de t\^aches \& BullMQ, pg-boss \& Laravel Queues, Symfony Messenger \& Spring Batch, RabbitMQ/Kafka clients \\
+  D\'eploiement \& Vercel/Netlify/Cloudflare, Docker \& PHP-FPM+Nginx, Platform.sh, Docker \& conteneurs, Kubernetes, Quarkus/Buildpacks \\
+  Documentation \& TSDoc/JSDoc \& phpDocumentor \& Javadoc \\
+\end{tablez}
+
+\section{Quelle stack pour quel projet~?}
+
+\begin{tablez}[p{0.24\textwidth}X]
+  \headrow Type de produit \& Recommandation \\
+  \midrule
+  Site vitrine, blog, portfolio \& HTML/CSS + un SSG (Astro, Eleventy) ou un CMS PHP statufi\'e. Pas de SPA~: tu perds le SEO et tu gagnes de la complexit\'e. \\
+  Site \'editorial avec r\'edacteurs \& WordPress/Drupal (m\'etier r\'eel) ou Laravel/Symfony + back-office sur-mesure si le besoin d\'eborde. \\
+  SaaS CRUD multi-tenant \& PHP (Laravel/Symfony) \emph{ou} Java (Spring) pour le c\oe{}ur~; React ou Vue pour l'interface~; PostgreSQL pour tout le monde. \\
+  Application tr\`es interactive (tableaux, \'editeurs, hors-ligne) \& JS/TS d'abord~; un back l\'eger (Node ou API Java) ; le navigateur tient l'\'etat. \\
+  Temps r\'eel, collaboratif \& Node (ou Go/Java + WebSockets) + Redis pub/sub + une file de messages. \\
+  Traitement par lots, int\'egrations d'entreprise, facturation \& Java~: fiabilit\'e, transactions, typage, outillage d'observabilit\'e. \\
+  Traitement lourd de donn\'ees, ML, Android \& Python ou Java/Kotlin. \\
+  MVP en 3 semaines pour valider \& Le langage que tu connais le mieux, un seul d\'ep\^ot, un seul d\'eploiement. \\
+\end{tablez}
+
+\subsection{Les combinaisons qui marchent vraiment}
+
+\begin{enumerate}
+  \item \textbf{API Java + front TS~:} le profil \og ~grand compte~ \fg{}. Tu parles JSON, OpenAPI, JWT,
+        et tu es bilingue contrat/production.
+  \item \textbf{Monolithe PHP + front l\'eger~:} le profil agence~/ produit~: un d\'ep\^ot, un d\'eploiement,
+        un co\^ut d'h\'ebergement ridicule, un SEO parfait.
+  \item \textbf{Full-stack JS (Next.js ou Node + SPA)~:} le profil startup~: une \'equipe, un langage,
+        des it\'erations rapides~; \`a condition d'aimer maintenir l'outillage.
+  \item \textbf{Le trio assum\'e~:} PHP pour les pages, Java pour les services critiques, JS pour tout ce
+        qui vit dans le navigateur. C'est la r\'ealit\'e de beaucoup d'entreprises~: ton atout est
+        d'\^etre la personne qui comprend les trois bords.
+\end{enumerate}
+
+\section{Construire une carri\`ere~: la partie peu romantique}
+
+\etape{Les trois premiers emplois (ou les trois premi\`eres ann\'ees)}
+\begin{itemize}
+  \item Un portfolio de \textbf{3 projets termin\'es et en ligne} bat 15 tutos~: code lu par un
+        humain~: un README avec d\'ecisions et limites~: un historique Git lisible.
+  \item Apprends \`a \textbf{lire du code que tu n'as pas \'ecrit}~: c'est 60 \% du m\'etier. Prends un
+        projet open source de 3 000 lignes et \'ecris-en une carte d'architecture~: \c{c}a se passe
+        mieux avec un langage \`a typage statique (Java) ou typ\'e (TS) sous la main~: c'est un
+        argument pour apprendre l'un des deux.
+  \item \textbf{Les fondamentaux ne p\'erissent pas~:} HTTP, TLS, SQL et index, encodage,
+        concurrence, m\'emoire (pile/monceau), complexit\'e algorithmique, mise en cache, files,
+        idempotence, observabilit\'e. Les cadres passent~; ces dix mots restent.
+  \item Un certificat n'a d'int\'er\^et que s'il valide une comp\'etence que tu peux montrer.
+        En revanche~: un \verb|git log| propre~: une issue ferm\'ee avec reproduction~: une PR
+        relue --- \c{c}a~: \c{c}a compte partout.
+\end{itemize}
+
+\begin{tablez}[p{0.2\textwidth}X]
+  \headrow R\^ole \& Ce qu'on attend, et le chemin \\
+  \midrule
+  Int\'egrateur / frontend \& HTML/CSS/JS solides~: a11y~: outils de build~: un framework~; puis TS~: tests~: perf. PHP ou Node en second langage pour dialoguer avec le back. \\
+  D\'eveloppeur web g\'en\'eraliste \& PHP ou Node c\^ot\'e serveur~: SQL \'ecrit \`a la main~: un framework choisi pour ses id\'ees~: d\'eploiement~: journaux. Java en troisi\`eme langue pour la rigueur. \\
+  D\'eveloppeur back-end / services \& Java (ou Go)~: mod\'elisation~: transactions~: messagerie~: observabilit\'e~: s\'ecurit\'e~: chargement. TypeScript pour lire les fronts. \\
+  DevOps/SRE \& les trois~; et surtout Linux~: r\'eseau~: conteneurs~: Terraform~: CI~: et le go\^ut des post-mortems. \\
+  Freelance \& un p\'erim\`etre clair~: un contrat~: la capacit\'e \`a dire non~; et la sp\'ecialisation (ex. \og ~migrations PHP 5 \$\rightarrow\$ 8~ \fg{} ou \og ~perf WordPress~ \fg{}). \\
+\end{tablez}
+
+\etape{R\'emun\'eration et march\'e~: ordres de grandeur honn\^etes (2025--2026)}
+Fourchettes indicatives pour un march\'e francophone~; elles varient fortement selon la ville, la
+taille de la bo\^ite et la n\'egociation~: junior 30--40 k\texteuro{}~; interm\'ediaire 40--52 k\texteuro{}~;
+senior 52--70 k\texteuro{}~: expert/architecte 70 k\texteuro{} et plus. Ce qui d\'ecale le curseur n'est
+jamais \og ~je connais le framework \`a la mode~ \fg{}~: c'est la capacit\'e \`a faire tourner une d\'ecision
+technique co\^uteuse~: \`a la d\'efendre~: et \`a la documenter. PHP paie historiquement moins bien que Java
+\`a anciennet\'e \'egale~; l'\'ecart se resserre d\`es que tu fais du Laravel/Symfony en scale-up et que tu
+toucher aux bases~: \`a la perf et \`a la prod.
+
+\etape{Le rythme d'apprentissage qui tient sur dix ans}
+\begin{enumerate}
+  \item \textbf{Un projet, pas une s\'erie.} Tu apprends quand \c{c}a r\'esiste~; un tuto n'est pas une
+        r\'esistance~; c'est du confort avec des onglets.
+  \item \textbf{Un langage par saison.} 3 mois sur un~; 3 semaines sur le suivant pour transf\'erer~;
+        puis un projet qui m\'elange les deux.
+  \item \textbf{Relis tes corrig\'es dans 6 mois.} Tu dois trouver ton code d'il y a six mois
+        \og ~presque correct mais un peu naus\'eabond~ \fg{}~; sinon tu n'as pas progress\'e.
+  \item \textbf{\'Ecris.} Un billet de 500 mots par sujet dur~: c'est la meilleure consolidation
+        qui existe~: et c'est un signal d'expert gratuit.
+  \item \textbf{Lis les sources.} Le JEP qui introduit les threads virtuels~: la RFC 9110, le code
+        de \verb|PDO| ou de \verb|V8|~: le commit qui corrige un bug que tu as eu~: tout cela se lit
+        en une soir\'ee et te rend meilleur qu'une formation de deux jours.
+  \item \textbf{Garde un carnet.} Les 10 commandes que tu retapes~: les 5 erreurs qui reviennent~:
+        les 3 d\'ecisions d'archi et pourquoi~: c'est l'annexe~\ref{ch:antisecche} de ce livre, \'ecrit par toi.
+\end{enumerate}
+
+\begin{astuce}
+Si tu ne devais garder qu'une r\`egle~: \textbf{sois la personne qui fait le lien}. Un d\'eveloppeur PHP
+qui lit du TypeScript~: un Java qui comprend le navigateur~: un front qui sait expliquer un plan
+d'ex\'ecution--- ces profils sont rares, et ce sont eux qu'on promeut. Ce livre t'a donn\'e les trois
+bords~: exploite la jointure.
+\end{astuce}
+
+\index{comparatif}\index{carri\`ere}\index{stack}

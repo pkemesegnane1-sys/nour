@@ -1,0 +1,285 @@
+% ============================================================================
+\chapter{Programmation fonctionnelle~: lambdas, Streams, collecteurs}
+\label{ch:java-fonctionnel}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item \'Ecrire des lambdas lisibles, comprendre la capture et les interfaces fonctionnelles.
+  \item Ma\^itriser le pipeline Streams~: sources, op\'erations interm\'ediaires, terminales.
+  \item Utiliser \texttt{Collectors} sans recopier un exemple au hasard~: groupage, partition,
+        agr\'egats, maps imbriqu\'ees, collecteurs personnalis\'es.
+  \item Savoir quand le flux parall\`ele aide vraiment, et quand il nuit.
+  \item \'Ecrire du code fonctionnel qui reste d\'ebogable.
+\end{itemize}
+\end{objectif}
+
+\section{Lambda~: la syntaxe compl\`ete, puis la r\`egle}
+
+\begin{codejava}
+// Les cinq formes, de la plus verbeuse a la plus concise (toutes equivalentes)
+Comparator<Integer> c1 = (Integer a, Integer b) -> { return Integer.compare(a, b); };
+Comparator<Integer> c2 = (a, b) -> Integer.compare(a, b);
+Comparator<Integer> c3 = Comparator.comparingInt(Integer::intValue);
+Comparator<Integer> c4 = Integer::compare;
+Comparator<Integer> c5 = (a, b) -> a - b;             // correct pour des petits entiers, pas generique !
+
+// Le type cible est infer\'e par le contexte : "var" ne fonctionne pas avec un lambda nu
+var r = (Runnable) () -> System.out.println("ok");    // le cast donne le type cible
+// Runnable r2 = () -> { };                             // correct
+// var r3 = () -> { };                                  // ERREUR de compilation
+
+// Une expression lambda peut etre une expression ou un bloc ; un bloc doit avoir un return.
+Runnable vide = () -> { };
+java.util.function.Supplier<String> consigne = () -> { var s = "a"; return s + "b"; };
+
+// Les interfaces fonctionnelles du JDK (java.util.function) -- a memoriser par famille :
+//   Predicate<T>  : boolean test(T)                 | Function<T,R> : R apply(T)
+//   Consumer<T>   : void accept(T)                  | Supplier<T>   : T get()
+//   UnaryOperator<T> / BinaryOperator<T>            | BiFunction<T,U,R>
+//   IntFunction<R>, ToIntFunction<T>, IntToDoubleFunction, ... (variantes primitives)
+//   Runnable, Callable<V> (peut lancer une exception), Comparator<T>, Predicate combinables
+Predicate<Integer> pair = i -> i % 2 == 0;
+Predicate<Integer> positif = i -> i > 0;
+var combo = pair.and(positiv).or(i -> i == 0);
+Function<Integer, Integer> fois2 = i -> i * 2;
+Function<Integer, Integer> chaine = fois2.andThen(String::valueOf).andThen(s -> "[" + s + "]");
+// composition : andThen (apres) vs compose (avant) -- la source d'erreur numero 1
+
+// Capture : uniquement des variables "effectivement finales"
+int facteur = 3;
+Function<Integer, Integer> mult = x -> x * facteur;      // OK (facteur non modifie ensuite)
+// facteur = 4;                                           // -> erreur de compilation : pas de reassignation
+final StringBuilder acc = new StringBuilder();            // contournement propre : un objet mutable
+Consumer<String> collecter = s -> acc.append(s).append('\n');
+// Ce n'est pas une limitation technique mais un choix : capturer une variable locale mutable
+// dans un lambda partage entre threads serait une bombe.
+\end{codejava}
+
+\begin{note}
+En Java, un lambda est une instance d'interface fonctionnelle (pas une fonction de premi\`ere
+classe flottante). Le bytecode utilise \verb|invokedynamic| + \verb|LambdaMetafactory|~:
+l'objet est cr\'e\'e une fois, et l'appel est aussi rapide qu'une m\'ethode virtuelle. Concr\`etement~:
+n'aie pas peur d'un lambda dans une boucle chaude~; aie peur de l'\emph{allocation} d'un
+\verb|ArrayList| dans la m\^eme boucle.
+\end{note}
+
+\section{Streams~: le pipeline}
+
+Un \verb|Stream| n'est \textbf{pas} une collection~: c'est un plan de calcul sur une source,
+\emph{consommable une fois}, paresseux jusqu'\`a l'op\'eration terminale.
+
+\begin{codejava}
+Stream<Article> src = articles.stream();
+
+// Intermediaires (paresseux, renvoie un Stream) :
+src.filter(a -> a.estPublie() && a.tags().contains("java"))
+   .map(Article::titre)
+   .map(String::trim)
+   .distinct()
+   .sorted(Comparator.reverseOrder())
+   .peek(t -> log.info("traitement de {}", t))        // peek = debug seulement
+   .limit(20)
+   .skip(5)
+   .flatMap(t -> Stream.of(t.split(" ")))              // un element -> plusieurs
+   .mapMulti(String.class, (t, out) -> { for (var w : t.split(" ")) { out.accept(w); } });
+
+// Terminales (\'evaluent tout, une seule fois) :
+List<String> l = stream.toList();                       // Java 16+ (immuable)
+var copieModifiable = stream.collect(Collectors.toCollection(ArrayList::new));
+Set<String> set = stream.collect(Collectors.toSet());
+Map<Long, String> map = stream.collect(Collectors.toMap(Article::id, Article::titre));
+Optional<Article> premier = stream.findFirst();          // rencontre le 1er (ordre = source)
+Article un = stream.findAny().orElseThrow();              // en parallele : findAny est moins restrictif
+long n = stream.count();
+boolean aucun = stream.noneMatch(pred);                  // anyMatch/allMatch/noneMatch = courts-circuits
+OptionalInt min = stream.mapToInt(Article::vues).min();
+int somme = stream.map(Article::vues).reduce(0, Integer::sum);
+String joint = stream.map(Article::titre).collect(Collectors.joining(", ", "[", "]"));
+stream.forEach(System.out::println);                     // pas forEachOrdered (garde l'ordre en parallele)
+var tableau = stream.toArray(String[]::new);
+var optionnel = Optional.ofNullable(stream.findFirst().orElse(null));
+\end{codejava}
+
+\subsection{Les collecteurs, l\`a o\`u le talent se voit}
+
+\begin{codejava}
+import java.util.stream.Collectors;
+import static java.util.stream.Collectors.*;
+
+// Agr\'egations
+long nbPublies = articles.stream().filter(Article::estPublie).count();
+DoubleSummaryStatistics stats = articles.stream().mapToDouble(Article::vues).summaryStatistics();
+stats.getCount(); stats.getAverage(); stats.getMin(); stats.getMax(); stats.getSum();
+IntSummaryStatistics notes = eleves.stream().mapToInt(Eleve::note).summaryStatistics();
+
+// Groupages
+Map<Statut, List<Article>> parStatut = articles.stream().collect(groupingBy(Article::statut));
+Map<Statut, Long> compteParStatut = articles.stream().collect(groupingBy(Article::statut, counting()));
+Map<String, List<String>> titresParAnnee = articles.stream().collect(
+        groupingBy(a -> String.valueOf(a.publieLe().getYear()),
+                   collectingAndThen(mapping(Article::titre, toList()), l -> new ArrayList<>(l))));
+Map<Statut, Map<String, List<Article>>> doubleCle = articles.stream()
+        .collect(groupingBy(Article::statut, groupingBy(a -> a.tags().isEmpty() ? "sans-tag" : a.tags().get(0))));
+Map<Boolean, List<Article>> partition = articles.stream().collect(partitioningBy(Article::estPublie));
+
+// Maps et transformations
+Map<Long, Article> parId = articles.stream().collect(toMap(Article::id, a -> a));
+Map<Long, Article> parIdOrdonne = articles.stream().collect(toMap(Article::id, a -> a, (x, y) -> x, TreeMap::new));
+Map<String, Integer> totauxParTag = articles.stream()
+        .flatMap(a -> a.tags().stream())
+        .collect(groupingBy(t -> t, summingInt(t -> 1)));
+// (plus simple : groupingBy + counting)
+
+// Collections cibles
+var parSet = articles.stream().collect(toCollection(LinkedHashSet::new));
+String csv = articles.stream().map(Article::titre).collect(joining(",", "\"", "\""));
+Map<String, Long> top5 = stream.collect(groupingBy(f, counting())).entrySet().stream()
+        .sorted(Map.Entry.<String, Long>comparingByValue().reversed()).limit(5)
+        .collect(toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> a, LinkedHashMap::new));
+
+// Collecteur sur mesure (reduction mutable propre)
+record Compacteur(int total, int max, List<String> noms) {
+    static Compacteur creer() { return new Compacteur(0, 0, new ArrayList<>()); }
+    void ajouter(String nom, int valeur) { noms.add(nom); total += valeur; max = Math.max(max, valeur); }
+    Compacteur fusionner(Compacteur o) {   // utilise en parallele
+        noms.addAll(o.noms); return new Compacteur(total + o.total, Math.max(max, o.max), noms);
+    }
+}
+var resume = flux.collect(Collector.of(
+        Compacteur::creer,
+        (c, a) -> c.ajouter(a.titre(), a.vues()),
+        Compacteur::fusionner,
+        Collector.Characteristics.CONCURRENT));
+
+// Un stream ne se relit pas : si tu as besoin du resultat deux fois, materialise-le.
+List<Article> materialise = articles.stream().filter(c::pertinent).toList();
+\end{codejava}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Collecteur} \& \thd{\`A la place de...} \& \thd{Note} \\
+  \midrule
+  \verb|toList()| (Java~16+) \& \verb|collect(toList())| \& immuable~; \verb|collect(Collectors.toList())| reste mutable. \\
+  \verb|toUnmodifiableList()| \& -- \& Java~10+, et \'echoue si un \'el\'ement est \verb|null|. \\
+  \verb|toMap(k, v)| \& une boucle + put | \textbf{l\`eve} sur cl\'e dupliqu\'ee~: passe le mergeur \verb|(a,b)->a|. \\
+  \verb|toCollection(HashSet::new)| \& -- \& type de collection explicite. \\
+  \verb|groupingBy(classifier)| \& \verb|Map<K, List<V>>| rempli \`a la main \& accepte un downstream. \\
+  \verb|groupingBy(classifier, downstream)| \& -- \& \verb|counting|, \verb|summingInt|, \verb|reducing|, \verb|minByBy|... \\
+  \verb|partitioningBy(pred)| \& deux listes \& 2 cl\'es seulement, plus rapide qu'un groupage. \\
+  \verb|joining(delim, prefix, suffix)| \& \verb|StringBuilder| \& attention : lent sur de gros volumes. \\
+  \verb|mapping(f, d)|, \verb|filtering(p, d)|, \verb|collectingAndThen(...)| \& -- \& la combinatoire qui \'evite un stream interm\'ediaire. \\
+  \verb|summarizingInt/Long/Double| \& trois parcours | un seul. \\
+  \verb|reducing(id, f, op)| \& un accumulateur | associativit\'e obligatoire pour le parall\`ele. \\
+\end{tabz}
+
+\section{Flux primitifs~: la performance sans emballage}
+
+\begin{codejava}
+// Stream<Integer> cree des objets Integer pour chaque element. Les flux primitifs non.
+int total = articles.stream().mapToInt(Article::vues).sum();
+long totalLong = articles.stream().mapToLong(Article::vues).asLongStream().sum();
+double moyenne = articles.stream().mapToDouble(a -> a.vues()).average().orElse(0);
+DoubleStream.of(1.1, 2.2).map(Math::sqrt).filter(d -> d > 1).summaryStatistics();
+IntStream.range(0, n).map(i -> i * i).filter(i -> i % 2 == 0).boxed().toList();
+IntStream.rangeClosed(1, 100).sum();                      // 1..100 (range = exclut la fin)
+IntStream.iterate(1, v -> v <= 1000, v -> v * 2).toArray();
+IntStream.generate(() -> (int) (Math.random() * 6) + 1).limit(10).toArray();
+Stream.generate(() -> "constant").limit(3);
+Stream.iterate(new int[]{0, 1}, t -> new int[]{t[1], t[0] + t[1]}).limit(10).map(t -> t[0]);  // Fibonacci
+// Boite / deboite : .boxed() (primitif -> objet) ; .mapToInt() (objet -> primitif)
+List<Integer> entiers = IntStream.of(1, 2, 3).boxed().toList();
+OptionalInt vide = IntStream.empty().min();
+int avecDefaut = IntStream.of().max().orElse(-1);        // les Optional primitifs ont orElse/orElseGet
+\end{codejava}
+
+\section{Parall\'elisme de flux~: le mode d'emploi honn\^ete}
+
+\begin{codejava}
+int somme = fluxEnMemoire.parallel().mapToInt(String::length).sum();
+
+// Le parallel() utilise le FORK/JOIN COMMUN (threads = nb de coeurs - 1). Donc :
+//  - interdit d'y faire du bloquant (IO, sommeil, appel HTTP) : tu affames les autres ;
+//  - inutile sur une liste de 5 000 elements : le cout de partition > le gain ;
+//  - rentable sur des donnees en memoire, sans \'etat partag\'e, avec une operation courte et pure ;
+//  - a mesurer : parfois 8x, parfois 0.9x (contention, allocation, ordre impos\'e).
+List<String> ok = stream.parallel().map(String::trim).filter(s -> !s.isEmpty()).toList();
+// Operations "sans ordre" (findAny, noneMatch, unordered) sont les amies du parallele :
+Optional<String> nImporteLequel = stream.parallel().unordered().filter(c::estBon).findAny();
+// Limiter le pool pour un calcul isol\'e, sans polluer le commun :
+try (var pool = new ForkJoinPool(4)) {                  // Java 19+: AutoCloseable
+    resultat = pool.submit(() -> stream.parallel().map(...).reduce(...)).get();
+}
+// Regle d'or : si un calcul est trop gros pour un thread et trop petit pour un cluster,
+// un stream parallele est la bonne idee. Sinon, les virtual threads (chapitre suivant) sont
+// presque toujours meilleurs.
+\end{codejava}
+
+\subsection{\'Ecrire du code fonctionnel qui reste lisible}
+
+\begin{enumerate}
+  \item Une op\'eration par ligne dans les pipelines de plus de trois \'etapes~; retour \`a la ligne
+        apr\`es chaque \verb|.|, indent\'es de quatre espaces.
+  \item Un lamba de plus de trois lignes~: nomme-le (m\'ethode priv\'ee)~: \verb|a -> estPublieRecent(a)|.
+  \item \verb|peek| n'est pas un outil de production~: il peut \^etre ignor\'e par le moteur
+        (court-circuit). Utilise un compteur ou un vrai point de log.
+  \item Pas d'effet de bord dans \verb|map|/ \verb|filter|~: le compilateur ne te sauvera pas,
+        mais le parall\`ele et le r\'eordonnancement, si.
+  \item Un stream consomm\'e est mort~: si tu it\`eres deux fois, mat\'erialise une \verb|List|.
+  \item Ferme les flux issus de \verb|Files.lines| (try-with-resources)~: ils d\'etiennent un handle.
+  \item La boucle \verb|for| n'est pas un aveu d'\'echec~: parcours avec indices, mutation d'un
+        tableau, algorithme avec break conditionnel~? La boucle gagne. Les streams excellent sur
+        \og ~transformer une collection en une autre~ \fg{}.
+\end{enumerate}
+
+\begin{codejava}
+// Refactorisation type : de "Java 5" a "Java 21", en gardant la clarte
+// AVANT
+Map<String, List<Article>> res = new HashMap<>();
+for (Article a : articles) {
+    if (a.estPublie()) {
+        for (String tag : a.tags()) {
+            res.computeIfAbsent(tag, k -> new ArrayList<>()).add(a);
+        }
+    }
+}
+// APRES
+Map<String, List<Article>> res = articles.stream()
+        .filter(Article::estPublie)
+        .flatMap(a -> a.tags().stream().map(t -> Map.entry(t, a)))
+        .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
+// et un jour, tu realise que computeIfAbsent etait plus rapide a lire : tu reviens en arriere.
+// La bonne question n'est pas "fonctionnel ou boucle" mais "le lecteur comprend-il en 5 secondes".
+\end{codejava}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \`A partir d'une liste de 100 000 enregistrements \verb|Vente(id, produit, region, montant, date)|,
+        produis~: le chiffre par r\'egion~; le top 10 produits~: la croissance mensuelle~; le panier
+        moyen~; les r\'egions sans vente~; et un export CSV tri\'e~: le tout en streams~: puis en boucles~;
+        compare la lisibilit\'e, pas seulement le temps.
+  \item \'Ecris un collecteur \verb|versStatistiques()| qui renvoie un \verb|record Stats(n, somme,
+        moyenne, min, max, ecartType)| en un seul passage~: puis valide-le avec des propri\'et\'es
+        (valeurs al\'eatoires, comparaison avec trois parcours s\'epar\'es).
+  \item Construis un mini-\verb|Collectors| : \verb|toMapMulti|, \verb|toGroupedCount|, \verb|toSortedSet|.
+  \item Utilise \verb|mapMulti| pour aplatisir un arbre (\verb|record Noeud(String nom, List<Noeud> enfants)|)
+        en un flux de chemins \og ~a/b/c~ \fg{}~: puis compare \`a un \verb|flatMap| r\'ecursif.
+  \item Calcule les premiers 10 000 nombres premiers~: (a) filtre na\"if en stream~; (b) crible
+        d'\'Eratosth\`ene avec \verb|int[]|~; (c) version parall\`ele. Donne les trois temps et explique
+        l'\'ecart. (Spoiler~: le stream sera 50 fois plus lent, et c'est formateur.)
+  \item Ajoute une m\'ethode par d\'efaut \`a une de tes interfaces fonctionnelles~: \verb| puis |,
+        \verb|enSecurite| (capture les exceptions~: \verb|Function<T,R>| -> \verb|Resultat<R>|)~;
+        utilise-la pour transformer un parsing fragile en composition propre.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Tutorial officiel Streams --- \url{https://dev.java/learn/streams/}
+  \item Javadoc \verb|Collectors| (le tableau des collecteurs vaut le d\'etour) --- \url{https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/stream/Collectors.html}
+  \item \emph{Java Streams} (P. Sotuyodhy, en fran\c{c}ais) --- \url{https://blog.sotuyodhy.com/java-streams/}
+  \item Article de Brian Goetz sur les limites du parall\'elisme --- \url{https://www.oracle.com/technical-resources/articles/java/architect-streams.html}
+  \item Vavr (fonctionnel avanc\'e en Java) --- \url{https://www.vavr.io/}
+\end{itemize}
+\end{ressources}
+
+\index{lambda}\index{Streams}\index{Collectors}\index{parallel stream}

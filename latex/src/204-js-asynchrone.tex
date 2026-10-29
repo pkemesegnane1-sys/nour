@@ -1,0 +1,337 @@
+% ============================================================================
+\chapter{Asynchrone : boucle d'\'ev\'enements, promesses, \texttt{async/await}}
+\label{ch:js-async}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Expliquer ce qui se passe vraiment quand une requ\^ete est en cours.
+  \item Cr\'eer, cha\^iner, combiner et annuler des promesses sans fuite ni \og ~promesse flottante~ \fg{}.
+  \item \'Ecrire du code asynchrone lisible avec \verb|async/await|, en parall\`ele quand c'est possible.
+  \item Impl\'ementer les motifs r\'eels~: retry, timeout, debounce, throttle, file \`a concurrence limit\'ee.
+  \item Comprendre les it\'erateurs, g\'en\'erateurs et it\'erateurs asynchrones.
+\end{itemize}
+\end{objectif}
+
+\section{Le mod\`ele d'ex\'ecution}
+
+JavaScript est \textbf{mono-thread}~: un seul appel de fonction \`a la fois. Mais il est
+\textbf{asynchrone et non bloquant}~: les op\'erations lentes (r\'eseau, disque, timer) sont d\'el\'egu\'ees
+\`a des threads du syst\`eme (navigateur ou \link{libuv}{https://github.com/libuv/libuv} sous Node).
+Leur r\'esultat est trait\'e quand la pile d'appel est vide.
+
+\begin{enumerate}
+  \item La \textbf{call stack} ex\'ecute le code synchrone jusqu'au bout.
+  \item Les \textbf{API} (fetch, \verb|setTimeout|, fs) renvoient le contr\^ole imm\'ediatement ;
+        la r\'eponse arrive plus tard, via un rappel plac\'e dans une file.
+  \item La \textbf{microtask queue} (promesses r\'esolues, \verb|queueMicrotask|, MutationObserver)
+        est vid\'ee \emph{enti\`erement} avant la suite~: chaque t\^ache a la priorit\'e.
+  \item La \textbf{task queue} (timers, E/S, \'ev\'enements) attend que les microt\^aches soient vides,
+        puis fournit \emph{une} t\^ache.
+  \item \verb|requestAnimationFrame| s'ex\'ecute avant le rendu de l'image suivante.
+\end{enumerate}
+
+\begin{codejs}
+console.log("1 synchrone");
+
+setTimeout(() => console.log("6 timeout 0ms (macrotache)"), 0);
+Promise.resolve().then(() => console.log("4 then"));
+queueMicrotask(() => console.log("5 microtask"));
+async function f() { console.log("2 debut async"); await null; console.log("3 apres await"); }
+f();
+
+// Ordre reel : 1, 2, 3, 4, 5, 6
+// Regle mnemonique : tout le code synchrone, PUIS toutes les microtaches, PUIS une macrotache.
+\end{codejs}
+
+\begin{note}
+\og ~JS est mono-thread donc il ne peut pas faire de calcul~ \fg{} est faux pour les calculs lourds~:
+on les d\'eplace dans un \textbf{Web Worker} (navigueur) ou un \textbf{worker thread} (Node),
+et on communique par messages. Voir \cref{sec:workers}.
+\end{note}
+
+\section{Rappels --- et pourquoi on les a quitt\'es}
+
+\begin{codejs}
+// Convention "error-first" heritee de Node : premier argument = erreur
+function lireConfig(chemin, cb) {
+  setTimeout(() => {
+    if (!chemin) return cb(new Error("chemin requis"));
+    cb(null, { chemin, ok: true });
+  }, 30);
+}
+lireConfig("a.json", (err, res) => { if (err) throw err; /* ... */ });
+
+// Le "pyramid of doom" est la vraie raison d'abandonner les callbacks imbriques
+a(() => b(() => c(() => d(() => e(() => { /* on ne sait plus ou on est */ }))));
+\end{codejs}
+
+\section{Promesses}
+
+Une promesse est un \textbf{objet qui repr\'esente une valeur pas encore disponible}, dans un des
+trois \'etats~: \emph{pending}, \emph{fulfilled}, \emph{rejected} --- et qui ne change plus d'\'etat.
+
+\begin{codejs}
+const tache = new Promise((resolve, reject) => {
+  setTimeout(() => resolve(42), 100);           // une seule resolution utile
+});
+
+tache
+  .then((v) => v * 2)              // renvoyer une valeur -> nouvelle promesse resolue
+  .then((v) => Promise.resolve(v + 1))   // renvoyer une promesse -> elle est "awaitee"
+  .catch((e) => { console.error(e); throw new Error("echec traite"); })
+  .finally(() => console.log("toujours"));   // ne transforme pas la valeur
+
+// Les methodes de combinaison
+const [u, posts] = await Promise.all([fetchUser(), fetchPosts()]);   // toutes ou echec
+const resultats = await Promise.allSettled([p1, p2, p3]);  // toujours : [{status,value|reason}]
+const premier = await Promise.race([requete, timeout]);            // le premier qui finit
+const meilleur = await Promise.any([miroir1, miroir2]);            // le premier qui reussit
+const p = Promise.withResolvers();            // {promise, resolve, reject} : propre a l'exterieur
+const r = await Promise.try(() => fonctionPeutEtreSynchrone());    // n'importe quoi, uniformise
+
+// await sur n'importe quoi (valeur, thenable, tableau)
+const x = await 5;                 // 5
+for (const v of await Promise.all(tab.map(async (i) => i * 2))) {}
+\end{codejs}
+
+\subsection{\'Ecrire des promesses correctes}
+
+\begin{codejs}
+// 1. Ne jamais creer une promesse "a la main" autour d'une API deja promise
+const mauvais = new Promise((res) => res(fetch(url)));      // anti-pattern
+const bon = fetch(url);
+
+// 2. Promisify utile pour les API a callback
+const promisifier = (fn) => (...args) =>
+  new Promise((resolve, reject) =>
+    fn(...args, (err, val) => (err ? reject(err) : resolve(val)))
+  );
+const tard = (ms) => new Promise((r) => setTimeout(r, ms));
+await Promise.all([tard(100), tard(50)]);     // 100 ms (parallele), pas 150
+
+// 3. Toujours gerter l'erreur, sinon : "unhandledRejection" (crash par defaut sous Node)
+process.on("unhandledRejection", (reason) => { console.error("NON GREEE", reason); });
+
+// 4. Une promesse n'est pas annulable : on ajoute un AbortController
+const ctrl = new AbortController();
+const reponse = await fetch(url, { signal: ctrl.signal });
+ctrl.abort(new DOMException("Timeout", "TimeoutError"));  // -> fetch rejette
+
+// 5. Enveloppe timeout reutilisable
+async function avecTimeout(p, ms, message = "Timeout") {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(new Error(message)), ms);
+  try {
+    return await Promise.race([
+      p,
+      new Promise((_, rej) => ctrl.signal.addEventListener("abort", () => rej(ctrl.signal.reason))),
+    ]);
+  } finally { clearTimeout(t); }
+}
+\end{codejs}
+
+\section{\texttt{async/await}}
+
+\verb|async function| renvoie toujours une promesse~; \verb|await| met la fonction en pause
+et rend la main \`a la boucle d'\'ev\'enements.
+
+\begin{codejs}
+async function chargerProjet(id) {
+  try {
+    const rep = await fetch(`/api/projects/${id}`);
+    if (!rep.ok) throw new Error(`HTTP ${rep.status} sur ${rep.url}`);
+    const projet = await rep.json();
+    const membres = await Promise.all(              // parallelisme : on attend les deux a la fois
+      projet.membreIds.map((mid) => fetch(`/api/users/${mid}`).then((r) => r.json()))
+    );
+    return { ...projet, membres };
+  } catch (err) {
+    if (err.name === "AbortError") throw new Error("Requete annulee par l'utilisateur", { cause: err });
+    throw err;                                       // remonter ce qu'on ne comprend pas
+  } finally {
+    masquerSpinner();
+  }
+}
+\end{codejs}
+
+\begin{tablez}[p{0.2\textwidth}XX]
+  \headrow \thd{Anti-pattern} \& \thd{Probl\`eme} \& \thd{Correction} \\
+  \midrule
+  \verb|await p1; await p2;| (ind\'ependants) \& Temps cumul\'e, latence doubl\'ee \& \verb|await Promise.all([p1, p2])| \\
+  \verb|tab.map(async x => await f(x))| \& concurrence non born\'ee (10 000 requ\^etes d'un coup) \& fichier d'attente born\'ee (ci-dessous) \\
+  \verb|forEach(async x => ...)| \& la boucle ne \og ~attend~ \fg{} pas ; les erreurs sont perdues \& \verb|for...of| + \verb|await|, ou \verb|Promise.all(map)| \\
+  \verb|.then(f).catch(g)| avec throw dans g \& \og ~unhandled rejection~ \fg{} \& attraper au plus pr\`es ou renvoyer \\
+  \verb|catch {}| vide \& Bug invisible, donn\'ees corrompues \& au minimum \verb|console.error| ou \verb|throw| \\
+  fonction non \verb|async| qui appelle une promesse \& valeur \verb|Promise \{pending\}| affich\'ee \& remonter \verb|async| jusqu'\`a l'appelant \\
+\end{tablez}
+
+\subsection{Trois utilitaires \`a avoir dans son projet}
+
+\begin{codejs}
+// 1. Retry avec recul exponentiel et jitter (la base de la resilience reseau)
+async function retry(fn, { essais = 4, base = 200, max = 4000, surErreur } = {}) {
+  let dernier;
+  for (let i = 0; i < essais; i++) {
+    try { return await fn(i); }
+    catch (e) {
+      dernier = e;
+      surErreur?.(e, i);
+      if (i === essais - 1) break;
+      const attente = Math.min(max, base * 2 ** i) * (0.5 + Math.random() * 0.5);
+      await new Promise((r) => setTimeout(r, attente));
+    }
+  }
+  throw dernier;
+}
+
+// 2. Pool de concurrence : N taches en parallele, pas plus
+async function parallelLimite(taches, limite = 5) {
+  const resultats = new Array(taches.length);
+  let curseur = 0;
+  const worker = async () => {
+    while (curseur < taches.length) {
+      const i = curseur++;
+      resultats[i] = await taches[i]();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limite, taches.length) }, worker));
+  return resultats;
+}
+
+// 3. Debounce / throttle : les deux fonctions les plus demandees en UI
+const debounce = (fn, ms = 250) => {
+  let t;
+  const wrapped = (...args) => new Promise((res) => {
+    clearTimeout(t);
+    t = setTimeout(() => res(fn(...args)), ms);
+  });
+  wrapped.cancel = () => clearTimeout(t);
+  return wrapped;
+};
+const throttle = (fn, ms = 100) => {
+  let dernier = 0, minuterie = null, dernArgs;
+  return (...args) => {
+    const maintenant = Date.now();
+    dernArgs = args;
+    if (maintenant - dernier >= ms) { dernier = maintenant; fn(...args); }
+    else if (!minuterie) minuterie = setTimeout(() => {
+      dernier = Date.now(); minuterie = null; fn(...dernArgs);
+    }, ms - (maintenant - dernier));
+  };
+};
+
+const surRecherche = debounce(async (q) => { /* appel API */ }, 350);
+document.querySelector("#q").addEventListener("input", (e) => surRecherche(e.target.value));
+\end{codejs}
+
+\section{G\'en\'erateurs, it\'erateurs et it\'erateurs asynchrones}
+
+Un \textbf{it\'erateur} est un objet avec \verb|next()| renvoyant \verb|{ value, done }| ;
+un \textbf{it\'erable} expose \verb|[Symbol.iterator]()|. \verb|for...of|, le spread et
+\verb|Array.from| ne fonctionnent qu'avec \c{c}a.
+
+\begin{codejs}
+// Rendre un objet iterable (une playlist)
+const playlist = {
+  titres: ["a", "b", "c"],
+  *[Symbol.iterator]() { for (const t of this.titres) yield t.toUpperCase(); },
+};
+[...playlist];                    // ["A","B","C"]
+
+// Sequence infinie + paresse
+function* entiersPairs(de = 0) { for (let n = de; ; n += 2) yield n; }
+const dix = [];
+for (const n of entiersPairs(2)) { if (dix.push(n) === 10) break; }
+
+// Pipeline de transformation (generator-based)
+function* map(iterable, fn) { for (const x of iterable) yield fn(x); }
+function* filtre(iterable, pred) { for (const x of iterable) if (pred(x)) yield x; }
+const lignes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const sommeDesCarresImpairs = [...filtre(map(lignes, (x) => x * x), (x) => x % 2)]
+  .reduce((a, b) => a + b, 0);
+
+// Iterateur asynchrone : lire un tres gros fichier ligne a ligne sans le charger en RAM
+async function* lignesFichier(url) {
+  const res = await fetch(url);
+  const decod = new TextDecoderStream("utf-8");
+  const flux = res.body.pipeThrough(decod).pipeThrough(new TextEncoderStream ? new TransformStream() : new TransformStream());
+  let tampon = "";
+  for await (const chunk of res.body.pipeThrough(new TextDecoderStream("utf-8"))) {
+    tampon += chunk;
+    let idx;
+    while ((idx = tampon.indexOf("\n")) >= 0) { yield tampon.slice(0, idx); tampon = tampon.slice(idx + 1); }
+  }
+  if (tampon) yield tampon;
+}
+// pour (const ligne of await ... ) n'existe pas : on ecrit
+for await (const ligne of lignesFichier("https://exemple.gouv.fr/gros-fichier.csv")) { /* ... */ }
+\end{codejs}
+
+\subsection{Le flux (Streams) --- l'id\'ee \`a retenir}
+
+Un \verb|ReadableStream| se lit morceau par morceau~; un \verb|WritableStream| s'\'ecrit de m\^eme ;
+\verb|pipeThrough| et \verb|TransformStream| les cha\^inent. C'est ce qui permet de
+t\'el\'echarger et transformer 5~Go sans jamais les mettre en m\'emoire, de streamer une r\'eponse
+depuis Express ou un mod\`ele de langage, et de parser du SSE. On l'utilise concr\`etement dans
+les chapitres Node et API.
+
+\section{Chronologie, temps r\'eel et minuterie}
+
+\begin{codejs}
+const id = setInterval(() => tick(), 1000);   // recurrent
+clearInterval(id);
+let t = setTimeout(() => envoi(), 300);       // unique
+clearTimeout(t);
+
+// setTimeout(fn, 0) n'est pas "immediat" : c'est "prochaine macrotache"
+// queueMicrotask(fn) est "des que la pile est vide" (avant le rendu)
+// requestAnimationFrame(fn) est "juste avant le prochain affichage" (~16 ms)
+function boucle() { dessiner(); requestAnimationFrame(boucle); }
+
+// Mesurer proprement (pas Date.now)
+const t0 = performance.now();
+attente();
+console.log(`${(performance.now() - t0).toFixed(2)} ms`);
+\end{codejs}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris \verb|attendre(ms)| puis transforme une fonction callback \verb|lireFichier| en
+        version promise \verb|lireFichierAsync| (avec \verb|promisifier|~; puis \verb|fs/promises|).
+  \item Pr\'edis l'ordre d'affichage, puis v\'erifie~:
+\begin{codeplain}
+console.log("A");
+setTimeout(() => console.log("B"), 0);
+Promise.resolve().then(() => console.log("C"));
+console.log("D");
+(async () => { console.log("E"); await null; console.log("F"); })();
+console.log("G");
+\end{codeplain}
+  \item Charge les 26 lettres depuis \verb|https://api.npmjs.org/downloads/point/last-week/|
+        combin\'ees avec une API locale~: utilise \verb|Promise.allSettled|, affiche le top 10 des
+        paquets, et ne plante pas quand une requ\^ete \'echoue.
+  \item Impl\'emente \verb|crawler(startUrl, maxPages)|~: il r\'ecup\`ere une liste pagin\'ee
+        \verb|?page=n|, en parall\`ele \`a 5 maximum, s'arr\^ete sur page vide, ajoute un
+        \verb|retry| \`a 3 essais et un \verb|timeout| de 5 s.
+  \item \'Ecris un \verb|rateLimit(fn, appelsParSeconde)| qui r\'epartit les appels (token bucket),
+        puis un \verb|pQueue(tasks, { concurrency, pause, resume })| minimal.
+  \item Ajoute un bouton \og ~Annuler~ \fg{} \`a une recherche~: brancher un \verb|AbortController|,
+        annuler la requ\^ete pr\'ec\'edente \`a chaque nouvelle frappe, et ignorer proprement
+        \verb|AbortError|.
+  \item \'Ecris une file d'attente de messages pour un chat~: \verb|emit|/\verb|on|, avec
+        \verb|once|, \verb|off|, et un g\'en\'erateur asynchrone \verb|for await (const msg of bus)|.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\_Objects/Promise}
+  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML\\\\_DOM\\\\_API/Microtask\\\\_guide}
+  \item Visualiseur interactif de la boucle d'\'ev\'enements --- \url{https://www.jsv9000.app/}
+  \item Node --- Streams --- \url{https://nodejs.org/api/stream.html}
+  \item Jake Archibald --- \emph{In The Loop} (la r\'ef\'erence sur l'ordre d'ex\'ecution) --- \url{https://jakearchibald.com/2015/events-based-runtimes/}
+\end{itemize}
+\end{ressources}
+
+\index{JavaScript!asynchrone}\index{promesse}\index{async await}\index{event loop}

@@ -1,0 +1,263 @@
+% ============================================================================
+\chapter{Interface moderne : Vite, composants, React/Vue/Svelte, Astro}
+\label{ch:js-frameworks}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item D\'emarrer un projet avec Vite et comprendre ce qu'un bundler fait pour toi.
+  \item Saisir le mod\`ele \og ~\'etat \$\rightarrow\$ rendu~ \fg{} commun aux frameworks, et les hooks React.
+  \item Choisir un cadre en connaissance de cause, sans religion.
+  \item G\'erer \'etat, routes, donn\'ees serveur et styles dans une vraie application.
+  \item Savoir quand \emph{ne pas} mettre de framework.
+\end{itemize}
+\end{objectif}
+
+\section{Vite~: le socle}
+
+\link{Vite}{https://vitejs.dev/} (7\textsuperscript{e}~majore en 2025, cr\'e\'e par Evan~You) sert tes
+modules nativement en ESM pendant le d\'eveloppement (d\'emarrage quasi instantan\'e, HMR cibl\'e) et
+utilise \link{Rollup}{https://rollupjs.org/} pour construire la version de production
+(minification, d\'ecoupage de code, empreintes de fichiers).
+
+\begin{terminal}
+npm create vite@latest site -- --template vanilla        # ou react, vue, svelte, preact, lit...
+cd site
+npm install
+npm run dev              # http://localhost:5173
+npm run build && npm run preview
+\end{terminal}
+
+\begin{codejs}
+// vite.config.js --- les reglages qui reviennent vraiment
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: { alias: { "@": new URL("./src", import.meta.url).pathname } },
+  server: { port: 5173, host: true, proxy: { "/api": "http://localhost:8000" } },
+  build: {
+    sourcemap: true,
+    target: "es2022",
+    rollupOptions: { output: { manualChunks: (id) => (id.includes("node_modules") ? "deps" : undefined) } },
+  },
+  define: { __APP_VERSION__: JSON.stringify(process.env.npm_package_version) },
+});
+\end{codejs}
+
+Les variables d'environnement expos\'ees au client doivent \^etre pr\'efix\'ees \verb|VITE\_|~:
+\verb|import.meta.env.VITE\_API\_URL|. Tout le reste du fichier \verb|.env| reste c\^ot\'e build~:
+c'est intentionnel, ne cherche pas \`a le contourner.
+
+\section{Le mod\`ele commun \`a tous les frameworks}
+
+\begin{enumerate}
+  \item Tu d\'ecris l'\textbf{\'etat} (donn\'ees) et une \textbf{fonction de rendu}
+        (\verb|\'etat -> HTML|).
+  \item Tu changes l'\'etat avec les moyens du framework (\verb|setState|, \verb|\$set|, signal,
+        assignation r\'eactive).
+  \item Le framework \textbf{diff} l'ancien et le nouveau rendu, applique le minimum
+        d'op\'erations DOM (la \og ~r\'econciliation~ \fg{}), puis compose.
+\end{enumerate}
+
+Tout le reste (hooks, signaux, stores, effets) n'est que de la broderie autour de ce mod\`ele.
+C'est pour cela qu'apprendre un framework en rend les autres rapides.
+
+\subsection{React --- le cas le plus demand\'e}
+
+\begin{codejs}
+// src/Compteur.jsx --- lecture obligatoire : un composant est une fonction pure de l'etat
+import { useState, useEffect, useMemo, useCallback, useRef, useReducer } from "react";
+
+const initial = () => JSON.parse(localStorage.getItem("courses") ?? "[]");
+
+export function ListeCourses() {
+  const [articles, setArticles] = useState(initial);          // initialise une seule fois
+  const [filtre, setFiltre] = useState("tous");
+  const [brouillon, setBrouillon] = useState("");
+  const champ = useRef(null);                                  // reference a un noeud DOM, sans re-rendu
+
+  useEffect(() => {                                            // effet = synchronisation avec l'exterieur
+    localStorage.setItem("courses", JSON.stringify(articles));
+  }, [articles]);
+
+  useEffect(() => {                                            // ecouteur global + nettoyage
+    const onKey = (e) => e.key === "/" && champ.current?.focus();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);                                                        // [] : une fois, au montage
+
+  const restants = useMemo(() => articles.filter((a) => !a.faite), [articles]);
+  const total = useMemo(() => restants.reduce((s, a) => s + a.qte, 0), [restants]);
+
+  const ajouter = useCallback(() => {
+    const nom = brouillon.trim();
+    if (!nom) return;
+    setArticles((liste) => [{ id: crypto.randomUUID(), nom, qte: 1, faite: false }, ...liste]);
+    setBrouillon("");
+  }, [brouillon]);
+
+  const basculer = (id) =>
+    setArticles((liste) => liste.map((a) => (a.id === id ? { ...a, faite: !a.faite } : a)));
+
+  return (
+    <main>
+      <h1>Courses <small>({total})</small></h1>
+      <form onSubmit={(e) => { e.preventDefault(); ajouter(); }}>
+        <input ref={champ} value={brouillon} onChange={(e) => setBrouillon(e.target.value)}
+               placeholder="Ajouter (touche /)" />
+      </form>
+      <ul>
+        {restants.map((a) => (
+          <li key={a.id}>
+            <label>
+              <input type="checkbox" checked={a.faite} onChange={() => basculer(a.id)} />
+              {a.nom}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+\end{codejs}
+
+\etape{Les quatre r\`egles des hooks, sans exception}
+\begin{enumerate}
+  \item Un hook s'appelle \verb|useXxx|, et uniquement au \textbf{niveau sup\'erieur} d'un
+        composant ou d'un hook~: jamais dans une condition, une boucle, un rappel.
+  \item Un \verb|useEffect| doit d\'eclarer ses d\'ependances \textbf{compl\`etes}
+        (active \verb|eslint-plugin-react-hooks|, et le preset \og ~recommended-latest~ \fg{}).
+  \item Une mise \`a jour d'\'etat doit produire une \textbf{nouvelle r\'ef\'erence}
+        (\verb|set(x => ({ ...x })), pas \verb|set(state.prop = 1)|).
+  \item Si un effet sert \`a \og ~d\'eriver~ \fg{} une valeur, ce n'est pas un effet~: c'est un calcul
+        pendant le rendu (\verb|useMemo| ou simple const).
+\end{enumerate}
+
+\subsection{Vue~3 (composition API)}
+
+\begin{codeplain}
+<!-- ArticleList.vue -->
+<script setup>
+import { ref, computed, watchEffect } from "vue";
+
+const articles = ref(JSON.parse(localStorage.getItem("courses") ?? "[]"));
+const brouillon = ref("");
+const restants = computed(() => articles.value.filter((a) => !a.faite));
+
+function ajouter() {
+  const nom = brouillon.value.trim();
+  if (!nom) return;
+  articles.value.unshift({ id: crypto.randomUUID(), nom, qte: 1, faite: false });
+  brouillon.value = "";
+}
+watchEffect(() => localStorage.setItem("courses", JSON.stringify(articles.value)));
+</script>
+
+<template>
+  <input v-model="brouillon" @keyup.enter="ajouter" placeholder="Article" />
+  <ul><li v-for="a in restants" :key="a.id">{{ a.nom }}</li></ul>
+</template>
+\end{codeplain}
+
+\subsection{Svelte~5 (runes)~: le moins de code du march\'e}
+
+\begin{codeplain}
+<script>
+  let articles = $state(JSON.parse(localStorage.getItem("courses") ?? "[]"));
+  let brouillon = $state("");
+  const restants = $derived(articles.filter((a) => !a.faite));
+  $effect(() => localStorage.setItem("courses", JSON.stringify(articles)));
+
+  function ajouter() {
+    const nom = brouillon.trim();
+    if (!nom) return;
+    articles = [{ id: crypto.randomUUID(), nom, qte: 1, faite: false }, ...articles];
+    brouillon = "";
+  }
+</script>
+
+<input bind:value={brouillon} on:keydown={(e) => e.key === "Enter" && ajouter()} />
+<ul>{#each restants as a (a.id)}<li>{a.nom}</li>{/each}</ul>
+\end{codeplain}
+
+\section{Panorama honn\^ete}
+
+\begin{tabz}{lXlX}
+  \headrow \thd{Cadre} \& \thd{Id\'ee forte} \& \thd{Taille (gzipp\'ee, app. vide)} \& \thd{Doc} \\
+  \midrule
+  \link{React~19}{https://react.dev/} \& le plus d'emplois, \'ecosyst\`eme immense, rendu par fonction \& \$\approx\$45~Ko \& \url{https://react.dev/learn} \\
+  \link{Vue~3.5}{https://fr.vuejs.org/} \& la meilleure mont\'ee en charge du d\'ebutant au projet moyen, templates clairs \& \$\approx\$35~Ko \& \url{https://fr.vuejs.org/guide/introduction.html} \\
+  \link{Svelte~5 / SvelteKit}{https://svelte.dev/} \& compilateur, peu de code, performances par d\'efaut \& \$\approx\$7~Ko \& \url{https://learn.svelte.dev/} \\
+  \link{Solid}{https://www.solidjs.com/} \& signaux fins, syntaxe JSX, rapidit\'e maximale \& \$\approx\$8~Ko \& \url{https://docs.solidjs.com/} \\
+  \link{Qwik}{https://qwik.dev/} \& reprise d'hydratation~: ne charge que ce que l'utilisateur touche \& minuscule \& \url{https://qwik.dev/learn/} \\
+  \link{Angular~19+}{https://angular.dev/} \& tout int\'egr\'e (routes, HTTP, formulaires, DI), signals, standalone \& lourd mais complet \& \url{https://angular.dev/tutorials} \\
+  \link{Astro~5}{https://astro.build/} \& sites centr\'es contenu~: z\'ero JS par d\'efaut, \^ilots d'interactive \& 0~Ko \& \url{https://docs.astro.build/fr/getting-started/} \\
+  \link{HTMX}{https://htmx.org/} \& l'interactive dans les attributs HTML, le serveur renvoie du HTML \& 14~Ko \& \url{https://htmx.org/docs/} \\
+  \link{Lit}{https://lit.dev/} \& web components natifs et durables, multi-cadres \& \$\approx\$17~Ko \& \url{https://lit.dev/docs/} \\
+  \link{Alpine.js}{https://alpinejs.dev/} \& du \og ~jQuery propre~ \fg{} pour les petites pages \& \$\approx\$15~Ko \& \url{https://alpinejs.dev/start-here} \\
+  \link{jQuery}{https://jquery.com/} \& \`a conna\^itre pour maintenir l'existant, pas pour d\'emarrer \& 30~Ko \& \url{https://api.jquery.com/} \\
+\end{tabz}
+
+\subsection{Les briques transverses}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Besoin} \& \thd{Choix raisonnable en 2026} \& \thd{Lien} \\
+  \midrule
+  Routage SPA \& TanStack Router (typ\'e) ou react-router v7 \& \url{https://tanstack.com/router} \\
+  Donn\'ees serveur \& TanStack Query~: cache, retries, invalidation, \'etats \& \url{https://tanstack.com/query} \\
+  \'Etat client \& Zustand (l\'eger) ou le signal natif ; Redux Toolkit si grosse \'equipe \& \url{https://zustand.docs.pmnd.rs/} \\
+  Formulaires \& React Hook Form + zod (validation partag\'ee client/serveur) \& \url{https://react-hook-form.com/} \\
+  Styles \& CSS natif (variables, \verb|:has|, \verb|@layer|, \verb|container| queries) ou Tailwind~4 \& \url{https://tailwindcss.com/} \\
+  Composants UI \& shadcn/ui (copie le code, ne d\'epend pas d'une lib) \& \url{https://ui.shadcn.com/} \\
+  Animation \& \verb|element.animate()|, Motion (framer-motion), GSAP \& \url{https://motion.dev/} \\
+  Graphes/donn\'ees \& \link{D3}{https://d3js.org/}, \link{ECharts}{https://echarts.apache.org/}, \link{Chart.js}{https://www.chartjs.org/} \& \\
+\end{tabz}
+
+\section{Quand ne pas mettre de framework}
+
+\begin{itemize}
+  \item Site vitrine, blog, documentation, landing page~: \textbf{Astro} (ou du HTML + un peu de JS).
+  \item Page avec trois interactions~: HTML + 80 lignes de JS natif + \link{Alpine}{https://alpinejs.dev/}.
+  \item Backend qui rend du HTML (PHP, Java, Rails, Laravel)~: \link{HTMX}{https://htmx.org/}
+        ou \link{Hotwire/Turbo}{https://turbo.hotwired.dev/}~: tu gardes la simplicit\'e du serveur,
+        tu gagnes le confort du SPA. C'est une tendance lourde et saine.
+  \item Composant autonome r\'eutilisable dans n'importe quelle page~: un
+        \link{Web Component}{https://developer.mozilla.org/fr/docs/Web/API/Web\_components} natif.
+\end{itemize}
+
+\begin{note}
+Un framework se choisit sur trois crit\`eres~: la taille de l'\'equipe, la part d'interactive r\'eelle
+de l'interface, et la disponibilit\'e des comp\'etences sur le march\'e local. Pour un portfolio,
+React ou Vue maximisent les chances d'entretien~; pour un projet solo qui doit sortir vite,
+Svelte ou Astro gagnent.
+\end{note}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Initialise trois projets du m\^eme contenu (liste de courses)~: vanilla, Vue, React.
+        Compare le nombre de lignes, le poids du bundle (\verb|dist/|) et le temps de
+        d\'eveloppement~: \'ecris ton avis en dix lignes dans un \verb|ANALYSE.md|.
+  \item Sur le projet React~: remplace le \verb|useState| local par un store \verb|zustand|,
+        et ajoute une persistance via le middleware \verb|persist|.
+  \item Branche \link{TanStack~Query}{https://tanstack.com/query} sur une API r\'eelle~: g\`ere
+        \'etats \og ~chargement / erreur / vide~ \fg{}, mise en cache, invalidation apr\`es mutation.
+  \item Ajoute le routage~: routes \verb|/articles|, \verb|/articles/:id|, \verb|404|,
+        et un chargement diff\'er\'e (\verb|React.lazy| / \verb|defineAsyncComponent|) de la page d\'etail.
+  \item Migre un composant React existant vers un Web Component natif (\verb|customElements.define|)
+        et utilise-le dans une page HTML sans framework.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Vite --- \url{https://vite.dev/guide/}
+  \item React (nouvelle doc, excellente) --- \url{https://react.dev/learn}
+  \item Vue --- \url{https://fr.vuejs.org/guide/extras/composition-api-faq.html}
+  \item Svelte --- \url{https://svelte.dev/tutorial/} --- Astro --- \url{https://docs.astro.build/fr/core-concepts/overview/}
+  \item State of JS (sondage annuel, pour choisir sans se faire d'opinion fausse) --- \url{https://2024.stateofjs.com/}
+\end{itemize}
+\end{ressources}
+
+\index{Vite}\index{React}\index{Vue}\index{Svelte}\index{framework}

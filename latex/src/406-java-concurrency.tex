@@ -1,0 +1,294 @@
+% ============================================================================
+\chapter{Concurrence~: threads, synchronisation, virtual threads}
+\label{ch:java-concurrency}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Comprendre le mod\`ele m\'emoire Java~: ce qui est visible, dans quel ordre, et pourquoi.
+  \item Cr\'eer des t\^aches, les ex\'ecuter dans un pool, attendre, annuler, propager les erreurs.
+  \item Choisir le bon outil de synchronisation~: \texttt{synchronized}, lock, atomique,
+        file bloquante, \texttt{ConcurrentHashMap}.
+  \item Utiliser les threads virtuels (Java~21) et savoir quand ils remplacent un pool.
+  \item \'Ecrire du code concurrent testable et d\'ebogable.
+\end{itemize}
+\end{objectif}
+
+\section{Le mod\`ele, sans romantisme}
+
+Deux threads ex\'ecutent deux instructions~: rien ne garantit l'ordre d'interleaving, ni que la
+\'ecriture de l'un soit visible de l'autre, \emph{sauf} s'il existe une relation
+\textbf{happens-before}. Les points qui la cr\'eent~: lancer un thread (\verb|start|) se passe
+avant son ex\'ecution~; la fin d'un thread se passe avant que \verb|join| revienne~; une sortie de
+bloc \verb|synchronized| se passe avant l'entr\'ee du m\^eme moniteur~; un \verb|volatile write| avant
+le \verb|volatile read|~; la lib\'eration d'un \verb|Lock| avant son acquisition~; tout est transitif.
+
+\begin{codejava}
+static class CompteurCasse { int n; void incrementer() { n++; } }     // Jamais sur : lecture+ecriture non atomiques
+static class CompteurSur {
+    private int n;
+    synchronized void incrementer() { n++; }                     // verrou sur this
+    synchronized int valeur() { return n; }
+}
+static class CompteurAtomique {
+    private final java.util.concurrent.atomic.AtomicInteger n = new java.util.concurrent.atomic.AtomicInteger();
+    void incrementer() { n.incrementAndGet(); }
+    int valeur() { return n.get(); }
+}
+static class CompteurAdder {                                      // meilleur encore sous forte concurrence
+    private final java.util.concurrent.atomic.LongAdder n = new java.util.concurrent.atomic.LongAdder();
+    void incrementer() { n.increment(); }
+    long valeur() { return n.sum(); }
+}
+// Verdict : 4 threads x 10 millions d'incrementations -> CompteurCasse renvoie une valeur au hasard
+// (toujours <= 40M), CompteurSur ~140 ms, CompteurAtomique ~90 ms, LongAdder ~20 ms. A mesurer chez toi.
+
+// Le defaut de visibilit\'e le plus vicieux :
+class Travailleur extends Thread {
+    private boolean arrete = false;                       // PAS volatile : le compilateur peut hoister
+    public void run() { while (!arrete) { traiter(); } }
+    void stopper() { arrete = true; }                      // peut ne jamais etre vu !
+}
+// Corriger par : volatile, ou un Lock, ou une variable atomique, ou une queue bloquante.
+\end{codejava}
+
+\section{Trois fa\c{c}ons de lancer une t\^ache}
+
+\begin{codejava}
+// 1. Runnable/Thread : pour un programme d'exemple, jamais pour une application.
+var t = new Thread(() -> System.out.println("travail sur " + Thread.currentThread()), "worker-1");
+t.setDaemon(true); t.start(); t.join(java.time.Duration.ofSeconds(5));
+
+// 2. ExecutorService : un pool de threads de travail (la voie historique, reste pertinente)
+java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(
+        Runtime.getRuntime().availableProcessors(),
+        r -> { var th = new Thread(r, "metier-%d".formatted(CPT.incrementAndGet())); th.setDaemon(true); return th; });
+Future<Resultat> futur = pool.submit(() -> calculer());
+Resultat r = futur.get(30, java.util.concurrent.TimeUnit.SECONDS);   // TimeoutException, ExecutionException
+List<Future<Resultat>> lots = pool.invokeAll(taches);                 // tous, puis lire les futures
+Resultat premier = pool.invokeAny(taches);                            // le premier fini (annule les autres)
+pool.shutdown();
+if (!pool.awaitTermination(10, TimeUnit.SECONDS)) { pool.shutdownNow(); }
+
+// 3. Virtual threads (Java 21) : un thread par tache, pas de pool a dimensionner
+try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+    var futures = urls.stream()
+            .map(u -> executor.submit(() -> charger(u)))
+            .toList();
+    for (var f : futures) { traiter(f.get()); }           // bloquer est gratuit : le thread est virtuel
+}
+// Structured concurrency (preview Java 21-24, en cours de stabilisation) : le groupe meurt ensemble
+try (var scope = new java.util.concurrent.StructuredTaskScope.ShutdownOnFailure()) {
+    var user = scope.fork(() -> trouverUser(id));
+    var ordres = scope.fork(() -> trouverCommandes(id));
+    scope.joinUntil(java.time.Instant.now().plusSeconds(2)).throwOnFailure();
+    return new Vue(user.get(), ordres.get());
+}
+// Le pool reste utile quand : (a) le nombre de coeurs borne le CPU ; (b) tu dois limiter
+// l'acces a une ressource rare (pool JDBC = 10 connexions) ; (c) code base sur Java 17.
+\end{codejava}
+
+\subsection{CompletableFuture~: composer des \'etapes asynchrones}
+
+\begin{codejava}
+import java.util.concurrent.CompletableFuture;
+import static java.util.concurrent.CompletableFuture.*;
+
+// Creer
+CompletableFuture<Article> f1 = supplyAsync(() -> depot.trouver(id), pool);
+CompletableFuture<Article> f2 = completedFuture(article);
+CompletableFuture<Void> f3 = runAsync(() -> journaliser(), pool);
+
+// Chainer (les variantes "Async" repartent sur un executor ; sans suffixe, elles restent
+// sur le thread qui a termine l'etape precedente -- souvent ce qu'on veut)
+var chaine = supplyAsync(() -> trouverClient(id), pool)
+        .thenApply(client -> Facture.pour(client, panier))
+        .thenCompose(facture -> envoyerAsync(facture))            // etape asynchrone suivante
+        .thenAcceptAsync(envoyee -> log.info("facture {}", envoyee.numero()))
+        .exceptionally(ex -> { log.error("echec", ex); return null; })   // recuperation
+        .whenComplete((res, err) -> mesurer(res, err));                    // toujours execute
+
+// Combiner
+var lesDeux = thenCombine(fA, fB, (a, b) -> merge(a, b));
+var soitLUn = anyOf(fA, fB, fC).thenApply(o -> (Article) o);
+List<Article> tous = allOf(listeDeFutures.toArray(CompletableFuture[]::new))
+        .thenApply(v -> listeDeFutures.stream().map(CompletableFuture::join).toList()).join();
+// Aversion : ne JAMAIS laisser un CompletableFuture sans terminaison (ni exceptionally) ;
+// ne pas bloquer (.join()) dans une chaine qui tourne sur le pool commun : tu cr\'ees un deadlock.
+
+// Timeout (Java 9+)
+Article a = f1.orTimeout(2, TimeUnit.SECONDS)
+              .completeOnException(null, new ArticleParDefaut())   // repli gracieux
+              .join();
+// Helper que j'aime pour une liste de futures -> une future de liste :
+static <T> CompletableFuture<List<T>> tous(Collection<CompletableFuture<T>> fs) {
+    return CompletableFuture.allOf(fs.toArray(CompletableFuture[]::new))
+            .thenApply(v -> fs.stream().map(CompletableFuture::join).toList());
+}
+\end{codejava}
+
+\section{Synchronisation~: les outils, par taille de probl\`eme}
+
+\begin{codejava}
+// 1. synchronized : le verrou intrinseque (simple, correct, et suffisant 8 fois sur 10)
+synchronized (this) {                 // verrou sur l'objet ; ou methode synchronized (eviter : trop large)
+    if (!init) { charger(); init = true; }
+}
+static synchronized void globale() { }      // verrou sur la Class -- attention aux conflits mondes
+
+// 2. Lock : quand tu as besoin de tryLock, d'un delai, de deux conditions, ou d'un verrou equitable
+var lock = new java.util.concurrent.locks.ReentrantReadWriteLock(true);
+lock.readLock().lock(); try { return lecture(); } finally { lock.readLock().unlock(); }
+lock.writeLock().lock(); try { ecrire(); } finally { lock.writeLock().unlock(); }
+var tryLock = new java.util.concurrent.locks.ReentrantLock();
+if (tryLock.tryLock(50, TimeUnit.MILLISECONDS)) { try { critique(); } finally { tryLock.unlock(); } }
+
+// 3. Sections critiques atomiques : le CAS et ses wrappers
+var valeur = new java.util.concurrent.atomic.AtomicReference<>(initial);
+valeur.updateAndGet(courante -> courante.fusionner(nouveau));     // CAS en boucle interne
+var map = new java.util.concurrent.ConcurrentHashMap<Long, Compteur>();
+map.computeIfAbsent(cle, k -> new Compteur()).incrementer();      // atomique, sans verrou global
+map.merge(cle, 1L, Long::sum);
+
+// 4. Communication entre threads : une file bloquante remplace 90 % des wait/notify
+var tampon = new java.util.concurrent.ArrayBlockingQueue<Task>(64);   // BORNEE = backpressure
+producteur: while (actif) { tampon.put(tache()); }                  // bloque si plein
+consommateur: while (true) { var t = tampon.poll(1, TimeUnit.SECONDS); if (t == null) break; traiter(t); }
+tampon.offer(t, 200, TimeUnit.MILLISECONDS);                        // refuse au lieu de bloquer a l'infini
+var barriere = new java.util.concurrent.Semaphore(8);               // N acces simultanes (limite d'API)
+barriere.acquire(); try { appelExterne(); } finally { barriere.release(); }
+var latch = new java.util.concurrent.CountDownLatch(3);            // attendre 3 evenements
+var cycle = new java.util.concurrent.CyclicBarrier(4);              // demarrage synchronise
+// 5. wait/notify a l'ancienne : seulement pour comprendre le code des autres
+synchronized (monitor) { while (!condition) { monitor.wait(500); } }   // le while est OBLIGATOIRE
+synchronized (monitor) { condition = true; monitor.notifyAll(); }
+\end{codejava}
+
+\begin{tablez}[p{0.32\textwidth}X]
+  \headrow \thd{Probl\`eme} \& \thd{Solution} \\
+  \midrule
+  compter / accumuler entre threads \& \verb|LongAdder|, \verb|AtomicInteger| \\
+  cache partag\'e \& \verb|ConcurrentHashMap| + \verb|computeIfAbsent| \\
+  limitation de concurrence (N appels simultan\'es) \& \verb|Semaphore| \\
+  phase de pr\'eparation commune \& \verb|CyclicBarrier|, \verb|Phaser| \\
+  attente d'un r\'esultat \& \verb|CompletableFuture|, \verb|ExecutorService.submit| \\
+  producteur/consommateur \& \verb|BlockingQueue| born\'ee \\
+  arr\^et coop\'eratif d'une t\^ache \& \verb|Thread.interrupt()| + test de l'interruption \\
+  \og ~une seule fois par JVM~ \fg{} \& \verb|enum Holder|, \verb|ClassValue|, \verb|volatile|+double test \\
+  t\^ache planifi\'ee \& \verb|ScheduledExecutorService| (et \verb|Executors.newScheduledThreadPool|) \\
+  blocage mutuel \& \textbf{ordre global d'acquisition} des verrous, timeout, aucune entr\'ee utilisateur sous verrou \\
+\end{tablez}
+
+\section{Threads virtuels~: ce que \c{c}a change vraiment (Java 21)}
+
+Un thread virtuel est une t\^ache l\'eg\`ere manag\'ee par la JVM, pos\'ee sur un petit nombre de threads
+porteurs. Co\^ut de cr\'eation~: l'ordre du microseconde, m\'emoire~: quelques kilo-octets. On peut en
+cr\'eer un million. Quand il bloque sur une E/S (socket, fichier, \verb|sleep|), il se d\'epose et
+lib\`ere le porteur~: le d\'ebit d'une application \og ~une requ\^ete = beaucoup d'E/S~ \fg{} explose sans
+changer une ligne de logique.
+
+\begin{codejava}
+// 1. Lancer une tache
+Thread.ofVirtual().name("tache-", 0).start(() -> traiter());
+// 2. Executor dedie (le motif d'une servlet "un thread par requete")
+try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+    sources.forEach(url -> executor.submit(() -> { var html = HttpClient.newHttpClient()
+            .send(HttpRequest.newBuilder(URI.create(url)).build(), BodyHandlers.ofString());
+        return html.body().length(); }));
+}    // le try-with-resources attend la fin de toutes les taches
+// 3. Serveur HTTP : un thread virtuel par connexion -- la meme ecriture que le code bloquant
+try (var serveur = HttpServer.create(new InetSocketAddress(8080), 0)) {
+    serveur.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
+    serveur.createContext("/", e -> {
+        try { e.sendResponseHeaders(200, 5); e.getResponseBody().write("hello".getBytes()); }
+        catch (IOException ex) { throw new UncheckedIOException(ex); }
+        finally { e.close(); }
+    });
+    serveur.start();
+}
+// 4. Fixed : les virtual threads n'ont PAS de pool ; si tu dois limiter (API externe, connexions
+//    BDD), utilise un Semaphore -- pas newFixedThreadPool(N) sur des virtual.
+
+// Ce que ca ne change pas :
+//  - le code CPU-bound ne devient pas plus rapide (toujours nb coeurs) ;
+//  - synchronized qui bloque longtemps epingle le thread porteur : remplace par ReentrantLock
+//    dans les sections critiques longues (corrige en 24 via JEP 491) ;
+//  - ca ne remplace pas CompletableFuture quand tu veux composer des resultats ;
+//  - un thread local par tache legere = des millions d'objets : prefere les Scoped Values (JEP 446+).
+Thread.sleep(Duration.ofSeconds(1));           // desormais aussi efficace sur un instant que sur un thread
+\end{codejava}
+
+\section{D\'eboguer et mesurer une application concurrente}
+
+\begin{terminal}
+jps -l                                  # lister les JVM en cours
+jstack <pid> > threads.txt              # l'etat de TOUS les threads : cherche "BLOCKED", "deadlock"
+jcmd <pid> Thread.print
+jcmd <pid> VM.native_memory summary      # (avec -XX:NativeMemoryTracking=summary)
+jstat -gcutil <pid> 1000                 # activite GC en direct
+jmap -histo:live <pid> | head -20
+# Outils graphiques : JDK Mission Control (gratuit), async-profiler (flammes), VisualVM
+async-profiler -d 30 -f cpu.html <pid>
+\end{terminal}
+
+\etape{Recettes anti-race}
+\begin{itemize}
+  \item \textbf{Immutabilit\'e par d\'efaut}~: une donn\'ee qui ne change pas ne se synchronise pas.
+  \item \textbf{Confine}~: un objet mutable appartient \`a un seul thread (ou une seule
+        section critique explicite)~; passe des copies entre threads, pas des r\'ef\'erences.
+  \item \textbf{Une seule voie de mutation}~: une file + un worker, ou un
+        \verb|ConcurrentHashMap| + op\'erations atomiques -- jamais les deux m\'elang\'es.
+  \item \textbf{Timeouts partout}~: un appel r\'eseau sans timeout est un thread bloqu\'e pour
+        l'\'eternit\'e, donc un pool \'epuis\'e, donc un site mort.
+  \item \textbf{Backpressure explicite}~: une file born\'ee qui refuse (429~HTTP, rejet, m\'etrique).
+  \item \textbf{Test}~: \verb|ExecutorService| remplac\'e par un ex\'ecuteur direct dans les tests
+        (d\'eterminisme)~; \link{jcstress}{https://github.com/openjdk/jcstress} pour les
+        micro-tests de m\'emoire~; \link{ThreadSanitizer}{https://github.com/google/sanitizers} (natif
+        en JDK~24+, \verb+-XX:+UseTSO+) ; \verb|-agentlib:jdwp| pour les points d'arr\^et multi-threads.
+\end{itemize}
+
+\begin{tablez}[p{0.34\textwidth}X]
+  \headrow \thd{Sympt\^ome} \& \thd{Cause la plus probable} \\
+  \midrule
+  L'application se fige, CPU \`a 0 \& deadlock (ordre d'acquisition incoh\'erent) ou verrou jamais lib\'er\'e \\
+  CPU \`a 100 \% sans travail \& boucle d'attente sans \verb|wait|/\verb|sleep| (spin) \\
+  R\'esultats parfois faux \& champ partag\'e non volatile sans verrou~; \verb|HashMap| mut\'ee \`a deux threads \\
+  Pool \'epuis\'e, timeouts en cha\^ine \& appels bloquants sans timeout~; ou \verb|join| dans le pool commun \\
+  \verb|OutOfMemoryError: unable to create native thread| \& threads cr\'e\'es sans limite~: utilise un pool ou des virtuels \\
+  Lent au d\'emarrage, rapide ensuite \& JIT froid~: profile apr\`es \'echauffement (JMH, \verb|-XX:TieredStopAtLevel|) \\
+\end{tablez}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris un tableau \verb|Rates| sur \verb|ConcurrentHashMap| qui compte des \'ev\'enements par
+        minute~: lecture du taux glissant~; puis la version avec \verb|LongAdder|~; puis compare
+        avec un \verb|synchronized| (10 threads, 10\textsuperscript{6} writes chacun).
+  \item Construis un producteur/consommateur avec \verb|ArrayBlockingQueue|~: capacit\'e 100,
+        arr\^et propre (poison pill ou interrupt), mesure du d\'ebit, et un indicateur de file pleine.
+  \item T\'el\'echarge 1 000 URLs~: (a) s\'equentiel~; (b) pool fixe de 20~; (c) virtual threads
+        illimit\'es~; (d) virtual threads + \verb|Semaphore(20)|. Rapporte les dur\'ees et explique
+        chaque chiffre~: celui-ci est l'exercice qui fait comprendre la diff\'erence latence/d\'ebit.
+  \item \'Ecris un cache TTL thread-safe~: \verb|computeIfAbsent|, \'eviction par access
+        (\verb|LinkedHashMap| + \verb|removeEldestEntry|) ou horodatage~; 20 tests~: dont deux
+        tests de concurrence (barrier + compteurs atomiques v\'erifiant qu'une valeur n'est calcul\'ee
+        qu'une fois).
+  \item Reproduis volontairement un deadlock \`a deux verrous~: observe-le avec \verb|jstack|, puis
+        corrige-le par l'ordre global, puis par un \verb|tryLock| avec timeout~; garde la capture
+        dans ton carnet.
+  \item \'Ecris une impl\'ementation de \verb|RateLimiter| \og ~jeton~ \fg{} avec \verb|AtomicLong| et
+        horodatage (pas de \verb|synchronized|), puis un test qui v\'erifie que 100 threads
+        obtenants au plus 10 jetons/seconde pendant 5 secondes.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Tutorial officiel Concurrency --- \url{https://dev.java/learn/concurrency/}
+  \item JEP 444 (virtual threads) --- \url{https://openjdk.org/jeps/444} --- Structured concurrency --- \url{https://openjdk.org/jeps/453}
+  \item \emph{Java Concurrency in Practice} (Brian Goetz et al.) --- toujours le meilleur livre du domaine
+  \item JCStress --- \url{https://github.com/openjdk/jcstress} --- Async-profiler --- \url{https://github.com/async-profiler/async-profiler}
+  \item JDK Mission Control --- \url{https://www.oracle.com/java/technologies/jdk-mission-control.html}
+\end{itemize}
+\end{ressources}
+
+\index{threads}\index{synchronized}\index{CompletableFuture}\index{virtual threads}

@@ -1,0 +1,493 @@
+% ============================================================================
+\chapter{PHP et MySQL~: PDO, requ\^etes pr\'epar\'ees, transactions, migrations}
+\label{ch:php-db}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Concevoir un sch\'ema correct (types, cl\'es, index) et le versionner avec des migrations.
+  \item Utiliser PDO parfaitement~: requ\^etes pr\'epar\'ees, transactions, modes de r\'ecup\'eration,
+        erreurs en exception.
+  \item \'Ecrire les requ\^etes d'une vraie application~: CRUD, pagination, agr\'egats, jointures.
+  \item Comprendre pourquoi une requ\^ete est lente et la r\'eparer avec \verb|EXPLAIN|.
+  \item \'Ecrire un d\'ep\^ot (repository) simple, testable, sans ORM, puis savoir ce qu'un ORM t'apporte.
+\end{itemize}
+\end{objectif}
+
+\section{Installer, cr\'eer la base, la sch\'ematiser}
+
+\begin{terminal}
+# MariaDB locale (ou le conteneur du chapitre 1)
+sudo apt install -y mariadb-server && sudo mariadb-secure-installation
+mysql -u root -p
+CREATE DATABASE blog CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'blog'@'localhost' IDENTIFIED BY 'un-mot-de-passe-long';
+GRANT SELECT, INSERT, UPDATE, DELETE ON blog.* TO 'blog'@'localhost';
+-- Surtout PAS GRANT ALL ni root pour une application.
+FLUSH PRIVILEGES;
+\end{terminal}
+
+\begin{codesql}
+-- schema/001_init.sql --- un schema qui tient la route
+CREATE TABLE utilisateurs (
+  id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  email         VARCHAR(255)    NOT NULL,
+  mot_de_passe  VARCHAR(255)    NOT NULL,          -- hash argon2 : ~97 caracteres, ne troncne pas a 60
+  pseudo        VARCHAR(40)     NOT NULL,
+  role          ENUM('lecteur','auteur','redacteur','admin') NOT NULL DEFAULT 'lecteur',
+  actif         TINYINT(1)      NOT NULL DEFAULT 1,
+  tentatives    TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  verrou_jusqua DATETIME        NULL,
+  cree_le       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  maj_le        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_utilisateur_email (email),
+  KEY idx_utilisateur_role (role, actif)
+) ENGINE=InnoDB;
+
+CREATE TABLE articles (
+  id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  slug        VARCHAR(191)    NOT NULL,
+  titre       VARCHAR(191)    NOT NULL,
+  corps       MEDIUMTEXT      NOT NULL,
+  statut      ENUM('brouillon','publie','archive') NOT NULL DEFAULT 'brouillon',
+  auteur_id   BIGINT UNSIGNED NOT NULL,
+  vues        INT UNSIGNED    NOT NULL DEFAULT 0,
+  publie_le   DATETIME        NULL,
+  cree_le     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  maj_le      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  version     INT UNSIGNED    NOT NULL DEFAULT 1,      -- controle optimiste
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_article_slug (slug),
+  KEY idx_article_liste (statut, publie_le DESC),
+  CONSTRAINT fk_article_auteur FOREIGN KEY (auteur_id) REFERENCES utilisateurs(id)
+    ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT chk_article_titre CHECK (CHAR_LENGTH(titre) BETWEEN 3 AND 191)
+) ENGINE=InnoDB;
+
+CREATE TABLE tags (id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT, nom VARCHAR(40) NOT NULL,
+  PRIMARY KEY (id), UNIQUE KEY uq_tag_nom (nom)) ENGINE=InnoDB;
+
+CREATE TABLE article_tag (
+  article_id BIGINT UNSIGNED NOT NULL,
+  tag_id     SMALLINT UNSIGNED NOT NULL,
+  PRIMARY KEY (article_id, tag_id),
+  CONSTRAINT fk_at_article FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  CONSTRAINT fk_at_tag     FOREIGN KEY (tag_id)     REFERENCES tags(id)     ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_article_recherche ON articles ((CAST(corps AS CHAR(255)))) ;  -- astuce ; prefere FULLTEXT :
+ALTER TABLE articles ADD FULLTEXT KEY ft_article (titre, corps);
+-- SELECT * FROM articles WHERE MATCH(titre, corps) AGAINST ('php pdo' IN NATURAL LANGUAGE MODE);
+\end{codesql}
+
+\etape{R\`egles de sch\'ema qui t'\'epargnent des ann\'ees de douleur}
+\begin{enumerate}
+  \item \verb|utf8mb4| \emph{partout} (les \'emojis et l'arabe passent, contrairement \`a \verb|utf8mb3|).
+  \item Une cl\'e primaire \verb|BIGINT UNSIGNED AUTO\_INCREMENT| partout, ou un UUIDv7 stock\'e en
+        \verb|BINARY(16)| (meilleure localit\'e). Un id \og ~email~ \fg{} ne se met pas \`a jour~: ne le fais pas.
+  \item Dates en \verb|DATETIME| \textbf{UTC}, jamais \verb|TIMESTAMP| (limit\'e \`a 2038 sur vieux syst\`emes,
+        et transforme silencieusement selon le fuseau de la session).
+  \item \verb|NOT NULL| par d\'efaut~; \verb|NULL| seulement quand \og ~inconnu~ \fg{} est un \'etat m\'etier
+        (sinon \verb|COUNT(col)|, \verb|!=|, \verb|NOT IN| te trahissent).
+  \item Un index pour chaque colonne de \verb|WHERE|/\verb|JOIN|/\verb|ORDER BY| fr\'equent, et des
+        index \emph{compos\'es} dans le bon ordre (\'egalit\'e d'abord, tri ensuite).
+  \item Migrations versionn\'ees, jamais d'\verb|ALTER| \`a la main en production.
+\end{enumerate}
+
+\section{PDO~: la seule API de base de donn\'ees \`a apprendre en PHP}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+function creerPdo(): PDO
+{
+    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+        getenv('DB_HOST') ?: '127.0.0.1', (int) (getenv('DB_PORT') ?: 3306), getenv('DB_NAME') ?: 'blog');
+    $pdo = new PDO($dsn, (string) getenv('DB_USER'), (string) getenv('DB_PASS'), [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,               // exceptions, jamais des silences
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,                        // vraies requetes preparees (securite + types)
+        PDO::ATTR_STRINGIFY_FETCHES => false,                      // int restent int
+        PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,                  // refuse "1; DROP TABLE"
+        PDO::MYSQL_ATTR_INIT_COMMAND => "SET time_zone = '+00:00', sql_mode = 'STRICT_ALL_TABLES'",
+        PDO::ATTR_PERSISTENT => false,                              // true seulement si tu sais pourquoi
+    ]);
+    return $pdo;
+}
+$pdo = creerPdo();
+
+// ---- INSERT : prepare + execute. JAMAIS de concatenation.
+$sql = 'INSERT INTO articles (slug, titre, corps, statut, auteur_id, publie_le)
+        VALUES (:slug, :titre, :corps, :statut, :auteur, :publie_le)';
+$stmt = $pdo->prepare($sql);
+$stmt->bindValue('slug', $slug, PDO::PARAM_STR);
+$stmt->bindValue('titre', $titre, PDO::PARAM_STR);
+$stmt->bindValue('corps', $corps, PDO::PARAM_STR);
+$stmt->bindValue('statut', 'publie', PDO::PARAM_STR);
+$stmt->bindValue('auteur', $auteurId, PDO::PARAM_INT);
+$stmt->bindValue('publie_le', $publieLe?->format('Y-m-d H:i:s'), $publieLe === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+$stmt->execute();
+$id = (int) $pdo->lastInsertId();
+$modifies = $stmt->rowCount();
+
+// Variante courte (valeurs positionnees) :
+$pdo->prepare('INSERT INTO tags (nom) VALUES (?)')->execute([mb_strtolower($nom)]);
+
+// Upsert MySQL / PostgreSQL (deux syntaxes differentes !) :
+$pdo->prepare('INSERT INTO utilisateurs (email, pseudo) VALUES (?, ?)
+               ON DUPLICATE KEY UPDATE pseudo = VALUES(pseudo)')->execute([$email, $pseudo]);
+// Postgres : ON CONFLICT (email) DO UPDATE SET pseudo = EXCLUDED.pseudo
+
+// ---- SELECT : les quatre facons de recuperer
+$un = $pdo->query('SELECT id, titre FROM articles WHERE id = 42')->fetch();                    // array|false
+$un = $pdo->prepare('SELECT id, titre FROM articles WHERE slug = ?'); $un->execute([$slug]); $article = $un->fetch();
+$ligne = $un->fetch(PDO::FETCH_NUM);       // indexee par position
+$objet = $un->fetch(PDO::FETCH_OBJ);      // stdClass
+ typed = $un->setFetchMode(PDO::FETCH_CLASS, Article::class);
+$cartographie = function (array $l): Article { return Article::deLigne($l); };                  // LA bonne habitude
+foreach ($pdo->query('SELECT * FROM articles WHERE statut = "publie"') as $l) { $liste[] = $cartographie($l); }
+$tous = $pdo->query('SELECT id, titre FROM articles')->fetchAll(PDO::FETCH_KEY_PAIR);           // id => titre
+$colonne = $pdo->query('SELECT slug FROM articles')->fetchAll(PDO::FETCH_COLUMN);
+$compte = (int) $pdo->query('SELECT COUNT(*) FROM articles')->fetchColumn();
+
+// ---- UPDATE / DELETE : le WHERE est obligatoire, et limite
+$aff = $pdo->prepare('UPDATE articles SET titre = ?, version = version + 1 WHERE id = ? AND version = ?');
+$aff->execute([$titre, $id, $versionAttendue]);
+if ($aff->rowCount() === 0) { throw new ConflitModification('L\'article a ete modifie entre-temps.'); }
+$pdo->prepare('DELETE FROM articles WHERE id = ? AND auteur_id = ?')->execute([$id, $userId]);  // autorisation dans la requete
+
+// ---- Parametres multiples dynamiques (IN (...)) : generer les marqueurs, pas la valeur
+$ids = [1, 5, 9];
+$marqueurs = implode(',', array_fill(0, count($ids), '?'));
+$rows = $pdo->prepare("SELECT id, titre FROM articles WHERE id IN ($marqueurs)")->execute($ids)->fetchAll();
+
+// ---- LIMIT / OFFSET : pas de parametre possible (ce sont des entiers : cast)
+$limite = max(1, min(100, (int) $page->taille));
+$decalage = max(0, (int) $page->decalage);
+$rows = $pdo->prepare("SELECT * FROM articles ORDER BY publie_le DESC LIMIT {$limite} OFFSET {$decalage}")->fetchAll();
+\end{codephp}
+
+\begin{piege}
+\textbf{Le pi\`ege PHP le plus co\^uteux.} Une clause \verb|LIKE '\%motif\%'| avec une valeur
+contenant \verb|\%| ou \verb|\_| doit \^etre \'echapp\'ee (\verb|addcslashes(\$q, '\%\_\\')|), sinon
+\og ~100\,\%~ \fg{} devient un joker. Et surtout~: un \verb|LIMIT|/\verb|ORDER BY| \emph{ne peut pas}
+venir d'un param\`etre de requ\^ete pr\'epar\'ee~; ce sont les deux seuls endroits o\`u tu construis
+la SQL~: donc liste blanche absolue (cf. \cref{ch:js-secu}).
+\end{piege}
+
+\section{Transactions~: la consistance, pas le luxe}
+
+\begin{codephp}
+<?php
+// Exemple reel : muter un solde + ecrire une ecriture comptable, ou transf\'erer entre comptes.
+function transferer(PDO $pdo, int $de, int $vers, int $centimes): void
+{
+    if ($centimes <= 0) { throw new InvalidArgumentException('Montant doit etre positif.'); }
+    $pdo->beginTransaction();
+    try {
+        // verrouillage preventif : SELECT ... FOR UPDATE (InnoDB seulement)
+        $sel = $pdo->prepare('SELECT id, solde FROM comptes WHERE id IN (?, ?) ORDER BY id FOR UPDATE');
+        $sel->execute([$de, $vers]);
+        $comptes = $sel->fetchAll(PDO::FETCH_KEY_PAIR);
+        if (!isset($comptes[$de], $comptes[$vers])) { throw new RuntimeException('compte inexistant'); }
+        if ($comptes[$de] < $centimes) { throw new RuntimeException('solde insuffisant'); }
+
+        $pdo->prepare('UPDATE comptes SET solde = solde - ? WHERE id = ?')->execute([$centimes, $de]);
+        $pdo->prepare('UPDATE comptes SET solde = solde + ? WHERE id = ?')->execute([$centimes, $vers]);
+        $ins = $pdo->prepare('INSERT INTO ecritures (compte_id, montant, contrepartie, cree_le) VALUES (?, ?, ?, NOW())');
+        $ins->execute([$de, -$centimes, $vers]);
+        $ins->execute([$vers, $centimes, $de]);
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+// Le patron "transaction imbriquee sure" : savepoints
+function transaction(PDO $pdo, callable $travail): mixed
+{
+    static $profondeur = 0;
+    if ($profondeur++ === 0) { $pdo->beginTransaction(); } else { $pdo->exec('SAVEPOINT t' . $profondeur); }
+    try {
+        $r = $travail($pdo);
+        $profondeur === 1 ? $pdo->commit() : $pdo->exec('RELEASE SAVEPOINT t' . $profondeur);
+        return $r;
+    } catch (Throwable $e) {
+        $profondeur === 1 ? $pdo->rollBack() : $pdo->exec('ROLLBACK TO SAVEPOINT t' . $profondeur);
+        throw $e;
+    } finally {
+        $profondeur--;
+    }
+}
+
+// Insertions en masse : une transaction + reuses la meme requete preparee = 50 a 100x plus rapide
+$t0 = microtime(true);
+$pdo->beginTransaction();
+$ins = $pdo->prepare('INSERT INTO logs (niveau, message, cree_le) VALUES (?, ?, NOW())');
+foreach ($lignes as $l) { $ins->execute([$l['niveau'], $l['message']]); }
+$pdo->commit();
+printf("%d lignes en %.2f s\n", count($lignes), microtime(true) - $t0);
+\end{codephp}
+
+\section{Paginer, agr\'eger, joindre~: les requ\^etes du quotidien}
+
+\begin{codesql}
+-- 1. Pagination avec total (le "SELECT SQL_CALC_FOUND_ROWS" est mort depuis MySQL 8)
+SELECT COUNT(*) AS total FROM articles WHERE statut = 'publie';
+SELECT id, slug, titre, publie_le FROM articles
+WHERE statut = 'publie'
+ORDER BY publie_le DESC, id DESC
+LIMIT 20 OFFSET 40;
+
+-- 2. Pagination par curseur (la seule qui reste rapide a 100 000 pages)
+SELECT id, slug, titre FROM articles
+WHERE (publie_le, id) < ('2026-01-31 10:00:00', 4241)
+ORDER BY publie_le DESC, id DESC LIMIT 20;
+
+-- 3. Joindre les tags sans dupliquer les lignes (GROUP_CONCAT)
+SELECT a.id, a.titre, GROUP_CONCAT(t.nom ORDER BY t.nom SEPARATOR ',') AS tags
+FROM articles a
+LEFT JOIN article_tag at ON at.article_id = a.id
+LEFT JOIN tags t ON t.id = at.tag_id
+WHERE a.statut = 'publie'
+GROUP BY a.id, a.titre
+ORDER BY a.publie_le DESC
+LIMIT 20;
+
+-- 4. Agr\'egats par auteur avec et sans articles (LEFT JOIN + COALESCE)
+SELECT u.id, u.pseudo,
+       COUNT(a.id) AS nb,
+       COALESCE(SUM(a.vues), 0) AS vues,
+       MAX(a.publie_le) AS dernier
+FROM utilisateurs u
+LEFT JOIN articles a ON a.auteur_id = u.id AND a.statut = 'publie'
+WHERE u.actif = 1
+GROUP BY u.id, u.pseudo
+HAVING nb > 3
+ORDER BY vues DESC
+LIMIT 10;
+
+-- 5. Top N par groupe (fenetres : MySQL 8+, MariaDB 10.2+, Postgres partout)
+SELECT * FROM (
+  SELECT a.*, ROW_NUMBER() OVER (PARTITION BY auteur_id ORDER BY vues DESC) AS rn
+  FROM articles a WHERE statut = 'publie'
+) x WHERE x.rn <= 3;
+
+-- 6. Recherche full text + pertinence
+SELECT id, titre, MATCH(titre, corps) AGAINST (:q IN BOOLEAN MODE) AS score
+FROM articles WHERE MATCH(titre, corps) AGAINST (:q IN BOOLEAN MODE) > 0.1
+ORDER BY score DESC LIMIT 20;
+
+-- 7. EXPLAIN : l'outil qui repond a "pourquoi c'est lent"
+EXPLAIN ANALYZE SELECT * FROM articles WHERE statut = 'publie' ORDER BY publie_le DESC LIMIT 20;
+-- regarde : type (const/range/ref/ALL), key, rows, "Using filesort", "Using temporary"
+SHOW INDEX FROM articles; SHOW FULL COLUMNS FROM articles;
+\end{codesql}
+
+\begin{note}
+Deux index suffisent pour la page liste d'un blog~: un index compos\'e
+\verb|(statut, publie\_le DESC)| pour le filtre+tri, et \verb|UNIQUE(slug)| pour la page d\'etail.
+Si \verb|EXPLAIN| affiche \verb|type: ALL| (scan complet) sur une table de plus de 10 000 lignes,
+ton probl\`eme n'est pas le code PHP~: il est dans l'index.
+\end{note}
+
+\section{Le d\'ep\^ot~: la couche qui prot\`ege le reste du code}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+final class DepotArticles
+{
+    public function __construct(private readonly PDO $pdo) {}
+
+    public function parId(int $id): ?Article
+    {
+        $stmt = $this->pdo->prepare(
+            'SELECT a.*, u.pseudo AS auteur_pseudo, u.email AS auteur_email
+             FROM articles a JOIN utilisateurs u ON u.id = a.auteur_id
+             WHERE a.id = ? LIMIT 1'
+        );
+        $stmt->execute([$id]);
+        $l = $stmt->fetch();
+        return $l === false ? null : $this->hydrater($l);
+    }
+
+    /** @return array{articles: Article[], total: int, page: int, pages: int} */
+    public function pageListe(?Statut $statut, string $recherche = '', int $page = 1, int $taille = 20): array
+    {
+        [$where, $args] = $this->contruireFiltres($statut, $recherche);
+        $taille = max(1, min(100, $taille));
+        $page = max(1, $page);
+
+        $total = (int) $this->scalar("SELECT COUNT(*) FROM articles a {$where}", $args);
+        $sql = "SELECT a.*, u.pseudo AS auteur_pseudo, u.email AS auteur_email
+                 FROM articles a JOIN utilisateurs u ON u.id = a.auteur_id
+                 {$where}
+                 ORDER BY COALESCE(a.publie_le, a.cree_le) DESC, a.id DESC
+                 LIMIT {$taille} OFFSET " . (($page - 1) * $taille);
+        $lignes = $this->all($sql, $args);
+
+        return [
+            'articles' => array_map($this->hydrater(...), $lignes),
+            'total' => $total,
+            'page' => $page,
+            'pages' => max(1, intdiv($total + $taille - 1, $taille)),
+        ];
+    }
+
+    public function creer(Article $a): Article
+    {
+        $this->pdo->prepare('INSERT INTO articles (slug, titre, corps, statut, auteur_id, publie_le) VALUES (?,?,?,?,?,?)')
+            ->execute([$a->slug(), $a->titre(), $a->corps(), $a->statut()->value, $a->auteur()->id(), $a->publieLe()?->format('Y-m-d H:i:s')]);
+        return $a->avecId((int) $this->pdo->lastInsertId());
+    }
+
+    public function ajouterTag(int $articleId, string $tag): void
+    {
+        $this->pdo->prepare('INSERT INTO tags (nom) VALUES (?) ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)')
+                  ->execute([mb_strtolower($tag)]);
+        $tagId = (int) $this->pdo->lastInsertId();
+        $this->pdo->prepare('INSERT IGNORE INTO article_tag (article_id, tag_id) VALUES (?, ?)')
+                  ->execute([$articleId, $tagId]);
+    }
+
+    /** @return array{0:string,1:array} */
+    private function construireFiltres(?Statut $statut, string $recherche): array
+    {
+        $conditions = []; $args = [];
+        if ($statut !== null) { $conditions[] = 'a.statut = ?'; $args[] = $statut->value; }
+        if ($recherche !== '') {
+            $conditions[] = '(a.titre LIKE ? OR a.corps LIKE ?)';
+            $q = '%' . addcslashes(mb_strtolower($recherche), '%_\\') . '%';
+            array_push($args, $q, $q);
+        }
+        return [$conditions === [] ? '' : 'WHERE ' . implode(' AND ', $conditions), $args];
+    }
+
+    /** Raccourcis de lecture (le trait PdoPratique, plus bas). */
+    private function all(string $sql, array $args = []): array
+    { $s = $this->pdo->prepare($sql); $s->execute($args); return $s->fetchAll(); }
+    private function scalar(string $sql, array $args = []): mixed
+    { $s = $this->pdo->prepare($sql); $s->execute($args); return $s->fetchColumn(); }
+
+    private function hydrater(array $l): Article { /* ... cf. chapitre precedent */ }
+}
+\end{codephp}
+
+\begin{note}
+Ce que j'ai \'ecrit ci-dessus \og ~\verb|->tap(...)|~ \fg{} et \og ~\verb|executeRet(...)|~ \fg{} n'existe pas en PDO~:
+c'est une micro-extension que j'aime ajouter~:
+
+\begin{codephp}
+trait PdoPratique
+{
+    public function run(PDOStatement $s, array $args = []): PDOStatement { $s->execute($args); return $s; }
+    public function all(PDOStatement $s, array $args = []): array { $s->execute($args); return $s->fetchAll(); }
+    public function one(PDOStatement $s, array $args = []): array|false { $s->execute($args); return $s->fetch(); }
+    public function scalar(PDOStatement $s, array $args = []): mixed { $s->execute($args); return $s->fetchColumn(); }
+}
+\end{codephp}
+Ces quatre m\'ethodes suppriment la moiti\'e du bruit de PDO et rendent les d\'ep\^ots lisibles.
+\end{note}
+
+\section{Migrations~: le fichier qui fait \og ~marche~ \fg{} en production}
+
+\begin{terminal}
+composer require --dev robmorgan/phinx        # ou doctrine/migrations, ou phinx-like maison
+vendor/bin/phinx init
+vendor/bin/phinx create CreateArticles
+vendor/bin/phinx migrate -e development
+vendor/bin/phinx rollback -e development
+vendor/bin/phinx status
+\end{terminal}
+
+\begin{codephp}
+<?php
+use Phinx\Migration\AbstractMigration;
+
+final class CreateArticles extends AbstractMigration
+{
+    public function up(): void
+    {
+        $t = $this->table('articles', ['collation' => 'utf8mb4_unicode_ci']);
+        $t->addColumn('slug', 'string', ['limit' => 191])
+          ->addColumn('titre', 'string', ['limit' => 191])
+          ->addColumn('corps', 'text')
+          ->addColumn('statut', 'enum', ['values' => ['brouillon', 'publie', 'archive'], 'default' => 'brouillon'])
+          ->addColumn('vues', 'integer', ['signed' => false, 'default' => 0])
+          ->addColumn('auteur_id', 'integer', ['signed' => false])
+          ->addColumn('publie_le', 'datetime', ['null' => true])
+          ->addColumn('cree_le', 'datetime', ['default' => 'CURRENT_TIMESTAMP'])
+          ->addIndex(['slug'], ['unique' => true])
+          ->addIndex(['statut', 'publie_le'])
+          ->addForeignKey('auteur_id', 'utilisateurs', 'id', ['delete' => 'RESTRICT', 'update' => 'CASCADE'])
+          ->create();
+    }
+    public function down(): void { $this->table('articles')->drop()->save(); }
+}
+\end{codephp}
+
+\begin{enumerate}
+  \item Une migration = un changement d'\'etat, et elle doit \^etre \textbf{compatible avec le code
+        encore en ligne} pendant le d\'eploiement~: ajoute une colonne avant de l'utiliser,
+        supprime-la seulement \`a la release suivante.
+  \item Ne mets jamais de donn\'ees m\'etier dans une migration de sch\'ema~: s\'epare
+        \verb|schema/*| et \verb|data/*.sql| (sinon rollback impossible).
+  \item Teste la \verb|down()|. Une migration sans retour est un ticket d'incident garanti.
+\end{enumerate}
+
+\section{Et les ORM~?}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Outil} \& \thd{Position} \& \thd{Lien} \\
+  \midrule
+  PDO nu \& le contr\^ole total, le moins de magie~: mon choix pour apprendre et pour 80 \% des projets. \& --- \\
+  \link{Doctrine ORM}{https://www.doctrine-project.org/projects/orm.html} \& le standard entreprise, UnitOfWork, hydratation diff\'er\'ee, migrations. Courbe d'apprentissage r\'eelle. \& \url{https://www.doctrine-project.org/} \\
+  \link{Eloquent (Laravel)}{https://laravel.com/docs/eloquent} \& le plus productif, actif record, tr\`es \og ~convention~ \fg{}~; magique quand on ne le comprend pas. \& \url{https://laravel.com/docs} \\
+  \link{Propel}{https://propelorm.org/} \& g\'en\`ere des classes depuis le sch\'ema, tr\`es typ\'e. \& --- \\
+  \link{Doctrine DBAL}{https://www.doctrine-project.org/projects/dbal.html} \& le \og ~PDO am\'elior\'e~ \fg{} multi-plateformes, sans ORM. Bon compromis. \& --- \\
+\end{tabz}
+
+\begin{astuce}
+Apprends PDO \emph{d'abord}. Un ORM est alors facile~: tu reconnais chaque \og ~lazy loading~ \fg{},
+chaque \og ~N+1 requ\^etes~ \fg{}, chaque requ\^ete implicite. Sans cette base, un ORM est une source
+d'erreurs silencieuses (et le \og ~N+1~ \fg{} est LA faute de performance la plus fr\'equente en
+application web~: 1 requ\^ete pour la liste, puis 1 par \'el\'ement~; la correction tient en un
+\verb|JOIN| ou un \verb|IN|).
+\end{astuce}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris le sch\'ema complet d'un gestionnaire de t\^aches~: utilisateurs, projets, t\^aches,
+        \'etiquettes, affectations, commentaires~; avec les index justifi\'es par trois requ\^etes
+        r\'eelles que tu \'ecris en premier.
+  \item \'Ecris le d\'ep\^ot correspondant~: \verb|pageListe|, \verb|creer|, \verb|modifier| avec
+        verrouillage optimiste (colonne \verb|version|), \verb|supprimerEnCascade| dans une
+        transaction~; un script de \emph{seed} de 10 000 t\^aches.
+  \item Rends ta pagination rapide \`a la page 5 000~: passe du \verb|OFFSET| au curseur et mesure.
+  \item Trouve un \og ~N+1~ \fg{}~: affiche le nombre de requ\^etes par page (un listener SQL, ou le
+        d\'ebogueur SQL de Adminer), puis \'elimine-le avec une jointure.
+  \item Ajoute la recherche full-text avec pertinence, un surlignage des termes, et un temps
+        de requ\^ete sous 50 ms sur 100 000 lignes.
+  \item Fais une migration de donn\'ees~: ajouter une colonne \verb|slug|, la remplir, la passer
+        \verb|NOT NULL| + \verb|UNIQUE|, en quatre migrations s\'epar\'ees, chacune r\'eversible.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Manuel PDO --- \url{https://www.php.net/manual/fr/book.pdo.php}
+  \item \emph{PHP PDO: The Definitive Guide} / articles dereference --- \url{https://phpdelusions.net/pdo}
+  \item MySQL 8 reference --- \url{https://dev.mysql.com/doc/refman/8.4/en/} --- MariaDB --- \url{https://mariadb.com/kb/}
+  \item PostgreSQL (\`a apprendre apr\`es MySQL~: le meilleur moteur relationnel) --- \url{https://www.postgresql.org/docs/}
+  \item Phinx --- \url{https://book.cakephp.org/phinx/0/en.html} --- Doctrine Migrations --- \url{https://www.doctrine-project.org/projects/migrations.html}
+  \item \link{use-the-index-luke}{https://use-the-index-luke.com/} (index : le meilleur cours gratuit qui existe)
+\end{itemize}
+\end{ressources}
+
+\index{PHP!PDO}\index{MySQL}\index{index}\index{migration}\index{transaction}

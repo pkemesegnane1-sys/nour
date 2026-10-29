@@ -1,0 +1,331 @@
+% ============================================================================
+\chapter{Java~: le langage, la JVM, les bases}
+\label{ch:java-bases}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Installer un JDK, comprendre ce que sont JVM, bytecode, GC, et le mod\`ele \og ~\'ecrire une fois,
+        ex\'ecuter partout~ \fg{}.
+  \item Compiler et ex\'ecuter un programme, avec et sans outil de build.
+  \item Ma\^itriser le typage statique, les primitifs, les conversions et la nullit\'e.
+  \item \'Ecrire du Java moderne~: \verb|var|, enregistrements, expressions \verb|switch|, blocs de texte.
+  \item Savoir lire une stack trace et un message du compilateur sans paniquer.
+\end{itemize}
+\end{objectif}
+
+\section{La plateforme, en cinq mots}
+
+\begin{description}
+  \item[JDK] l'outil de d\'eveloppement~: compilateur (\verb|javac|), lanceur (\verb|java|),
+        \verb|jshell|, \verb|javadoc|, \verb|jar|, analyeurs (\verb|jcmd|, \verb|jstack|, \verb|jmap|).
+  \item[JVM] la machine virtuelle qui ex\'ecute le \emph{bytecode} (\fichier{.class}), just-\`a-temps
+        (JIT), avec ramasse-miettes, et un \'ecosyst\`eme d'outils de profilage.
+  \item[Version] une nouvelle version \textbf{tous les six mois}~; des versions \textbf{LTS}
+        (17, 21, \emph{25}) soutenues des ann\'ees. En entreprise~: 17 ou 21 dominent.
+        En 2026, \textbf{Java~21} est le choix par d\'efaut (virtual threads, records, patterns,
+        s\'equenc\'e), \textbf{Java~25} apporte les versions de preview stabilis\'ees (structured
+        concurrency, primitive types en preview, etc.).
+  \item[Distributions] les binaires OpenJDK~: \link{Temurin (Adoptium)}{https://adoptium.net/fr/}
+        (le choix par d\'efaut), \link{Amazon~Corretto}{https://aws.amazon.com/corretto/},
+        \link{Azul~Zulu}{https://www.azul.com/downloads/}, \link{BellSoft~Liberica}{https://bell-sw.com/pages/downloads/},
+        \link{GraalVM}{https://www.graalvm.org/} (compilation native, polyglotte).
+  \item[Sp\'ecification] \link{JLS}{https://docs.oracle.com/javase/specs/} et les
+        \link{JEP}{https://openjdk.org/jeps/0}--- chaque nouveaut\'es y est \'ecrite noir sur blanc.
+\end{description}
+
+\begin{terminal}
+# Linux (Debian/Ubuntu) : le depot Temurin
+sudo apt install -y temurin-21-jdk
+# macOS
+brew install --cask temurin@21
+# Windows : https://adoptium.net/temurin/releases/?os=windows (MSI : cocher JAVA_HOME + PATH)
+# Ou, multi-versions (recommande) :
+brew install sdkman-cli && sdk install java 21.0.5-tem && sdk list java     # Linux/macOS
+# Windows : scoop bucket add java && scoop install temurin21-jdk
+# Verification :
+java -version && javac -version && echo $JAVA_HOME
+which java && readlink -f $(which java)     # ne pas etre surpris : /usr/bin/java est un lien alternatives
+\end{terminal}
+
+\subsection{Compiler, ex\'ecuter, et le \og ~single-file source launcher~ \fg{}}
+
+\begin{codejava}
+// HelloWorld.java --- le nom du fichier doit correspondre a la classe publique
+public class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Bonjour, Java !");
+    }
+}
+\end{codejava}
+
+\begin{terminal}
+# Facon classique : compiler puis lancer
+javac HelloWorld.java            # produit HelloWorld.class (le bytecode)
+java HelloWorld                  # la JVM execute ; pas de ".class"
+
+# Depuis Java 11 : lancer le fichier source directement (scripts, apprentissage)
+java HelloWorld.java
+# Avec arguments, proprietes, et classpath :
+java -Xmx256m -Dapp.env=dev -cp lib/\*:target/classes com.exemple.App --port 8080
+# JAR executable :
+jar cfe app.jar com.exemple.App -C target/classes . && java -jar app.jar
+# Decouvrir la JVM :
+java --list-modules ; java -XX:+PrintFlagsFinal -version | grep -i heapsize ; jcmd VM.info
+\end{terminal}
+
+\begin{note}
+Java est compil\'e \emph{et} ex\'ecut\'e par une JVM qui compile \`a chaud (C1 puis C2 JIT)~: le
+d\'emarrage d'une application Java un peu grosse est lent, puis elle devient plus rapide que du JS
+ou du PHP sur un calcul long. C'est pour cela qu'on utilise des cadres avec \og ~compilation
+native~ \fg{} (GraalVM) ou des \emph{app/crac} pour le serverless~; et que dans ce livre, les mesures
+de performance Java se font apr\`es \'echauffement (\link{JMH}{https://github.com/openjdk/jmh}).
+\end{note}
+
+\section{Types primitifs, variables et conversions}
+
+\begin{codejava}
+// Primitives : 8, pas d'objet, pas de null, empilees dans la pile d'appel.
+boolean vif = true;
+byte octet = 127;                    // -128..127 (rare, utile pour les protocols)
+short petit = 32_000;                // -32 768..32 767
+int n = 42;                          // -2^31..2^31-1 : c'est LE type entier par defaut
+long grand = 9_000_000_000L;         // 64 bits : pour les id, les tailles, les timestamps
+float virgule = 1.5f;                // 32 bits : ne l'utilise presque jamais
+double d = 3.14159;                  // 64 bits IEEE-754 : le par defaut pour le flottant
+char c = 'A';                        // 16 bits UTF-16 ; 0..65535 (les emoji debordent)
+
+// 0b1010 = 10 ; 0x1F = 31 ; 1_000_000 s'ecrit avec des underscores ; 0777 est OCTAL (piege).
+var inference = 42;                  // Java 10+ : le type est DEDUIT (ici int), pas " dynamique"
+final int CONSTANTE = 7;             // non reassignable ; pour une veritable constante :
+public static final double TVA = 0.20;
+
+// Conversions
+long l = n;                          // elargissement : implicite, sur
+int revenu = (int) grand;             // retrecissement : EXPLICITE obligatoire (sinon erreur)
+int arrondi = (int) Math.round(d);
+long precise = Math.roundExact(2.5); // version 19+ : leve au lieu de silencieusement tronquer
+
+// Division entiere : le piege n1 de Java
+double demi = 1 / 2;                 // 0.0  <-- la division se fait en int AVANT conversion
+double vraiDemi = 1.0 / 2;           // 0.5
+double pourcentage = 5.0 * 2 / 100;  // 0.1 (et non 0)
+int reste = 7 % -2;                   // 1 ; signe = celui du dividende
+
+double infini = 1.0 / 0;              // Infinity : pas d'exception en flottant !
+double nan = 0.0 / 0;                 // NaN
+System.out.println(Double.isNaN(nan));          // true
+System.out.println(nan == Double.NaN);          // false : NaN != NaN, toujours
+System.out.println(0.1 + 0.2 == 0.3);           // false
+System.out.println(Math.abs(0.1 + 0.2 - 0.3) < 1e-9);  // true
+// En monetaire : JAMAIS double. Utilise BigDecimal (exact) ou des centimes en long.
+var montant = java.math.BigDecimal.valueOf(12.50).multiply(java.math.BigDecimal.valueOf(3));
+var arrondiUp = montant.setScale(2, java.math.RoundingMode.HALF_UP);   // 37.50
+
+// Strings
+String s = "Bonjour";
+String bloc = """
+    SELECT id, titre
+    FROM   articles
+    WHERE  statut = 'publie'
+    """;                               // Java 15+ : text block, sans concatenations moches
+var concat = "a" + 1 + true;           // "a1true" : evaluation gauche a droite
+var interpo = "Resultat : " + arrondiUp.stripTrailingZeros().toPlainString();
+System.out.printf("%-10s | %6.2f | %05d%n", "libelle", 12.34, 7);  // n = saut de ligne
+String[] mots = bloc.lines().toList().toArray(String[]::new);
+\end{codejava}
+
+\subsection{Nullit\'e, types enveloppes, et \texttt{Optional}}
+
+\begin{codejava}
+Integer boxee = null;                  // les wrappers (Integer, Long, Double...) peuvent etre null
+int casse = boxee;                      // NullPointerException a l'unboxing : le classique
+long somme = liste.stream().mapToLong(Moteur::getDuree).sum();  // si un getDuree est Long null -> NPE
+
+// Comparaison : equals/toujours pour les objets, == seulement pour les primitives
+Integer a = 128, b = 128;
+System.out.println(a == b);             // FALSE  (cache des Integer uniquement -128..127 !)
+System.out.println(Objects.equals(a, b));   // true : LE reflexe a prendre
+System.out.println("x".equals(s));         // true ; "x" == s : comparaison de reference -> faux
+
+// Optional : un conteneur de valeur absente, pas un champ de classe
+public Optional<Article> trouver(long id) {
+    return Optional.ofNullable(repo.sel(id));
+}
+Optional<Article> o = trouver(1);
+o.ifPresent(a -> System.out.println(a.titre()));
+String titre = o.map(Article::titre).orElse("sans titre");
+Article article = o.orElseThrow(() -> new Introuvable("id 1"));
+o.filter(a -> a.publie()).ifPresent(this::notifier);
+// Anti-patterns : o.get() sans isPresent(), Optional comme parametre ou champ, .orElse(calculCouteux())
+// (le calcul est evalue dans tous les cas : orElseGet le rend paresseux)
+\end{codejava}
+
+\section{Op\'erateurs, conditions et boucles}
+
+\begin{codejava}
+// Arithmetique et incrementation : comme en JS/C, aux differences notees
+int i = 0; i++; ++i; i += 2; i <<= 3; i >>>= 1;         // >>> : decale logique (sans signe)
+boolean b = !b;                                         // pas de surcharge operateur en Java
+long hachage = "cle".hashCode();                        // pas de `+` sur des types arbitraires
+
+// Comparaison a trois voies : le spaceship de Java
+Integer.compare(x, y);                                  // -1/0/1 (utilise dans les comparators)
+Long.compare(a, b);
+"b".compareTo("a");
+Comparator.comparing(Article::date).thenComparing(Article::titre).reversed();
+
+// Conditions
+if (a > 0 && b < 10) { } else if (a == 0) { } else { }
+String libelle = switch (note) {                        // Java 14+ : switch EXPRESSION
+    case 20 -> "parfait";
+    case 16, 17, 18, 19 -> "tres bien";
+    case 10, 11, 12, 13, 14, 15 -> "bien";
+    default -> {
+        String r = note < 0 ? "impossible" : "a revoir";
+        yield r;                                        // yield = "return" dans un switch
+    }
+};
+// switch sur des types et des motifs (Java 21) : le pattern matching
+String decrire(Object o) {
+    return switch (o) {
+        case Integer n when n > 100 -> "grand entier " + n;
+        case Integer n -> "petit entier " + n;
+        case String s when s.isBlank() -> "vide";
+        case String s -> "texte de " + s.length() + " caracteres";
+        case int[] tab -> "tableau de " + tab.length + " entiers";
+        case null -> "rien";                             // Java 21 : le cas null est autorise
+        default -> "autre chose";
+    };
+}
+
+// Boucles
+for (int j = 0; j < 10; j++) { }
+for (var mot : "un deux".split(" ")) { }
+for (int k = 0, m = 10; k < m; k++, m--) { }
+while (it.hasNext()) { }
+do { travail(); } while (tropTot());
+// Etiquettes : a connaitre pour lire du code, a eviter d'ecrire
+externe: for (int x = 0; x < 10; x++) { for (int y = 0; y < 10; y++) { if (y > x) continue externe; } }
+\end{codejava}
+
+\section{Tableaux~: le type brut dont tout le monde h\'erite dans sa t\^ete}
+
+\begin{codejava}
+int[] notes = new int[5];                 // taille fixe, initialisee a 0
+int[] litteral = {14, 9, 17, 12};
+String[] villes = { "Dakar", "Thies", "Saint-Louis" };
+notes.length;                              // une PROPRIETE, pas une methode
+villes[0] = "Thi\`es";
+//ville[5];                                 // ArrayIndexOutOfBoundsException (jamais de lecture floue)
+
+var matrice = new int[3][4];               // tableaux imbriques (lignes de tailles differentes OK)
+matrice[0][1] = 7;
+
+Arrays.sort(litteral);
+Arrays.copyOf(litteral, 10);
+Arrays.equals(litteral, copie);
+Arrays.fill(notes, -1);
+Arrays.mismatch(a, b);                      // Java 11+ : index de difference, -1 si egales
+Arrays.asList("a", "b");                    // vue FIXE sur le tableau -- pas un ArrayList !
+List.of(1, 2, 3);                            // liste immuable (Java 9+)
+new ArrayList<>(List.of(1, 2, 3));           // la version modifiable
+
+// Impression (jamais System.out.println(tab) : tu obtiens [I@1a2b3c)
+System.out.println(Arrays.toString(litteral));
+System.out.println(Arrays.deepToString(matrice));
+System.out.printf("notes = %s%n", Arrays.toString(notes));
+
+// Copie rapide et allocation : les deux utilitaires bas niveau
+System.arraycopy(src, 0, dest, 10, n);     // ou : Arrays.copyOfRange(src, debut, fin)
+var montee = new java.util.RandomGenerator.JdkRandom(1).ints(1000, 0, 50).toArray();
+// Tableaux et genericite : impossible de creer un List<String>[] typable -> on utilise des Collections.
+\end{codejava}
+
+\section{M\'ethodes, arguments, et la surcharge}
+
+\begin{codejava}
+public final class Calculs {
+    private Calculs() { }                        // classe utilitaire : pas d'instance
+
+    // Surcharge : meme nom, signatures differentes (les types, pas les noms de parametres)
+    public static int max(int a, int b) { return Math.max(a, b); }
+    public static double max(double a, double b) { return Math.max(a, b); }
+    public static int max(int... valeurs) {       // varargs : un tableau en entree
+        if (valeurs.length == 0) { throw new IllegalArgumentException("au moins une valeur"); }
+        int m = valeurs[0];
+        for (var v : valeurs) { if (v > m) { m = v; } }
+        return m;
+    }
+    public static void melanger(List<String> l) { java.util.Collections.shuffle(l); }
+}
+
+// Pas de passage par reference : les objets passent par copie de la reference
+static void tente(Article a) { a = new Article("autre"); }   // l'appelant ne le voit pas
+static void marche(Article a) { a.marquerVu(); }              // mais muter l'objet, si
+
+// En Java, une methode renvoie UN seul resultat : pour en renvoyer plusieurs -> un record
+public record DivResultat(int quotient, int reste) { }
+public static DivResultat diviser(int a, int b) { return new DivResultat(a / b, a % b); }
+
+// Recursion : pas de TCO garantie par la JVM -> sur de tres grandes profondeurs, une boucle.
+static long fib(int n, long a, long b) { return n == 0 ? a : fib(n - 1, b, a + b); }
+
+// Memo : les methodes d'une classe ne sont jamais globales ; tout est statique ou membre.
+\end{codejava}
+
+\section{Lire les messages~: le compilateur et la pile d'appels}
+
+\begin{codejava}
+/*
+  Exemples reellement frequents, avec leur traduction :
+
+  error: cannot find symbol                -> classe non importee, faute de frappe, ou methode
+                                             inexistante ; verifie la casse et le package
+  error: variable x might not have been initialized -> champ local non initialise (en Java, un
+                                             local n'a AUCUNE valeur par defaut)
+  error: incompatible types: int cannot be converted to String -> String.valueOf(n) ou "" + n
+  error: unreported exception IOException  -> les exceptions verifiees : try/catch ou throws
+  error: method does not override or implement a method from a supertype
+                                          -> signature legerement differente : mets @Override
+  Exception in thread "main" java.lang.NullPointerException: Cannot invoke "String.length()"
+       because "s" is null                 -> depuis Java 14, le message dit QUI est null. Lis-le.
+  java.lang.ArrayIndexOutOfBoundsException: Index 5 out of bounds for length 5
+  java.util.ConcurrentModificationException -> tu modifies une collection pendant son iteration
+  java.lang.StackOverflowError              -> recursion sans cas de base (ou cycle d'objets)
+*/
+\end{codejava}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris \verb|FizzBuzz|, \verb|estPremier|, \verb|pgcd| (Euclide, puis version binaire),
+        \verb|converser(int[])| (sur place), \verb|moyenneMobile(double[], int)|~: tous en
+        m\'ethodes statiques d'une classe utilitaire priv\'ee.
+  \item Pr\'edis puis v\'erifie~: \verb|1/2|, \verb|1.0/2|, \verb|7\%3|, \verb|-7\%3|,
+        \verb|(int) 3.99|, \verb|Math.round(-2.5)|, \verb|Double.doubleToLongBits(0.0)|,
+        \verb|Integer.MAX\_VALUE + 1|, \verb|0.1 + 0.2 == 0.3|, \verb|"1" + 2|, \verb|2 + "1"|.
+  \item Convertis un nombre en romains (\verb|1..3999|), puis l'inverse~; puis un nombre en
+        base quelconque (2 \`a 36) et reviens, en utilisant \verb|Integer.toString(n, base)|
+        et \verb|Integer.parseInt(s, base)|~: compare \`a ta version manuscrite.
+  \item \'Ecris \verb|Textes|~: \verb|inverser|, \verb|estPalindrome| (en ignorant ponctuation et
+        accents via \verb|java.text.Normalizer|), \verb|compterMots|, \verb|capitaliser|,
+        \verb|estAnagramme|, \verb|slug|~: en utilisant \verb|StringBuilder| et les m\'ethodes
+        \verb|chars()|/ \verb|codePoints()|.
+  \item \'Ecris une classe \verb|Matrice| (tableau 2D) avec \verb|ajoute|, \verb|multiplier|,
+        \verb|transposer|, \verb|toString| et \verb|equals|/ \verb|hashCode| corrects.
+  \item Ouvre \verb|jshell|~: teste chaque snippet de ce chapitre une ligne \`a la fois.
+        C'est le meilleur moyen de v\'erifier une hypoth\`ese sans cr\'eer de projet.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Dev.java (la porte officielle moderne) --- \url{https://dev.java/learn/}
+  \item Documentations JDK (javadoc de r\'ef\'erence) --- \url{https://docs.oracle.com/en/java/javase/21/docs/api/index.html}
+  \item \link{Baeldung}{https://www.baeldung.com/java-tutorial} (recettes concises, enorme index)
+  \item \emph{Introduction to Java Programming} -- \url{https://java-programming.baoyj.com/} (libre)
+  \item \link{JEP index}{https://hiphopjava.github.io/jep-in-Java-FR/} (JEP traduits en francais)
+\end{itemize}
+\end{ressources}
+
+\index{Java!bases}\index{JDK}\index{JVM}\index{primitives}\index{Optional}

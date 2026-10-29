@@ -1,0 +1,306 @@
+% ============================================================================
+\chapter{Terminal, Git, et bonnes habitudes de fichiers}
+\label{ch:git}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Naviger, cr\'eer, copier, chercher dans un terminal sans ouvrir de fen\^etre graphique.
+  \item Comprendre un chemin absolu, relatif, une variable d'environnement et le \verb|PATH|.
+  \item Utiliser Git comme un outil de travail quotidien (et pas seulement comme une sauvegarde).
+  \item Structurer un projet proprement, avec un \fichier{README.md} et un \fichier{.gitignore}.
+\end{itemize}
+\end{objectif}
+
+\section{Le terminal en 20 commandes}
+
+Tout ce livre se d\'eroule dans un terminal. Ouvre-le maintenant~:
+\keys{Ctrl+Alt+T} (Ubuntu), \clic{Applications \$\rightarrow\$ Utilitaires \$\rightarrow\$ Terminal} (macOS),
+\clic{Windows + X \$\rightarrow\$ Terminal} (Windows).
+
+\begin{terminal}
+pwd                       # ou suis-je ? affiche le chemin absolu courant
+ls -la                    # liste, y compris fichiers caches et permissions
+tree -L 2 -a          # arborescence (a installer : sudo apt install tree)
+cd ~/projet           # aller dans un repertoire
+cd ..                 # remonter d'un niveau
+cd -                  # revenir au repertoire precedent
+mkdir -p a/b/c        # creer une arborescence complete
+cp -r src backup      # copier recursivement
+mv old.js new.js      # deplacer / renommer
+rm -f fichier ; rm -rf dossier    # supprimer (-rf = irreversible, reflexion avant)
+cat fichier ; head -20 f ; tail -f log    # lire / debut / suivi en direct
+less fichier          # defilement (q pour quitter, /motif pour chercher, n suivant)
+find . -name "*.php" -type f       # trouver des fichiers
+grep -rn "TODO" src --include="*.js"   # chercher du texte recursivement
+rg "SELECT \*" .      # ripgrep, 10x plus rapide : https://github.com/BurntSushi/ripgrep
+chmod +x script.sh    # rendre executable
+ln -s /chemin/long /tmp/l  # lien symbolique
+ps aux | grep node    # processus en cours
+kill -TERM 12345      # arreter proprement ; -9 pour forcer
+history | grep docker # retrouver une commande deja tapee
+man ls                # la documentation d'une commande (q pour quitter)
+\end{terminal}
+
+\subsection{Redirections et tuyaux --- la super-puissance}
+
+Un programme \'ecrit sur \emph{stdout} (flux~1) et ses erreurs sur \emph{stderr} (flux~2).
+\begin{terminal}
+php -i > info.txt              # rediriger la sortie vers un fichier (ecrase)
+php -i >> info.txt             # ajouter a la fin
+php -i 2>&1 | grep memory       # erreurs + sortie, envoyees dans grep
+node app.js > out.txt 2> err.txt &   # en arriere-plan
+tee app.log                   # afficher ET enregistrer : node app.js | tee -a app.log
+xargs                         # transformer des lignes en arguments : find . -name *.tmp | xargs rm
+alias ll='ls -lah'            # raccourci ; a mettre dans ~/.bashrc
+\end{terminal}
+
+\begin{astuce}
+Le raccourci qui fait gagner le plus de temps au monde~: \keys{Ctrl+R} pour rechercher dans
+l'historique, \keys{Tab} pour l'auto-compl\'etion, \keys{Ctrl+C} pour interrompre un programme,
+\keys{Ctrl+Z} puis \cmd{bg} pour le remettre en arri\`ere-plan, \keys{Ctrl+L} pour nettoyer l'\'ecran.
+\end{astuce}
+
+\section{Chemins, \texttt{PATH} et variables d'environnement}
+
+Un \textbf{chemin relatif} d\'epend du r\'epertoire courant ; un \textbf{chemin absolu} part de la
+racine. \verb|..| = parent, \verb|.| = ici, \verb|~| = dossier personnel. En code, retiens cette
+r\`egle d'or~: \emph{un chemin se construit toujours \`a partir du fichier qui l'utilise, jamais du
+r\'epertoire courant de l'utilisateur}.
+
+\begin{codejs}
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+// __dirname n'existe plus en ES modules : on le reconstruit proprement
+const here = dirname(fileURLToPath(import.meta.url));
+const configPath = join(here, "..", "config", "app.json");  // jamais "./config/app.json"
+\end{codejs}
+
+Une \textbf{variable d'environnement} est une paire \verb|CLE=valeur| transmise \`a tous les
+programmes lanc\'es depuis ce terminal. Le \verb|PATH| est la liste des dossiers o\`u le syst\`eme
+cherche les ex\'ecutables~; c'est pour cette raison qu'un outil \og ~install\'e mais introuvable~ \fg{} est
+presque toujours un probl\`eme de \verb|PATH|.
+
+\begin{terminal}
+echo $PATH
+echo "$HOME" "$USER" "$SHELL" "$JAVA_HOME"
+export DEBUG="app:*"       # valable pour cette session seulement
+export PATH="$HOME/.npm-global/bin:$PATH"   # ajouter un dossier au PATH
+printenv | sort             # tout afficher
+# Pour Windows PowerShell : $env:PATH += ";C:\php"
+\end{terminal}
+
+Fichiers de configuration du shell (\`a \'editer une fois, puis \cmd{source})~:
+
+\begin{tabz}{llX}
+  \headrow \thd{Shell} \& \thd{Fichier} \& \thd{Quand} \\
+  \midrule
+  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\\\\\_profile} \& interactif / connexion \\
+  zsh (macOS par d\'efaut) \& \fichier{\textasciitilde/.zshrc} \& les deux \\
+  fish \& \fichier{\textasciitilde/.config/fish/config.fish} \& syntaxe diff\'erente, tr\`es convivial \\
+  PowerShell \& \cmd{Notepad \$PROFILE} \& Windows \\
+\end{tabz}
+
+Les variables d'environnement d'\textbf{un projet} ne vont pas dans le shell mais dans un
+fichier \fichier{.env}, jamais versionn\'e, accompagn\'e d'un \fichier{.env.example} versionn\'e, lui.
+C'est le contrat standard en Node comme en PHP~; voir \cref{sec:dotenv,ch:php-bases}.
+
+\subsection{Les shells qui changent la vie}
+
+\begin{itemize}
+  \item \link{Starship}{https://starship.rs/fr/} --- invite de commande rapide, multi-langage,
+        qui affiche automatiquement la version de Node/PHP/Java du dossier courant.
+        \cmd{curl -sS https://starship.rs/install.sh | sh}
+  \item \link{zsh + Oh My Zsh}{https://ohmyz.sh/} --- raccourcis, th\`emes, compl\'etions.
+  \item \link{fish}{https://fishshell.com/} --- pr\^et \`a l'emploi, auto-suggestions.
+  \item \link{Windows Terminal}{https://github.com/microsoft/terminal} +
+        \link{Nerd Fonts}{https://www.nerdfonts.com/} pour les ic\^ones.
+\end{itemize}
+
+\section{Git : sauvegarder, historiser, collaborer}
+
+Git n'est pas un nuage~: c'est une base de donn\'ees d'instants de ta vie de projet.
+Trois semaines de code sans Git, c'est trois semaines \`a risque z\'ero de r\'ecup\'eration.
+Documentation officielle~: \link{Pro~Git (livre gratuit)}{https://git-scm.com/book/fr/v2}.\src{https://git-scm.com/book/fr/v2}
+
+\etape{Configuration une bonne fois pour toutes}
+\begin{terminal}
+git config --global user.name  "Ton Nom"
+git config --global user.email "toi@example.com"
+git config --global init.defaultBranch main
+git config --global core.autocrlf input      # "true" sous Windows
+git config --global core.editor "code --wait"
+git config --global pull.rebase false
+git config --global alias.st status
+git config --global alias.lg "log --oneline --graph --decorate --all"
+\end{terminal}
+
+\etape{Le cycle quotidien}
+\begin{terminal}
+git init                     # une seule fois
+git status                   # QUELS fichiers ont change ? (a taper 50 fois par jour)
+git add src/app.js           # mettre en scene (index)
+git diff --cached            # relire ce qui sera commite
+git commit -m "feat: ajoute la validation de l'email"
+git log --oneline --graph
+\end{terminal}
+
+Convention de message \link{Conventional~Commits}{https://www.conventionalcommits.org/fr/v1.0.0/}~:
+\verb|type(scope): description imp\'erative|. Types~: \verb|feat|, \verb|fix|, \verb|docs|,
+\verb|style|, \verb|refactor|, \verb|perf|, \verb|test|, \verb|chore|. Un historique propre est
+un outil de debugging~: \cmd{git bisect} trouve la commit fautive en \$\log\_2(n)\$ \'etapes.
+
+\etape{Travailler avec GitHub / GitLab}
+\begin{terminal}
+git remote add origin git@github.com:utilisateur/projet.git
+git branch -M main
+git push -u origin main          # premier push, puis simplement : git push
+git switch -c ma-fonctionnalite  # creer une branche de travail
+git switch main && git pull --rebase origin main
+git rebase main                  # mettre ma branche a jour sans merge moche
+git cherry-pick abc1234          # rejouer une commit precise
+git restore --source=HEAD~3 src/app.js   # recuperer une version anterieure d'un fichier
+git stash push -u -m "wip"       # mettre de cote sans commiter ; git stash pop
+git reset --soft HEAD~1          # defaire le dernier commit en gardant les modifications
+git revert abc1234               # defaire un commit deja pousse (sur, cree une nouvelle commit)
+git clean -fd                    # supprimer les fichiers non suivis (attention)
+\end{terminal}
+
+\begin{piege}
+\cmd{git push --force} sur une branche partag\'ee efface le travail des autres. Utilise
+\cmd{--force-with-lease}, qui refuse si quelqu'un a pouss\'e entre-temps. Et ne force
+jamais sur \verb|main|.
+\end{piege}
+
+\etape{Le \fichier{.gitignore} de base, valable pour les trois langages}
+\begin{codeconf}
+# dependances
+node_modules/
+vendor/
+target/
+build/
+dist/
+out/
+
+# environnements et secrets
+.env
+.env.local
+*.pem
+secrets/
+
+# outils
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.log
+coverage/
+.phpunit.result.cache
+.phpstan.cache/
+.php-cs-fixer.cache
+__pycache__/
+
+# telephones / emulators
+.gradle/
+local.properties
+\end{codeconf}
+
+G\'en\`ere-le en ligne~: \link{toptal.gitignore.io}{https://www.toptal.com/developers/gitignore}
+(nomme \og ~gitignore.io~ \fg{} dans beaucoup de tutos).
+
+\subsection{GitHub --- la bo\^ite \`a outils gratuite pour d\'eveloppeurs}
+
+\begin{itemize}
+  \item Un d\'ep\^ot public = portfolio. Mets un \fichier{README.md} soign\'e, une capture d'\'ecran,
+        la proc\'edure d'installation, et une section \og ~ce que j'ai appris~ \fg{}.
+  \item \link{gh~(GitHub~CLI)}{https://cli.github.com/}~: ouvre un PR, lit les logs CI sans navigateur.
+\end{itemize}
+
+\begin{terminal}
+gh auth login
+gh repo create mon-projet --public --source=. --push
+gh pr create --fill
+gh run watch                  # suivre la pipeline CI en direct
+gh issue list --state open
+\end{terminal}
+
+\begin{itemize}
+  \item \link{Gist}{https://gist.github.com/} pour partager un extrait de code.
+  \item \link{Discussions}{https://docs.github.com/en/discussions} et
+        \link{Pages}{https://pages.github.com/} pour h\'eberger un site statique gratuit.
+  \item \link{Actions}{https://github.com/features/actions} pour l'int\'egration continue
+        (exemple complet en \cref{sec:ci-cd}).
+  \item \link{Copilot}{https://github.com/features/copilot} gratuit pour les \'etudiants et
+        les maintainers de projets open source populaires.
+\end{itemize}
+
+\section{Structurer un projet et \'ecrire un README}
+
+\begin{codeplain}
+mon-projet/
+  README.md            <- pourquoi, comment installer, comment lancer, captures
+  LICENSE              <- MIT si tu veux que ton code soit librement reutilisable
+  .gitignore
+  .editorconfig        <- indentation et fins de ligne partagees avec l'equipe
+  .env.example
+  docs/                <- decisions d'architecture, captures, maquettes
+  src/                 <- le code qui tourne en production
+  tests/               <- ce qui prouve que le code tourne
+  scripts/             <- outils internes (deploiement, generation de donnees)
+\end{codeplain}
+
+\begin{codeconf}
+# .editorconfig --- a installer comme extension dans ton editeur
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.php]
+indent_size = 4
+
+[*.java]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+\end{codeconf}
+
+Le README d'un projet d'apprentissage doit contenir quatre choses~: ce que \c{c}a fait
+(avec une capture ou un GIF), comment le lancer en trois commandes, ce que tu as appris,
+et ce que tu referais autrement. C'est ce que regarde un recruteur~: \emph{le processus},
+pas seulement le r\'esultat.
+
+\begin{exercice}
+\begin{enumerate}
+  \item Dans le terminal, cr\'ee \verb|~/labo/js|, \verb|~/labo/php|, \verb|~/labo/java|,
+        place un \fichier{.gitignore} et un \fichier{.editorconfig} dans chacun.
+  \item \'Ecris trois commandes qui cr\'eent un fichier, l'affichent, puis le suppriment.
+  \item Cherche avec \cmd{grep} toutes les occurrences du mot \verb{console.log} dans
+        un dossier et compte-les avec \cmd{wc -l}.
+  \item Fais un d\'ep\^ot GitHub public nomm\'e \verb|labo-js|. Pousse, cr\'ee une branche,
+        un commit, une pull request depuis la CLI \cmd{gh}, puis fusionne-la en local.
+  \item Casse volontairement un fichier, puis restaure-le avec \cmd{git restore}~;
+        supprime-le, restaure-le avec \cmd{git checkout HEAD\textasciitilde1 -- chemin}.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Pro Git (livre complet, gratuit, en fran\c{c}ais) --- \url{https://git-scm.com/book/fr/v2}
+  \item GitHub Skills (cours officiels gratuits) --- \url{https://skills.github.com/}
+  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr\\\\_FR}
+  \item The Missing Semester (MIT) --- \url{https://missing.csail.mit.edu/2020/course-material/}
+  \item Shellcheck (analyse tes scripts bash) --- \url{https://www.shellcheck.net/}
+\end{itemize}
+\end{ressources}
+
+\index{terminal}\index{git}\index{PATH}

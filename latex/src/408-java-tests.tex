@@ -1,0 +1,325 @@
+% ============================================================================
+\chapter{Tests et qualit\'e en Java}
+\label{ch:java-tests}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Structurer une suite JUnit~5~: cycles de vie, assertions expressives, tests param\'etr\'es.
+  \item Tester ce qui compte~: unit\'es avec Mockito, int\'egration avec Testcontainers, HTTP avec
+        RestAssured/MockWebServer.
+  \item Faire respecter l'architecture avec \texttt{ArchUnit}, et la couverture avec JaCoCo.
+  \item Mesurer ce qui doit l'\^etre avec JMH, et la robustesse r\'eelle avec PIT (mutation testing).
+  \item Rendre les tests rapides et non flaky~: c'est la condition de survie de la suite.
+\end{itemize}
+\end{objectif}
+
+\section{JUnit~5~: ce qu'il faut conna\^itre}
+
+\begin{codejava}
+import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.*;      // la vraie API d'assertion (voir plus bas)
+
+@DisplayNameGeneration(DisplayNameGenerator.ReplaceUnderscores.class)
+@Tag("rapide")
+class CalculateurDeTests {
+
+    @BeforeAll static void uneFoisPourLaClasse() { }        // doit etre static (sinon @TestInstance(PER_CLASS))
+    @BeforeEach void avantChaqueTest(TestInfo info) { }
+    @AfterEach void apres() { }
+    @AfterAll static void fin() { }
+
+    @Test void publier_un_brouillon_fixe_la_date() {
+        var article = new Article("titre", "corps", Statut.BROUILLON);
+        var publie = article.publier(Instant.parse("2026-02-01T10:00:00Z"));
+        assertThat(publie.statut()).isEqualTo(Statut.PUBLIE);
+        assertThat(publie.publieLe()).isEqualTo(Instant.parse("2026-02-01T10:00:00Z"));
+        assertThat(article).isSameAs(article).isNotSameAs(publie);            // immuabilite verifiee
+        assertAll(
+            () -> assertThat(publie.titre()).isEqualTo("titre"),
+            () -> assertThat(publie.tags()).isEmpty(),
+            () -> assertThatCode(() -> publie.publier(null)).doesNotThrowAnyException()
+        );
+    }
+
+    @Test void publier_un_article_archive_refuse() {
+        var a = new Article("t", "c", Statut.ARCHIVE);
+        assertThatThrownBy(() -> a.publier(Instant.now()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("archive");
+        // equivalents JUnit : assertThrows / assertTimeoutPreemptively / assertLinesMatch
+    }
+
+    @Test @Timeout(value = 200, unit = java.util.concurrent.TimeUnit.MILLISECONDS)
+    void ne_pas_bloquer() { }
+    @Test @Disabled("attend la correction du lotisseur #142")
+    void en_attente() { }
+    @Test @RepeatedTest(value = 5, name = RepeatedTest.CURRENT_REPETITION + "/" + RepeatedTest.TOTAL_REPETITIONS)
+    @Execution(ExecutionMode.CONCURRENT)                    // avec @ResourceLock pour les ressources partagees
+    void idempotence() { }
+    @Test @EnabledOnJre({JRE_VERSION_17, JRE_VERSION_21}) @EnabledIfEnvironmentVariable(named = "CI", matches = "true")
+    void conditionnel() { }
+
+    // Les tests parametres : la moitie de la valeur de JUnit 5
+    @ParameterizedTest(name = "[{index}] {0} -> {1}")
+    @CsvSource({ "0, zero", "1, un", "42, quarante-deux", "-3, moins trois" })
+    void convertir(int n, String attendu) { assertThat(Nombres.enToutesLettres(n)).isEqualTo(attendu); }
+
+    @ParameterizedTest @MethodSource("casLimites")
+    void refuser(String titre, Class<? extends Exception> ex) {
+        assertThatThrownBy(() -> Article.de("titre", titre)).isInstanceOf(ex);
+    }
+    static Stream<Arguments> casLimites() {
+        return Stream.of(arguments("", IllegalArgumentException.class),
+                          arguments("  ", IllegalArgumentException.class),
+                          arguments("x".repeat(161), IllegalArgumentException.class));
+    }
+    @ParameterizedTest @EnumSource(Statut.class)
+    void chaque_statut_a_un_libelle(Statut s) { assertThat(s.libelle()).isNotBlank(); }
+    @ParameterizedTest @ValueSource(ints = {2, 3, 5, 7, 11}) @NullSource @EmptySource
+    void nombres_premiers(int n) { }
+
+    // voir Mockito plus bas pour @Mock/@InjectMocks
+    @TestFactory @DisplayName("test dynamique") DynamicNode[] usine() {
+        // Des noeuds generes a l'execution (ex. un test par fichier de fixtures, par ligne d'un CSV)
+        return java.nio.file.Files.list(dossier).map(p ->
+                DynamicTest.dynamicTest(p.toString(), () -> verifier(p))).toArray(DynamicNode[]::new);
+    }
+    @Test void message_daide_clair() {
+        var map = new java.util.HashMap<String, String>();
+        assertNotNull(map.get("absent"), () -> "touche 'absent' manquante dans " + map.keySet());
+        // Le fournisseur de message n'est evalue qu'en cas d'echec : pense a la forme lambda.
+    }
+}
+\end{codejava}
+
+\subsection{AssertJ~: l'API qui rend les tests lisibles}
+
+\begin{codejava}
+assertThat(liste).hasSize(3).contains("a", "b").doesNotContainNull().extracting(Article::titre)
+        .containsExactly("un", "deux").isSortedAccordingTo(comparator);
+assertThat(map).containsOnlyKeys("a", "b").doesNotContainValue(null)
+        .allSatisfy((k, v) -> assertThat(v).isPositive());
+assertThat(string).isEqualToIgnoringCase("OK").startsWith("O").matches("(?i)ok")
+        .normalizer(Normalizer.normalize()).isEqualTo("ca");
+assertThat(instant).isBetween(debut, fin).hasSameHourAs(attendu).isCloseTo(attendu, within(1, ChronoUnit.SECONDS));
+assertThat(code).hasFieldOrProperty("id").isNotSameAs(other);
+assertThat(optionnel).isPresent().get().isEqualTo(attendu);
+assertThat(uneFuture).succeedsWithin(Duration.ofSeconds(2)).isEqualTo(attendu);
+assertThatThrownBy(...).isInstanceOf(RuntimeException.class).hasRootCauseInstanceOf(SQLException.class)
+        .hasMessageContaining("cle").hasFieldOrPropertyWithValue("code", "validation");
+// Le livre des assertions completes : org.assertj.core.api / .api.soft (SoftAssertions pour
+// cumuler les echecs dans un test de parcours de formulaire).
+\end{codejava}
+
+\section{Mockito~: simuler les fronti\`eres, pas le syst\`eme}
+
+\begin{codejava}
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.STRICT_STUBS)      // le mode qui evite les faux positifs
+class ServiceArticlesTest {
+
+    @Mock private DepotArticles depot;
+    @Mock private Journal journal;
+    @Captor private ArgumentCaptor<Article> capteur;
+    @InjectMocks private ServiceArticles service;            // injection par constructeur
+
+    @Test void publier_delegue_et_notifie() {
+        when(depot.trouver(1L)).thenReturn(Optional.of(unArticle(Statut.BROUILLON)));
+        when(depot.sauver(any())).thenAnswer(i -> i.getArgument(0));
+        // ou, pour un mock "bete" : lenient().when(...) -- mais ca cache une stub inutile
+
+        var resultat = service.publier(1L, Instant.parse("2026-02-01T00:00:00Z"));
+
+        assertThat(resultat.statut()).isEqualTo(Statut.PUBLIE);
+        verify(depot).sauver(capteur.capture());
+        assertThat(capteur.getValue().publieLe()).isEqualTo(Instant.parse("2026-02-01T00:00:00Z"));
+        verify(journal).info(eq("article publie {}"), eq(1L));
+        verifyNoMoreInteractions(depot);
+    }
+
+    @Test void introuvable_remonte_le_bon_code() {
+        when(depot.trouver(9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.publier(9L, Instant.now()))
+                .isInstanceOf(ErreurIntrouvable.class);
+        verify(depot, never()).sauver(any());
+    }
+    // Spy = objet reel avec methodes detournees : a eviter (test fragile).
+    // Fais une fausse implementation explicite quand le comportement compte (un FakeDepot en 20 lignes) ;
+    // un mock ne sert qu'a verifier une interaction.
+}
+// Mockito + inline mock maker (depasse le final) :
+// org.mockito:mockito-core + argLine "-javaagent:..." pour Java 21+ (avoid the warning).
+// Reseaux : MockWebServer (OkHttp) ou WireMock -- voir le chapitre API.
+// Horloge : ne mocke pas Instant.now() : passe une Horloge/Supplier<Instant> (voir chapitre precedent).
+\end{codejava}
+
+\section{Int\'egration~: Testcontainers et la vraie base}
+
+\begin{codejava}
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.*;
+
+@Testcontainers
+class DepotArticlesIT {
+    @Container
+    static final PostgreSQLContainer<?> PG = new PostgreSQLContainer<>("postgres:17-alpine")
+            .withDatabaseName("test").withUsername("test").withPassword("test")
+            .withInitScript("db/schema.sql")        // puis, si besoin : "db/seed.sql"
+            .withReuse(true);                       // + testcontainers.reuse.enable=true dans ~/.testcontainers.properties
+    private DepotArticles depot;
+    @BeforeEach void monter() {
+        var cfg = new com.zaxxer.hikari.HikariConfig();
+        cfg.setJdbcUrl(PG.getJdbcUrl()); cfg.setUsername(PG.getUsername()); cfg.setPassword(PG.getPassword());
+        cfg.setMaximumPoolSize(4);
+        var ds = new com.zaxxer.hikari.HikariDataSource(cfg);
+        depot = new DepotArticlesJdbc(ds);
+    }
+    @Test void inserer_et_relire_avec_tags() throws Exception {
+        var a = depot.sauver(unArticle(Statut.PUBLIE).avecTag("java"));
+        assertThat(depot.trouver(a.id())).orElseThrow().tags().contains("java");
+        assertThat(depot.lister(new Pageable(0, 10))).hasSize(1);
+    }
+}
+// Les conteneurs demarrent en ~2 s (image deja presente) : une suite IT de 40 tests en < 1 min.
+// @Testcontainers(disabledWithoutDocker = true) pour ne pas casser le build d'un pote sans Docker.
+// Autres images qui changent la vie : "redis:7-alpine", "minio/minio", "hashicorp/vault",
+// "localstack/localstack", "elasticsearch:8", "maildev/maildev" (SMTP + HTTP, parfait pour les tests d'email).
+\end{codejava}
+
+\begin{codejava}
+// Test HTTP de bout en bout, sans serveur : RestAssured ou java.net.http + MockWebServer
+import static io.restassured.RestAssured.*;
+given().header("Authorization", "Bearer " + jeton).queryParam("page", 0)
+   .when().get("/api/articles")
+   .then().statusCode(200).contentType("application/json")
+   .body("total", equalTo(2)).body("contenus[0].titre", equalTo("Bonjour"))
+   .time(lessThan(1500L));                                   // une assertion de latence : oui, ca se fait
+given().body("""
+    {"titre":"x"}""").contentType("application/json")
+   .when().post("/api/articles")
+   .then().statusCode(400).body("type", equalTo("https://exemple.fr/erreurs/validation"));
+\end{codejava}
+
+\section{Architecture, couverture, mutations~: les trois filets}
+
+\begin{codejava}
+// 1. ArchUnit : les regles que la revue de code oublie, le test ne les oublie pas
+@AnalyzeClasses(packages = "com.exemple", importOptions = ImportOption.DoNotIncludeTests.class)
+class ArchitectureTest {
+    @ArchTest static final ArchRule couches = layeredArchitecture()
+            .consideringOnlyDependenciesInLayers()
+            .layer("Domaine").definedBy("..domaine..")
+            .layer("Application").definedBy("..application..")
+            .layer("Infra").definedBy("..infra..")
+            .whereLayer("Domaine").mayNotBeAccessedByAnyLayerExcept("Application")
+            .whereLayer("Infra").mayOnlyBeAccessedByLayers("Amoracage");
+    @ArchTest static final ArchRule domaine_pur = noClasses().that().resideInAPackage("..domaine..")
+            .should().dependOnClassesThat().resideOutsideOfPackages("..domaine..", "java..", "..record..");
+    @ArchTest static final ArchRule pas_de_field_injection =
+            noFields().should().beAnnotatedWith(Autowired.class);
+    @ArchTest static final ArchRule services_finaux = classes().that().resideInAPackage("..application..")
+            .and().haveSimpleNameEndingWith("Service").should().beFinal();
+}
+// 2. JaCoCo : la couverture est un signal d'alerte, pas un objectif.
+//    "80 % de lignes" ne dit rien sur les chemins d'erreur. Regarde les BRANCHES, et les paquets
+//    les moins couverts : ce sont eux, pas la moyenne, qui predisent les bugs.
+// 3. PIT (mutation testing) : le seul indicateur qui repond a "mes tests detecteraient-ils
+//    ce bug ?". Il injecte des fautes (>= remplace par >, constantes inversees) et exige
+//    qu'au moins un test echoue. Un score de mutations de 70 % vaut mieux que 95 % de lignes.
+\end{codejava}
+
+\begin{terminal}
+# PIT avec Maven (l'edition la plus simple)
+mvn org.pitest:pitest-maven:mutationCoverage -DtargetClasses=com.exemple.domaine.* -DtimeoutConstant=4000
+# PIT avec Gradle : plugin "info.solidsoft.pitest"
+./gradlew pitest
+# JMH (micro-benchmarks) : ne jamais mesurer avec System.nanoTime() a la main dans un main()
+./gradlew jmh ; mvn -Pbenchmark generate-sources  # ou creer un module benchmarks/
+\end{terminal}
+
+\begin{codejava}
+// Un JMH honnete, en 25 lignes (org.openjdk.jmh:jmh-core + generator)
+@BenchmarkMode(Mode.AverageTime) @OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Warmup(iterations = 5, time = 1) @Measurement(iterations = 5, time = 1) @Fork(1) @State(Scope.Benchmark)
+public class ParsingBench {
+    @Param({"100", "10000"}) private int n;
+    private List<String> entrees;
+    @Setup public void monter() { entrees = genere(n); }
+    @Benchmark public long avecStream() { return entrees.stream().mapToLong(String::length).sum(); }
+    @Benchmark public long avecBoucle() { long s = 0; for (var e : entrees) { s += e.length(); } return s; }
+    @Benchmark public void blackhole(Blackhole bh) { for (var e : entrees) { bh.consume(e); } }
+}
+// Sans @Setup/@Param/Blackhole, la mesure est du bruit ; sans @Fork, c'est faux.
+\end{codejava}
+
+\section{Anti-flaky~: les r\`egles de survie}
+
+\begin{enumerate}
+  \item Aucun \verb|Thread.sleep|~: attends une \emph{condition} avec \link{Awaitility}{https://github.com/awaitility/awaitility}
+        (\verb|await().atMost(5s).untilAsserted(...)|) ou un \verb|CountDownLatch|.
+  \item Horloge et al\'ea inject\'es~: \verb|Horloge| (\verb|Clock.fixed(...)|), \verb|Random(seed)| ou
+        \verb|RandomGenerator.JdkRandom(1)|. Deux ex\'ecutions, m\^emes r\'esultats.
+  \item Aucune d\'ependance d'ordre entre tests~: un test pris isol\'e doit passer
+        (\verb|-Djunit.jupiter.testmethod.order.default=...Random| pour v\'erifier).
+  \item R\'eseau et disques isol\'es~: \verb|@TempDir| pour les fichiers~; MockWebServer pour l'HTTP~;
+        un conteneur pour la BDD. Jamais l'instance de dev d'un coll\`egue.
+  \item Une donn\'ee de test par test (builder ou m\'ethode \verb|unArticle()|)~: pas de fixture
+        globale mut\'ee en s\'erie.
+  \item Locale et fuseau fix\'es~: \verb|@DefaultLocale("fr-FR")|, \verb|@DefaultTimeZone("UTC")|
+        (JUnit 5.12+) ou \verb|TimeZone.setDefault| dans un extension.
+  \item Un test qui \'echoue une fois sur 50 est un bug~: traite-le comme un P1, sinon il d\'evore
+        la confiance de toute l'\'equipe en trois semaines.
+\end{enumerate}
+
+\begin{tablez}[p{0.24\textwidth}X]
+  \headrow \thd{Ce que tu testes} \& \thd{Outil adapt\'e} \\
+  \midrule
+  une fonction pure (calcul, parsing, r\`egle m\'etier) \& JUnit + AssertJ, en table de v\'erit\'e param\'etr\'ee \\
+  une collaboration~: \og ~le service appelle le d\'ep\^ot avec X~ \fg{} \& Mockito \emph{ou} un fake explicite \\
+  SQL~: requ\^etes, contraintes, migrations, plans \& Testcontainers + un \verb|@Sql|/script d'init \\
+  S\'erialisation~: JSON entr\'ee/sortie, compatibilit\'e \& test sur un fichier d'or (\verb|.json| en resources) \\
+  HTTP~: une API, des en-t\^etes, des codes de statut \& RestAssured / MockMvc / WebTestClient \\
+  Une application compl\`ete qui d\'emarre \& \verb|@SpringBootTest| (ou \verb|quarkus test dev-services|) \\
+  Interface graphique/console \& le plus souvent~: ne pas tester l'UI, tester la couche en dessous (Playwright pour le web, tests de rendu pour Swing/JavaFX) \\
+  Performance d'un algorithme \& JMH~; \textbf{jamais} dans la CI bloquante~: une alarme s\'epar\'ee \\
+\end{tablez}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris la suite de tests du \verb|CalculateurDe| du chapitre sur les collections~: table de
+        v\'erit\'e \verb|@CsvSource|, un test d'erreur par invariante, un test de propri\'et\'e avec 1 000
+        entr\'ees al\'eatoires (graine fixe).
+  \item Couvre le \verb|LRUCache| de l'exercice du chapitre pr\'ec\'edent~: ajoute un test de
+        concurrence (\verb|CyclicBarrier| + \verb|ExecutorService|) qui prouve que deux threads
+        ne calculent pas deux fois la m\^eme cl\'e.
+  \item Fais passer la couverture de branches d'un module de 40 \% \`a 80 \%~: montre le rapport
+        JaCoCo avant/apr\`es~; puis lance PIT~: le score de mutations t'apprendra quelles assertions
+        \'etaient d\'ecoratives.
+  \item Ajoute un test d'int\'egration Testcontainers sur le d\'ep\^ot JDBC~: migration avec Flyway/Liquibase
+        dans le conteneur, jeu de donn\'ees~; puis un test qui v\'erifie le plan d'ex\'ecution
+        (\verb|EXPLAIN|) d'une requ\^ete~: une ligne sur la pr\'esence de l'index.
+  \item \'Ecris un test d'architecture~: le paquet \verb|domaine| ne d\'epend ni de Spring, ni de JDBC,
+        ni de Jackson~; aucune classe publique hors \verb|api|~; toutes les exceptions h\'eritent de
+        \verb|ErreurDomaine|. Fais-le \'echouer volontairement, puis corrige le code~: c'est le but.
+  \item Prends un benchmark JMH qui mesure deux impl\'ementations d'un m\^eme algorithme~:
+        \'ecris la ligne de commande, la description, et ce que tu conclurais si l'\'ecart \'etait de
+        3 \%~; puis fais la m\^eme mesure \`a froid et note la diff\'erence~: tu viens d'apprendre \`a ne
+        pas mentir avec un micro-benchmark.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item JUnit~5 User Guide --- \url{https://junit.org/junit5/docs/current/user-guide/}
+  \item AssertJ --- \url{https://assertj.github.io/doc/} --- Mockito --- \url{https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html}
+  \item Testcontainers --- \url{https://java.testcontainers.org/} (les modules officiels par image)
+  \item ArchUnit --- \url{https://www.archunit.org/} --- PIT --- \url{https://pitest.org/} --- JMH --- \url{https://github.com/openjdk/jmh}
+  \item Awaitility --- \url{https://github.com/awaitility/awaitility} --- RestAssured --- \url{https://restassured.io/}
+\end{itemize}
+\end{ressources}
+
+\index{JUnit}\index{AssertJ}\index{Mockito}\index{Testcontainers}\index{ArchUnit}\index{JMH}

@@ -1,0 +1,332 @@
+% ============================================================================
+\chapter{S\'ecurit\'e PHP~: les failles r\'eelles et leurs rem\`edes exacts}
+\label{ch:php-secu}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Reconna\^itre les huit failles qui font l'essentiel des incidents PHP~: injection SQL,
+        XSS, upload, LFI/RFI, d\'es\'erialisation, IDOR, SSRF, d\'ependance.
+  \item \'Ecrire les r\'eflexes qui les bouchent toutes, ligne par ligne.
+  \item Configurer PHP lui-m\^eme pour qu'il soit s\^ur par d\'efaut.
+  \item Journaliser assez pour comprendre un incident, pas assez pour en cr\'eer un second.
+\end{itemize}
+\end{objectif}
+
+\section{Configuration dure~: le \fichier{php.ini} de production}
+
+\begin{codeconf}
+; /etc/php/8.3/fpm/php.ini  -- les lignes qui comptent vraiment
+engine = On
+short_open_tag = Off                 ; sinon "<?" devient du PHP dans un template XML
+expose_php = Off                     ; retire "X-Powered-By: PHP/8.3"
+precision = 14
+
+; --- Erreurs : rien au visiteur, tout au journal
+display_errors = Off
+display_startup_errors = Off
+log_errors = On
+error_log = /var/log/php/error.log
+error_reporting = E_ALL
+ignore_repeated_errors = On
+
+; --- Limites : protegent contre l'epuisement
+memory_limit = 256M
+max_execution_time = 30
+max_input_time = 60
+post_max_size = 12M
+upload_max_filesize = 10M
+max_file_uploads = 20
+max_input_vars = 1000                ; un <= tableau en entree ne doit pas pouvoir tout ecraser
+
+; --- Securite du systeme de fichiers
+open_basedir = /var/www/nour:/tmp    ; ou mieux : un pool php-fpm par site avec chroot
+disable_functions = exec,passthru,shell_exec,system,proc_open,popen,curl_multi_exec,show_source,pcntl_alarm
+allow_url_fopen = Off                ; sinon file_get_contents("http://...") devient un vecteur SSRF
+allow_url_include = Off              ; RFI : doit etre une heresie, verifie-le
+
+; --- Sessions durcies (cf. chapitre precedent)
+session.use_strict_mode = On
+session.cookie_httponly = On
+session.cookie_secure = On
+session.cookie_samesite = Lax
+session.use_only_cookies = On
+session.sid_length = 48
+
+; --- Date
+date.timezone = UTC
+\end{codeconf}
+
+\begin{note}
+\verb|disable\_functions| n'est pas une s\'ecurit\'e, c'est une ceinture~: si un attaquant ex\'ecute
+du code chez toi, il a d\'ej\`a gagn\'e. La vraie s\'ecurit\'e, c'est de ne jamais \'evaluer de donn\'ee
+comme du code. Le point important de la liste~: \verb|allow\_url\_include=Off| et
+\verb|display\_errors=Off| en production (une stack trace publi\'ee = plan du ch\^ateau).
+\end{note}
+
+\section{Injection SQL~: un seul rem\`ede}
+
+\begin{codephp}
+<?php
+// NON : concatenation ou sprintf dans la SQL
+$sql = "SELECT * FROM articles WHERE id = " . $_GET['id'];              // 1; DROP TABLE articles; --
+$sql = sprintf('SELECT * FROM users WHERE email = "%s"', $email);       // ' OR 1=1 -- '
+// OUI : marqueur nomme ou positionne, toujours
+$stmt = $pdo->prepare('SELECT * FROM articles WHERE id = :id');
+$stmt->execute(['id' => (int) $_GET['id']]);
+
+// Le seul endroit ou l'on construit du texte SQL : les identifiants (table, colonne, ordre).
+// Remede : liste blanche, jamais echappement.
+$colonnesAutorisees = ['titre', 'vues', 'publie_le'];
+$ordre = in_array($_GET['tri'] ?? '', $colonnesAutorisees, true) ? $_GET['tri'] : 'publie_le';
+$sens = strtolower((string) ($_GET['ordre'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+$sql = "SELECT * FROM articles ORDER BY {$ordre} {$sens} LIMIT 20";     // sur, car valeurs issues d'une enum
+
+// LIKE : l'echappement des jokers est a faire par toi
+$q = '%' . addcslashes(mb_strtolower($recherche), '\\%_') . '%';
+$pdo->prepare("SELECT * FROM articles WHERE LOWER(titre) LIKE ? ESCAPE '\\\\'")->execute([$q]);
+\end{codephp}
+
+\begin{piege}
+Un \verb|real\_escape\_string()| + des guillemets bien plac\'es \og ~marche~ \fg{} tant que le charset de la
+connexion est coh\'erent~: en \verb|latin1| ou avec \verb|emulate prepares| activ\'e, certaines
+suites d'octets cassent l'\'echappement (les attaques GBK/UTF-8 historiques). Une requ\^ete
+pr\'epar\'ee \textbf{r\'eelle} (\verb|PDO::ATTR\_EMULATE\_PREPARES => false|) supprime la classe enti\`ere
+de probl\`emes. Il n'y a donc aucune raison de faire autrement.
+\end{piege}
+
+\section{XSS et \'echappement de sortie~: le contexte d\'ecide}
+
+\begin{codephp}
+<?php
+function e(?string $v): string            // dans le HTML
+{ return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8'); }
+
+function eAttr(?string $v): string        // dans un attribut non entre guillemets : ne fait pas \c{c}a
+{ return e($v); }                          // mets toujours des guillemets autour des attributs
+
+function eUrl(?string $v): string
+{
+    $u = filter_var((string) $v, FILTER_VALIDATE_URL);
+    if ($u === false) { return '#'; }
+    $h = parse_url($u, PHP_URL_SCHEME);
+    return in_array(strtolower((string) $h), ['http', 'https', 'mailto'], true) ? $u : '#';
+}
+
+function eJs(?string $v): string           // dans un <script> : JSON, pas htmlspecialchars
+{ return json_encode($v, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?: '""'; }
+
+function eCss(?string $v): string { return preg_replace('/[^a-zA-Z0-9 _#.-]/', '', (string) $v) ?? ''; }
+function eEmailHtml(?string $v): string    // anti-obfuscation dans les mails texte
+{ return str_replace('@', '[at]', (string) $v); }
+?>
+<!-- dans la vue : le bon escaper pour le bon trou -->
+<h1><?= e($article->titre()) ?></h1>
+<a href="<?= eUrl($auteur->site()) ?>" rel="noopener nofollow ugc"><?= e($auteur->pseudo()) ?></a>
+<div data-id="<?= e((string) $id) ?>" style="color: <?= eCss($couleur) ?>"></div>
+<script>window.__DATA__ = <?= eJs(json_encode($donnees, JSON_THROW_ON_ERROR)) ?>;</script>
+\end{codephp}
+
+\begin{itemize}
+  \item Une vue Twig/Blade \'echappe par d\'efaut~: les XSS survivent presque toujours \`a un
+        \verb|{{ x|raw }}| ajout\'e \og ~pour que \c{c}a s'affiche~ \fg{}. Interdis-le en revue de code.
+  \item Pour le HTML riche~: \link{HTML Purifier}{http://htmlpurifier.org/},
+        \link{symfony/html-sanitizer}{https://symfony.com/doc/current/html\_sanitizer.html},
+        ou \verb|strip\_tags| + une liste blanche d'\'etiquettes. Ne code jamais ton propre filtre.
+  \item \verb|header('content-type: text/html; charset=utf-8')| avant toute sortie~: sans
+        charset d\'eclar\'e, un navigateur peut \og ~deviner~ \fg{} un encodage qui recr\'ee du HTML depuis
+        des octets valides (le vieux \verb|UTF-7|-style XSS).
+\end{itemize}
+
+\section{Inclusion de fichiers, d\'es\'erialisation, \'evaluations}
+
+\begin{codephp}
+<?php
+// 1) Inclusion pilotee par l'entree utilisateur = LFI / RFI. Le pire pattern de l'histoire de PHP.
+require $_GET['page'] . '.php';                      // ../../../../etc/passwd, ou une URL distante
+require 'vues/' . $nom . '.php';                     // $nom vient d'un champ de formulaire ? idem
+
+// Le remede : une table de correspondance, ou un filtre alphanumerique strict.
+$vues = ['accueil' => 'vues/accueil.php', 'contact' => 'vues/contact.php'];
+require $vues[(string) ($_GET['page'] ?? 'accueil')] ?? $vues['accueil'];
+// ou :
+$nom = preg_replace('/[^a-z0-9_-]/', '', mb_strtolower((string) $_GET['page']));
+$chemin = realpath(__DIR__ . '/vues/' . $nom . '.php');
+if ($chemin === false || !str_starts_with($chemin, realpath(__DIR__ . '/vues') . DIRECTORY_SEPARATOR)) {
+    throw new RuntimeException('vue introuvable');       // verif de traversee de repertoire
+}
+require $chemin;
+
+// 2) unserialize sur une donnee utilisateur : RCE dans de nombreux cas ("POP chain").
+$etat = unserialize($_COOKIE['panier']);                 // NON
+$etat = json_decode((string) $_COOKIE['panier'], true, 8, JSON_THROW_ON_ERROR);   // OUI
+// Si tu dois vraiment s\'erialiser : signature + allowed_classes:false
+$signe = base64_encode(serialize($objet)) . '.' . hash_hmac('sha256', $objet, $secret);
+$objet = unserialize(base64_decode($partie), ['allowed_classes' => [MaClasse::class]]);
+
+// 3) eval(), preg_replace /e (mort), create_function (mort), extract($donnees), compact()
+//    dans une vue, ${$cle} dynamiques : tout ce qui transforme des donnees en code.
+extract($_GET);                                          // NON : l'attaquant definit tes variables
+parse_str(parse_url($url, PHP_URL_QUERY) ?: '', $out);  // $out['id'] = ... -> OK si tu lis le tableau
+\end{codephp}
+
+\section{IDOR, CSRF, SSRF, commandes~: les quatre qui restent}
+
+\begin{codephp}
+<?php
+// IDOR (l'identifiant est choisi par l'attaquant) : toujours filtrer par proprietaire
+$id = (int) $_GET['id'];
+$facture = $pdo->prepare('SELECT * FROM factures WHERE id = ?');                  // VULNERABLE
+$facture = $pdo->prepare('SELECT * FROM factures WHERE id = ? AND utilisateur_id = ?');
+$facture->execute([$id, $_SESSION['user_id']]);                                     // sur
+// + ne renvoie pas 403 qui confirme l'existence : 404.
+
+// CSRF : cf. chapitre formulaires. Jeton + Origin + SameSite=Lax.
+$enteteOrigine = $_SERVER['HTTP_ORIGIN'] ?? null;
+if ($_SERVER['REQUEST_METHOD'] !== 'GET' && $enteteOrigine !== null
+    && parse_url($enteteOrigine, PHP_URL_HOST) !== $_SERVER['HTTP_HOST']) {
+    http_response_code(403); exit('origine non autorisee');
+}
+
+// SSRF : un webhook qui demande une URL au visiteur permet de scanner ton reseau interne.
+$hote = parse_url($url, PHP_URL_HOST);
+$ip = gethostbyname((string) $hote);
+if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+    throw new InvalidArgumentException('Adresse non autorisee');       // refuse 127.*, 10.*, 169.254.169.254 (metadata cloud)
+}
+// + desactive les redirections, limite la taille de la reponse, timeout court, https seulement.
+
+// Commandes shell : tableaux + echappement, jamais de concatenation.
+exec(sprintf('convert %s %s', escapeshellarg($entree), escapeshellarg($sortie)), $out, $code);
+$proc = proc_open(['ffmpeg', '-i', $entree, $sortie], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes); // PHP 7.4+ : pas de shell
+if ($code !== 0) { throw new RuntimeException('ffmpeg a echoue : ' . implode("\n", $out)); }
+
+// Redirections ouvertes : "?next="
+$next = (string) ($_GET['next'] ?? '/');
+$safe = (str_starts_with($next, '/') && !str_starts_with($next, '//') && parse_url($next, PHP_URL_HOST) === null) ? $next : '/';
+header('location: ' . $safe, true, 303);
+\end{codephp}
+
+\section{Journaux, gestion des erreurs et des exceptions}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+// Bootstrap : rien au visiteur, tout au journal, y compris les fatal errors.
+error_reporting(E_ALL);
+ini_set('display_errors', getenv('APP_ENV') === 'dev' ? '1' : '0');
+ini_set('log_errors', '1');
+ini_set('error_log', '/var/log/php/app.log');
+
+set_error_handler(static function (int $n, string $msg, string $f = '', int $l = 0): bool {
+    if ((error_reporting() & $n) === 0) { return false; }
+    throw new ErrorException($msg, 0, $n, $f, $l);            // les warnings deviennent des exceptions : + de rigueur
+});
+set_exception_handler(static function (Throwable $e): void {
+    $id = bin2hex(random_bytes(6));                            // identifiant affiche a l'utilisateur
+    error_log(sprintf('[%s] %s %s:%d\n%s', $id, $e->getMessage(), $e->getFile(), $e->getLine(), $e->getTraceAsString()));
+    http_response_code(500);
+    if (($_SERVER['HTTP_ACCEPT'] ?? '') . ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== '' && stripos((string) ($_SERVER['HTTP_ACCEPT'] ?? ''), 'json') !== false) {
+        header('content-type: application/json');
+        echo json_encode(['erreur' => 'Incident ' . $id]);
+    } else {
+        require __DIR__ . '/vues/500.php';                      // page humaine, sans detail technique
+    }
+});
+register_shutdown_function(static function (): void {
+    $e = error_get_last();
+    if ($e !== null && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        error_log('FATAL ' . json_encode($e));
+        http_response_code(500);
+        echo file_get_contents(__DIR__ . '/vues/500.html');
+    }
+});
+
+// Logger structure maison (ou Monolog, cf. chapitre Composer)
+function journal(string $niveau, string $message, array $contexte = []): void
+{
+    static $requestId;
+    $requestId ??= substr(bin2hex(random_bytes(5)), 0, 10);
+    $ligne = [
+        'ts' => (new DateTimeImmutable('now'))->format(DATE_ATOM),
+        'niveau' => $niveau, 'message' => $message, 'request_id' => $requestId,
+        'url' => $_SERVER['REQUEST_URI'] ?? null, 'methode' => $_SERVER['REQUEST_METHOD'] ?? null,
+        'user_id' => $_SESSION['user_id'] ?? null, 'ip' => $_SERVER['REMOTE_ADDR'] ?? null,
+    ] + $contexte;
+    error_log(json_encode($ligne, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 4);   // 4 = sans horodatage doublon
+}
+journal('warn', 'mail lente', ['ms' => $duree, 'destinataire' => masquerEmail($email)]);
+
+function masquer(?string $v): string
+{
+    if ($v === null || $v === '') { return ''; }
+    return mb_substr($v, 0, 2) . str_repeat('*', max(0, mb_strlen($v) - 4)) . mb_substr($v, -2);
+}
+\end{codephp}
+
+\begin{tabz}{lX}
+  \headrow \thd{R\`egle de journal} \& \thd{Pourquoi} \\
+  \midrule
+  Aucun mot de passe, aucun jeton, aucun cookie \& le fichier de log est souvent le fichier le moins prot\'eg\'e du serveur. \\
+  Email/IP tronqu\'es, pas supprim\'es \& tu en as besoin pour diagnostiquer, pas pour profiler les gens. \\
+  Un identifiant de requ\^ete partout \& corr\`ele un incident avec un seul num\'ero donn\'e \`a l'utilisateur. \\
+  Niveaux utiles~: \verb|error|, \verb|warn|, \verb|info| \& le \verb|debug| permanent en production est du bruit co\^uteux. \\
+  Rotation et dur\'ee finie \& \verb|logrotate|, 30 \`a 90 jours, ou un agr\'egateur. \\
+\end{tabz}
+
+\section{D\'ependances et fichiers~: les deux derni\`eres portes}
+
+\begin{terminal}
+# Audit de securite des paquets PHP
+composer audit                                  # natif depuis Composer 2.4
+composer require --dev roave/security-advisories  # refuse d'installer une version connue vulnerable
+# Outils complementaires
+composer require --dev sensiolabs/security-checker   # (deprecie) -> utilise `composer audit`
+# Packagist signale les versions vulnerables : https://packagist.org/packages/roave/security-advisories
+# Analyses statiques orientees securite
+composer require --dev vimeo/psalm --dev ; vendor/bin/psalm --taint-analysis
+composer require --dev phpcs ; vendor/bin/phpcs --standard=PHPCompatibility
+composer require --dev phpstan/phpstan --level=max
+# Fichiers sensibles : ne JAMAIS exposer
+#   .env, storage/, *.sql, .git/, backup.zip, wp-config.php~
+\end{terminal}
+
+\begin{codeconf}
+# nginx : la liste noire minimale au-dessus d'une app PHP
+location ~ /\..*                       { deny all; }              # .git, .env, .htaccess
+location ~* \.(sql|log|bak|old|zip|tar|gz)$ { deny all; }
+location ~ ^/(storage|vendor|config|database)/ { deny all; }
+# La racine web doit pointer sur le dossier public/ uniquement. Jamais sur la racine du projet.
+\end{codeconf}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris un mini-IDS de revue~: une liste de motifs (concat\'enation dans \verb|prepare|,
+        \verb|eval|, \verb|unserialize|, \verb|?>| final, \verb|\$\_GET| non typ\'e) que tu passes
+        en regex sur \verb|src/|~; applique-la \`a un ancien projet.
+  \item Sur ton blog PHP~: injecte-toi toi-m\^eme un XSS stock\'e dans un commentaire, puis
+        corrige (\'echappement de sortie + \verb|strip\_tags| pour le gras) et rev\'erifie.
+  \item Force une URL \verb|file:///etc/passwd| dans ton champ \og ~aper\c{c}u distant~ \fg{}~: \'echoue,
+        puis impl\'emente la validation SSRF ci-dessus~: v\'erifie qu'elle \'echoue.
+  \item \'Ecris la page \og ~500~ \fg{} de ton application avec un identifiant d'incident, et un test
+        automatis\'e qui v\'erifie qu'aucune stack trace n'est visible en production.
+  \item Passe ton \verb|php.ini| en revue contre la liste, puis utilise
+        \link{PHP~Hardening}{https://github.com/lockfale/PHP-Security}~: liste les \'ecarts restants
+        dans un fichier \verb{SECURITE.md}.
+  \item Lance \verb|composer audit| et \verb|psalm --taint-analysis| sur un paquet du commerce~:
+        lis un r\'esultat, explique-le, et \'ecris la correction (pas seulement le bump de version).
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item OWASP Cheat Sheet Series (la s\'erie compl\`ete, 15 min par fiche) --- \url{https://cheatsheetseries.owasp.org/}
+  \item PHP Security Advisories DB --- \url{https://github.com/Roave/SecurityAdvisories}
+  \item \link{PHP~:~Security~Book}{https://phptherightway.com/pages/The-Fundamentals-Of-Programming.html} (chapitre s\'ecurit\'e)
+  \item \url{https://www.php.net/manual/fr/security.overview.php} --- la doc officielle, courte et juste
+  \item PortSwigger Academy (pour manipuler les attaques web dans un bac \`a sable l\'egal) --- \url{https://portswigger.net/web-security}
+\end{itemize}
+\end{ressources}
+
+\index{PHP!securite}\index{injection SQL}\index{LFI}\index{SSRF}\index{php.ini}

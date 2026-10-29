@@ -1,0 +1,411 @@
+% ============================================================================
+\chapter{Java et les bases de donn\'ees~: JDBC, pools, JPA/Hibernate, migrations}
+\label{ch:java-db}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item \'Ecrire du JDBC correct~: \texttt{DataSource}, requ\^etes pr\'epar\'ees, cl\'es g\'en\'er\'ees, lots,
+        transactions, isolation.
+  \item Cartographier proprement ResultSet \$\rightarrow\$ objets, sans ORM et sans N+1.
+  \item Comprendre ce que Hibernate fait pour toi~: unit\'e de travail, cache de premier niveau,
+        \og d\'etachement~\fg{}, et le pi\`ege N+1.
+  \item Versionner le sch\'ema avec Flyway/Liquibase~: la migration est du code.
+  \item Savoir quand se passer d'un ORM (et quand il est indispensable).
+\end{itemize}
+\end{objectif}
+
+\section{Le sch\'ema de travail (r\'eutilis\'e dans tout le livre)}
+
+\begin{codesql}
+-- PostgreSQL 17 / MySQL 8 : les deux sont cites, les differences sont signalees.
+CREATE TABLE auteurs (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,   -- MySQL : BIGINT AUTO_INCREMENT
+  nom        TEXT         NOT NULL,
+  email      TEXT         NOT NULL UNIQUE,
+  cree_le    TIMESTAMPTZ  NOT NULL DEFAULT now()                 -- MySQL : TIMESTAMP(3) NOT NULL
+);
+CREATE TABLE articles (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  auteur_id  BIGINT       NOT NULL REFERENCES auteurs(id) ON DELETE RESTRICT,
+  titre      TEXT         NOT NULL CHECK (char_length(titre) BETWEEN 3 AND 160),
+  slug       TEXT         NOT NULL UNIQUE,
+  corps      TEXT         NOT NULL,
+  statut     TEXT         NOT NULL DEFAULT 'BROUILLON'
+             CHECK (statut IN ('BROUILLON','PUBLIE','ARCHIVE')),
+  vues       INTEGER      NOT NULL DEFAULT 0,
+  publie_le  TIMESTAMPTZ,
+  cree_le    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  modifie_le TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_articles_publie_le ON articles (publie_le DESC) WHERE statut = 'PUBLIE';
+CREATE INDEX idx_articles_auteur    ON articles (auteur_id);
+CREATE TABLE tags (
+  id   SERIAL PRIMARY KEY,
+  nom  TEXT NOT NULL UNIQUE
+);
+CREATE TABLE articles_tags (
+  article_id BIGINT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  tag_id     INT    NOT NULL REFERENCES tags(id)     ON DELETE CASCADE,
+  PRIMARY KEY (article_id, tag_id)
+);
+CREATE TABLE comptes (
+  id            BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  identifiant   TEXT NOT NULL UNIQUE,
+  mot_de_passe  TEXT NOT NULL,                       -- empreinte Argon2id, jamais le mot de passe
+  role          TEXT NOT NULL DEFAULT 'AUTEUR',
+  version       INTEGER NOT NULL DEFAULT 0,          -- verrouillage optimiste (Hibernate @Version)
+  dernier_acc   TIMESTAMPTZ
+);
+CREATE OR REPLACE VIEW v_articles_publies AS
+  SELECT a.id, a.titre, a.slug, a.publie_le, a.vues, u.nom AS auteur
+  FROM articles a JOIN auteurs u ON u.id = a.auteur_id
+  WHERE a.statut = 'PUBLIE';
+\end{codesql}
+
+\section{JDBC nu : la connexion et l'\'egouttoir}
+
+\begin{codejava}
+// On ne cree JAMAIS une connexion a la main dans une application : on passe par un DataSource.
+var cfg = new com.zaxxer.hikari.HikariConfig();
+cfg.setJdbcUrl("jdbc:postgresql://localhost:5432/blog?currentSchema=public&ApplicationName=blog");
+cfg.setUsername("blog"); cfg.setPassword(System.getenv("DB_PASS"));
+cfg.setMaximumPoolSize(10);            // (2 x coeurs) + nombre de disques, en regle generale
+cfg.setMinimumIdle(2);
+cfg.setConnectionTimeout(3_000);        // echec rapide > attente infinie
+cfg.setMaxLifetime(30 * 60_000);         // < au timeout du proxy/pool cote serveur
+cfg.setKeepaliveTime(60_000);
+cfg.setLeakDetectionThreshold(20_000);   // ALERTE si une connexion n'est pas rendue : detecte les fuites
+cfg.setPoolName("blog-pool");
+cfg.addDataSourceProperty("prepareThreshold", "1");     // postges : server-side prepared statements
+var pool = new com.zaxxer.hikari.HikariDataSource(cfg);
+// MySQL : jdbc:mysql://hote:3306/blog?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8
+//        &useServerPrepStmts=true&cachePrepStmts=true&rewriteBatchedStatements=true&connectTimeout=3000
+// H2 (tests) : jdbc:h2:mem:blog;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE ; SQLite : jdbc:sqlite:app.db
+
+try (var c = pool.getConnection()) {                 // le try-with-resources REND la connexion au pool
+    c.setAutoCommit(false);
+    try {
+        // ... requetes ...
+        c.commit();
+    } catch (SQLException e) {
+        try { c.rollback(); } catch (SQLException sup) { e.addSuppressed(sup); }
+        throw e;
+    }
+}
+// La regle d'or : une connexion = un "unite de travail". On l'ouvre tard, on la rend tot.
+// Ne JAMAIS garder une connexion dans un champ d'une singleton ; ne JAMAIS creer un pool par requete.
+\end{codejava}
+
+\subsection{Requ\^etes~: le bon code, ligne \`a ligne}
+
+\begin{codejava}
+// SELECT avec parametres (JAMAIS de concatenation : injection SQL)
+record ResumeArticle(long id, String titre, String slug, Instant publieLe, int vues, String auteur) { }
+
+public List<ResumeArticle> recents(int limite) throws SQLException {
+    var sql = """
+            SELECT id, titre, slug, publie_le, vues, auteur
+            FROM   v_articles_publies
+            ORDER  BY publie_le DESC
+            LIMIT  ?
+            """;
+    try (var c = pool.getConnection();
+         var ps = c.prepareStatement(sql)) {
+        ps.setInt(1, limite);
+        ps.setFetchSize(200);                       // postgres : active le mode curseur (memoire!)
+        try (var rs = ps.executeQuery()) {
+            var out = new ArrayList<ResumeArticle>(limite);
+            while (rs.next()) {
+                out.add(new ResumeArticle(rs.getLong("id"), rs.getString("titre"), rs.getString("slug"),
+                        rs.getTimestamp("publie_le").toInstant(), rs.getInt("vues"), rs.getString("auteur")));
+            }
+            return out;
+        }
+    }
+}
+
+// INSERT + recuperation de la cle generee (getGeneratedKeys, pas de "SELECT lastval" maison)
+public long inserer(Article a) throws SQLException {
+    var sql = """
+            INSERT INTO articles (auteur_id, titre, slug, corps, statut, publie_le, cree_le, modifie_le)
+            VALUES (?, ?, ?, ?, ?, ?, now(), now())
+            """;
+    try (var c = pool.getConnection();
+         var ps = c.prepareStatement(sql, new String[] { "id" })) {
+        ps.setLong(1, a.auteurId());
+        ps.setString(2, a.titre());
+        ps.setString(3, a.slug());
+        ps.setString(4, a.corps());
+        ps.setString(5, a.statut().name());
+        ps.setTimestamp(6, a.publieLe() == null ? null : Timestamp.from(a.publieLe()));
+        // Timestamp.set... : ne passe jamais un Instant par setObject sans connaitre le type cible
+        ps.executeUpdate();
+        try (var rs = ps.getGeneratedKeys()) {
+            if (!rs.next()) { throw new SQLException("cle generee absente"); }
+            return rs.getLong(1);
+        }
+    }
+}
+
+// UPSERT (PostgreSQL) / ON DUPLICATE KEY UPDATE (MySQL)
+var up = """
+        INSERT INTO tags (nom) VALUES (?) ON CONFLICT (nom) DO UPDATE SET nom = EXCLUDED.nom RETURNING id
+        """;
+// Lots : l'ecart de performance est de 1 a 2 ordres de grandeur
+try (var c = pool.getConnection(); var ps = c.prepareStatement("INSERT INTO articles_tags (article_id, tag_id) VALUES (?, ?)")) {
+    c.setAutoCommit(false);
+    for (var tag : tags) {
+        ps.setLong(1, id); ps.setInt(2, tag.id());
+        ps.addBatch();
+        if (++compteur % 1000 == 0) { ps.executeBatch(); }   // decoupe : evite un tampon geant
+    }
+    ps.executeBatch();
+    c.commit();
+}
+// Requete dynamique sur un IN : generer N placeholders, jamais de "IN (" + join + ")"
+var ids = List.of(1L, 7L, 42L);
+var sqlIn = "SELECT id, titre FROM articles WHERE id IN (" +
+        ids.stream().map(x -> "?").collect(Collectors.joining(",")) + ")";
+try (var ps = c.prepareStatement(sqlIn)) {
+    for (int i = 0; i < ids.size(); i++) { ps.setLong(i + 1, ids.get(i)); }
+}
+// LIKE securise : echapper %, _ et \ avant de lier le parametre
+var motif = "%" + likeEscaper(recherche) + "%";
+ps.setString(1, motif);
+ps.setString(2, "\\");                       // ESCAPE '\' (Postgres : standard_conforming_strings)
+// Paginations : OFFSET est OK jusqu'a ~10 000 lignes, au-dela utilise un curseur
+//   OFFSET :   ORDER BY publie_le DESC LIMIT ? OFFSET ?
+//   CURSEUR :  WHERE (publie_le, id) < (?, ?) ORDER BY publie_le DESC, id DESC LIMIT ?
+//   (MySQL : WHERE publie_le < ? OR (publie_le = ? AND id < ?) ...)
+// Compter pour la pagination : SELECT count(*) ... ; ou : SELECT ..., count(*) OVER() AS total (1 requete)
+// Nullabilite : rs.getObject(...) puis rs.wasNull() ; ou setNull(i, Types.TIMESTAMP) pour ecrire un NULL.
+// Types delicats : BigDecimal (NUMERIC), java.time via setTimestamp/getTimestamp, tableaux via createArrayOf,
+// JSON via setObject(..., PGobject) ou ps.setString + colonne jsonb.
+\end{codejava}
+
+\begin{tablez}[p{0.2\textwidth}X]
+  \headrow \thd{Sympt\^ome} \& \thd{Diagnostic et correction} \\
+  \midrule
+  \verb|connection timed out| / pool \'epuis\'e \& fuite de connexion (non rendue)~: \verb|leakDetectionThreshold|~; connexion gard\'ee hors transaction \\
+  \verb|This result set is closed| \& le \verb|ResultSet| meurt avec son \verb|Statement|~: mat\'erialis avant de fermer \\
+  R\'esultats partiels ou lents sur de gros volumes \& \verb|setFetchSize| et transaction en lecture seule (\verb|setReadOnly(true)|) \\
+  \verb|Batch update returned ...| \& un trigger/contrainte casse le lot~: \verb|executeBatch| renvoie \verb|SUCCESS\_NO\_INFO|, teste ligne par ligne une fois \\
+  Chiffres/textes cass\'es \`a l'insertion \& encodage de connexion (MySQL \verb|utf8mb4|, URL \verb|characterEncoding=UTF-8|) \\
+  Dates d\'ecal\'ees d'une heure \& fuseau du serveur vs JVM~: explicite (\verb|serverTimezone=UTC|, \verb|TIMESTAMPTZ|) \\
+  \verb| deadlock detected| \& ordre d'acc\`es aux lignes dans les transactions~: trie les ids, raccourcis la transaction, isol READ COMMITTED \\
+\end{tablez}
+
+\section{Le mapping maison~: la couche \og ~d\'ep\^ot~ \fg{} en 60 lignes}
+
+\begin{codejava}
+public interface Mappage<T> { T de(java.sql.ResultSet rs) throws SQLException; }
+
+public abstract class Dep\^otJdbc {
+    protected final javax.sql.DataSource source;
+    protected Dep\^otJdbc(javax.sql.DataSource source) { this.source = source; }
+
+    protected <T> List<T> liste(String sql, Mappage<T> m, Consumer<PreparedStatement> lieurs) throws SQLException {
+        try (var c = source.getConnection(); var ps = c.prepareStatement(sql)) {
+            lieurs.accept(ps);
+            try (var rs = ps.executeQuery()) {
+                var out = new ArrayList<T>();
+                while (rs.next()) { out.add(m.de(rs)); }
+                return out;
+            }
+        }
+    }
+    protected <T> Optional<T> un(String sql, Mappage<T> m, Consumer<PreparedStatement> lieurs) throws SQLException {
+        var l = liste(sql, m, lieurs);
+        return l.isEmpty() ? Optional.empty() : Optional.of(l.get(0));
+    }
+    protected int modifier(String sql, Consumer<PreparedStatement> lieurs) throws SQLException {
+        try (var c = source.getConnection(); var ps = c.prepareStatement(sql)) {
+            lieurs.accept(ps);
+            return ps.executeUpdate();
+        }
+    }
+}
+
+public final class DepotArticlesJdbc extends Dep\^otJdbc implements Depot<Article, Long> {
+    private static final Mappage<Article> MAPPEUR = rs -> new Article(
+            rs.getLong("id"), rs.getString("titre"), rs.getString("corps"),
+            Statut.valueOf(rs.getString("statut")),
+            rs.getTimestamp("cree_le").toInstant(),
+            rs.getTimestamp("publie_le") == null ? null : rs.getTimestamp("publie_le").toInstant(),
+            rs.getObject("auteur_id", Long.class));
+
+    @Override public Article sauver(Article a) { /* upsert + tags en lot, dans une transaction */ }
+    @Override public Optional<Article> trouver(Long id) {
+        return un("""
+                SELECT a.id, a.titre, a.corps, a.statut, a.cree_le, a.publie_le, a.auteur_id
+                FROM articles a WHERE a.id = ?""", MAPPEUR, ps -> ps.setLong(1, id));
+    }
+    // Le piege N+1, cote JDBC : charger les tags article par article. Les deux corrections :
+    //  (a) une seule requete avec JOIN + regroupage en memoire ; (b) une requete "WHERE article_id = ANY(?)"
+    //      qui recupere les tags des 20 articles de la page en un aller-retour.
+    public List<Article> pageAvecTags(int page, int taille) throws SQLException {
+        var sql = """
+            WITH p AS (SELECT * FROM articles WHERE statut = 'PUBLIE'
+                       ORDER BY publie_le DESC, id DESC LIMIT ? OFFSET ?)
+            SELECT p.id, p.titre, p.corps, p.statut, p.cree_le, p.publie_le, p.auteur_id,
+                   t.id AS tag_id, t.nom AS tag_nom
+            FROM p LEFT JOIN articles_tags at ON at.article_id = p.id
+                   LEFT JOIN tags t ON t.id = at.tag_id
+            ORDER BY p.publie_le DESC, p.id DESC, t.nom
+            """;
+        // puis : regrouper par id (un LinkedHashMap<Long, Article> + accumulateur de tags)
+    }
+}
+\end{codejava}
+
+\begin{astuce}
+Tu n'as pas besoin d'un ORM. Pour une application avec 5 \`a 30 requ\^etes, un paquet de d\'ep\^ots JDBC
+\'ecrits \`a la main est plus rapide \`a comprendre, plus facile \`a d\'eboguer, et la performance est celle
+du SQL que tu as \'ecrit. Les biblioth\`eques qui r\'eduisent la corv\'ee sans te prendre le contr\^ole~:
+\link{jOOQ}{https://www.jooq.org/} (SQL typ\'e et compil\'e, tr\`es bon avec PostgreSQL),
+\link{Jdbi}{https://jdbi.org/} (mapping l\'eger sur JDBC), \link{Spring JDBC}{https://docs.spring.io/spring-framework/reference/data-access/jdbc.html}
+(\verb|JdbcTemplate|/ \verb|NamedParameterJdbcTemplate|).
+\end{astuce}
+
+\section{JPA et Hibernate~: l'unit\'e de travail}
+
+\begin{codejava}
+// entite : la classe est proxyabble -> non-final, constructeur sans argument requis
+@Entity
+@Table(name = "articles", indexes = { @Index(name = "idx_publie", columnList = "publie_le") })
+public class ArticleEntity {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Version private int version;                    // verrouillage optimiste : evite l'ecrasement
+
+    @Column(nullable = false, length = 160) private String titre;
+    @Column(unique = true, nullable = false, length = 180) private String slug;
+    @Column(nullable = false, columnDefinition = "text") @Basic(fetch = FetchType.LAZY) private String corps;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 16) private Statut statut = Statut.BROUILLON;
+    @Column(name = "publie_le") private Instant publieLe;
+    @Column(name = "cree_le", nullable = false, updatable = false) private Instant creeLe = Instant.now();
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "articles_tags",
+               joinColumns = @JoinColumn(name = "article_id"), inverseJoinColumns = @JoinColumn(name = "tag_id"))
+    private Set<Tag> tags = new HashSet<>();
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    // la BDD porte deja les contraintes : NO_CONSTRAINT evite que Hibernate en recree en doublon
+    @JoinColumn(name = "auteur_id", foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
+    private AuteurEntity auteur;
+    @PreUpdate void avantMaj() { modifieLe = Instant.now(); }     // idem @PrePersist sur creeLe
+    // getters/setters (JPA accede aux champs si @Id est sur le champ : sois coherent)
+}
+
+// Le repository (Spring Data JPA) : interface + methodes derivees + requetes ecrites a la main
+public interface ArticleRepository extends JpaRepository<ArticleEntity, Long>, JpaSpecificationExecutor<ArticleEntity> {
+    Optional<ArticleEntity> findBySlug(String slug);
+    @Query("select a from ArticleEntity a left join fetch a.tags where a.statut = :statut order by a.publieLe desc")
+    List<ArticleEntity> parStatut(@Param("statut") Statut statut, Pageable page);   // fetch = anti-N+1
+    @Modifying @Query("update ArticleEntity a set a.vues = a.vues + 1 where a.id = :id")
+    int incrementerVues(@Param("id") long id);
+}
+// Projection : evite de charger une entite complete quand tu veux 3 colonnes
+public interface Entete { long id(); String titre(); String slug(); }
+List<Entete> entetes = em.createQuery("select a.id as id, a.titre as titre, a.slug as slug from ArticleEntity a", Entete.class).getResultList();
+
+// Le cycle de vie : TRANSIENT -> MANAGED (dans l'em) -> DETACHED (fin de transaction) -> REMOVED
+// "could not initialize proxy - no Session" = acces a un chargement paresseux hors transaction.
+// Corrections : (1) fetch join ; (2) mapper en projection dans la requete ; (3) @EntityGraph ;
+// (4) DTO ; (5) ne pas sortir une entite du service. Sortir un DTO est LA bonne pratique.
+// batch : hibernate.jdbc.batch_size=50, order_inserts/order_updates, fetch=128 (hibernate.default_batch_fetch_size)
+// logs SQL : logging.level.org.hibernate.SQL=DEBUG + use_sql_comments=true (le source est affiche)
+// N+1 : hibernate.enable_lazy_load_no_trans = JAMAIS (cache le probleme en ouvrant des sessions)
+\end{codejava}
+
+\begin{tablez}[p{0.3\textwidth}p{0.22\textwidth}X]
+  \headrow \& \thd{JDBC + mapping} \& \thd{JPA/Hibernate} \\
+  \midrule
+  Mod\`ele riche (r\`egles, objets immuables) \& excellent \& contraint (champs, proxy, setters) \\
+  Requ\^etes analytiques, SQL fin \& \textbf{le terrain naturel} \& requ\^etes natives, projections \\
+  CRUD d'un back-office, many-to-many \& verbeux \& \textbf{brillant} \\
+  Migration de sch\'ema \& \`a toi (Flyway) \& \verb|ddl-auto=validate| (jamais \verb|update| en prod) \\
+  Performance \& pr\'evisible, aucune surprise \& cache, batch, plans--- mais exige de la rigueur \\
+\end{tablez}
+
+\section{Migrations~: le sch\'ema est du code}
+
+\begin{terminal}
+# Flyway (le plus repandu) -- src/main/resources/db/migration
+#   V1__schema_initial.sql   V2__ajout_tags.sql   R__vue_articles.sql   U1__annule_xxx.sql
+flyway migrate -url=jdbc:postgresql://localhost/blog -user=blog -password=$DB_PASS
+flyway info ; flyway validate ; flyway baseline -baselineVersion=1
+#   undo (payant) : flyway undo ; communautaires : Flyway 10+ "community" gratuit pour postgres/mysql
+# Liquibase : le XML/YAML/SQL avec changelog et rollback (les entreprises l'exigent parfois)
+liquibase update --changeLogFile=db/changelog.xml
+\end{terminal}
+
+\begin{codeconf}
+<!-- pom.xml : flyway-maven-plugin -->
+<plugin>
+  <groupId>org.flywaydb</groupId><artifactId>flyway-maven-plugin</artifactId><version>11.2.0</version>
+  <configuration>
+    <url>${db.url}</url><user>${db.user}</user><password>${db.password}</password>
+    <locations><location>filesystem:src/main/resources/db/migration</location></locations>
+    <validateMigrationNaming>true</validateMigrationNaming><cleanDisabled>true</cleanDisabled>
+  </configuration>
+</plugin>
+\end{codeconf}
+
+\begin{codeconf}
+# application.properties (Spring Boot) : les reglages qui comptent
+spring.datasource.url=jdbc:postgresql://localhost:5432/blog
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.leak-detection-threshold=20000
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.open-in-view=false                       # IMPORTANT : sinon la session vit toute la requete
+spring.jpa.properties.hibernate.jdbc.batch_size=50
+spring.jpa.properties.hibernate.order_inserts=true
+spring.jpa.properties.hibernate.query.in_clause_parameter_padding=true
+spring.jpa.properties.hibernate.session_factory.interceptor=...   # pour loguer le N+1
+spring.flyway.enabled=true
+spring.jpa.show-sql=false
+logging.level.org.hibernate.orm.jdbc.bind=TRACE      # les valeurs liees (debug seulement)
+\end{codeconf}
+
+\begin{piege}
+Trois blessures fr\'equentes en JPA~: (1) \verb|ddl-auto=update| en production~: Hibernate modifie le
+sch\'ema, perd des contraintes, ou \'echoue \`a 3 h~; (2) \verb|open-in-view=true|~: la session reste
+ouverte pendant le rendu, un appel lent c\^ot\'e client garde une connexion du pool~; (3) \verb|List| au
+lieu de \verb|Set| dans un \verb|@OneToMany|~: les lots d'insertion se transforment en delete+insert
+\`a chaque sauvegarde. Les trois sont document\'es, et les trois font mal en silence.
+\end{piege}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris le d\'ep\^ot JDBC complet de l'application du livre~: \verb|sauver|, \verb|trouver|,
+        \verb|lister(pageable, filtre)|, \verb|compter|, \verb|rechercher(texte)| (avec \'echappement
+        LIKE~; puis tsvector si tu utilises PostgreSQL)~: avec un seul aller-retour par page.
+  \item Ajoute la transaction~: publier un article = mise \`a jour + tag + journal~;rollback en cas
+        d'\'echec~; d\'emontre-le avec un test qui fait \'echouer volontairement le 3\ieme insert.
+  \item Fais tourner le m\^eme d\'ep\^ot avec H2, PostgreSQL (Testcontainers) et SQLite~: observe les
+        divergences de syntaxe (upsert, \verb|LIMIT|, \verb|SERIAL|) et d\'ecide o\`u tu mets la ligne.
+  \item \'Ecris la migration Flyway qui ajoute une colonne \verb|lecture\_minutes| calcul\'ee~: (a) avec
+        une valeur par d\'efaut pour les lignes existantes~; (b) sans verrouiller la table~: en trois
+        \'etapes (add nullable~: update batch~: set not null). Puis v\'erifie la taille du WAL et le temps.
+  \item Reprends la m\^eme entit\'e en Hibernate~: mappe, charge une page, affiche le nombre de
+        requ\^etes \'emises (logs) avant/apr\`es un \verb|join fetch|~: le gain doit \^etre mesurable.
+  \item Compare objectivement~: le CRUD en JDBC~; jOOQ~; Spring Data JPA~: sur les m\^emes crit\`eres
+        (lignes de code, nombre de requ\^etes, lisibilit\'e du diff en revue, temps de r\'eponse p95).
+        C'est l'exercice qui te fait choisir un outillage pour trois ans.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item JDBC API --- \url{https://docs.oracle.com/en/java/javase/21/docs/api/java.sql/java/sql/package-summary.html}
+  \item HikariCP --- \url{https://github.com/brettwooldridge/HikariCP} (le wiki \og ~pool sizing~ \fg{} est une lecture obligatoire)
+  \item Hibernate ORM --- \url{https://hibernate.org/orm/documentation/} --- Vlad Mihalcea's blog --- \url{https://vladmihalcea.com/}
+  \item Flyway --- \url{https://documentation.red-gate.com/flyway} --- Liquibase --- \url{https://docs.liquibase.com/}
+  \item jOOQ --- \url{https://www.jooq.org/} --- Jdbi --- \url{https://jdbi.org/}
+  \item PostgreSQL --- \url{https://www.postgresql.org/docs/current/} (le chapitre sur les index partiels et \verb|EXPLAIN|)
+\end{itemize}
+\end{ressources}
+
+\index{JDBC}\index{HikariCP}\index{Hibernate}\index{JPA}\index{Flyway}\index{N+1}

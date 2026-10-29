@@ -1,0 +1,349 @@
+% ============================================================================
+\chapter{Performance et mise en ligne}
+\label{ch:deploy}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Mesurer avant d'optimiser, avec les chiffres qui comptent (Core Web Vitals).
+  \item Appliquer la liste des gains r\'eels~: poids, cache, images, polices, JavaScript.
+  \item Construire une image Docker petite et s\^ure, la faire tourner derri\`ere nginx avec HTTPS.
+  \item Automatiser le d\'eploiement par une pipeline, et pr\'evoir sauvegardes et surveillance.
+\end{itemize}
+\end{objectif}
+
+\section{Mesurer~: les chiffres qui d\'ecident}
+
+\begin{tabz}{lllX}
+  \headrow \thd{Indice} \& \thd{Bon} \& \thd{\`A revoir} \& \thd{Ce qu'il mesure} \\
+  \midrule
+  LCP \& < 2{,}5~s \& > 4~s \& affichage du plus grand \'el\'ement (souvent le titre ou l'image principale). \\
+  INP \& < 200~ms \& > 500~ms \& d\'elai de r\'eponse au clic/touche (remplace FID depuis 2024). \\
+  CLS \& < 0{,}1 \& > 0{,}25 \& sauts de mise en page (images sans dimensions, polices, bandeaux). \\
+  TTFB \& < 800~ms \& --- \& temps avant le premier octet~: le serveur, pas le front. \\
+  Poids JS initial \& < 170~Ko gzip \& --- \& ce qui doit \^etre analys\'e avant l'interactivit\'e. \\
+\end{tabz}
+
+\begin{terminal}
+npx lighthouse http://localhost:4173 --only-categories=performance,best-practices,seo,accessibility --output=html --output-path=rapport.html
+npx lighthouse-ci   # seuils bloquants en CI : https://github.com/GoogleChrome/lighthouse-ci
+# Outils en ligne (public) : https://pagespeed.web.dev/  ---  https://web.dev/measure/
+# En conditions reelles : https://httparchive.org/ , le rapport CrUX de Search Console
+\end{terminal}
+
+\etape{Les 12 gains, par ordre de rendement}
+\begin{enumerate}
+  \item \textbf{R\'eduire le JavaScript.} Une d\'ependance de plus, c'est 100 \% de ses utilisateurs
+        qui la t\'el\'echargent. \link{Bundlephobia}{https://bundlephobia.com/} pour estimer un paquet,
+        \link{bundlejs}{https://bundlejs.com/} pour comparer des versions.
+  \item \textbf{D\'ecouper le code}~: \verb|React.lazy| / \verb|import()| par route~; charger
+        l'\'editeur, les graphes, l'export PDF seulement quand on les ouvre.
+  \item \textbf{Compresser}~: Brotli (meilleur que gzip~; nginx \verb|brotli on|),
+        et \verb|content-encoding| v\'erifi\'e dans l'onglet R\'eseau.
+  \item \textbf{Images}~: WebP/AVIF, dimensions r\'ealistes, \verb|loading="lazy"|, \verb|width| et
+        \verb|height| (CLS), \verb|fetchpriority="high"| sur l'image principale,
+        SVG pour les ic\^ones. Un \link{service d'images}{https://imgproxy.net/} ou l'URL de
+        l'h\'ebergeur suffit le plus souvent.
+  \item \textbf{Polices}~: \verb|font-display: swap|, \verb|preload| des deux fichiers utilis\'es,
+        sous-ensemble latin (\link{glyphhanger}{https://github.com/zachleat/glyphhanger}),
+        ou police syst\`eme (0~Ko~!).
+  \item \textbf{Cache HTTP}~: assets avec empreinte et \verb|immutable|, HTML en \verb|no-cache|.
+  \item \textbf{Rendre au plus t\^ot}~: pr\'e-rendu/SSG pour du contenu, \verb|app.js| en \verb|defer|,
+        CSS critique inline pour le premier \'ecran.
+  \item \textbf{R\'eduire les allers-retours}~: peu d'origines diff\'erentes, HTTP/2 ou~3,
+        \verb|preconnect| vers l'unique tiers indispensable.
+  \item \textbf{Mesurer l'INP}~: d\'ecouper les grosses t\^aches (\verb|scheduler.yield|,
+        \verb|setTimeout(\ldots, 0)|, Web Worker)~; ne rien calculer dans le handler de saisie.
+  \item \textbf{\'Eviter les requ\^etes en cascade}~: une requ\^ete qui en attend trois autres est
+        trois allers-retours. Regrouper c\^ot\'e serveur (un endpoint de page qui renvoie tout).
+  \item \textbf{Penser au mobile et au r\'eseau lent}~: throttling 4G lente dans DevTools avant
+        chaque mise en ligne~; les 60 fps d'un MacBook ne sont pas ceux d'un t\'el\'ephone \`a 120~\texteuro{}.
+  \item \textbf{V\'erifier les donn\'ees expos\'ees}~: requ\^etes inutiles, images non compress\'ees,
+        \verb|sourcemap| en production (utile, mais \`a prot\'eger), logs c\^ot\'e client.
+\end{enumerate}
+
+\subsection{Cache HTTP~: le tableau \`a afficher au mur}
+
+\begin{codeconf}
+# assets versionnes (nom avec empreinte) : ne jamais revalider
+Cache-Control: public, max-age=31536000, immutable
+
+# HTML et donnees : toujours reverifier, mais reponse 304 bon marche
+Cache-Control: no-cache
+ETag: W/"a3f9..."
+
+# API authentifiaue : hors cache partag\'es
+Cache-Control: private, no-store
+
+# fichiers d'import (CSV) : court
+Cache-Control: public, max-age=300, stale-while-revalidate=60
+\end{codeconf}
+
+\begin{note}
+Un \verb|Cache-Control: immutable| sur un fichier dont le nom contient son empreinte
+(\verb|app.4f9c12.js|) est la strat\'egie la plus efficace qui existe~: le navigateur ne redemande
+\emph{jamais}. Change le contenu, le nom change, l'URL change~: la casse du cache est r\'esolue
+sans effort. C'est exactement ce que fait un build Vite.
+\end{note}
+
+\section{Construire une image Docker}
+
+\begin{codeconf}
+# Dockerfile multi-etapes : build avec les outils, execution avec le strict minimum
+FROM node:22-alpine AS build
+WORKDIR /app
+ENV CI=1
+COPY package.json package-lock.json ./
+RUN npm ci                       # respecte exactement le lockfile
+COPY . .
+RUN npm run build && npm prune --omit=dev
+
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+# securite : un utilisateur dedie, pas root
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=build --chown=app:app /app/dist ./dist
+COPY --from=build --chown=app:app /app/node_modules ./node_modules
+COPY --from=build --chown=app:app /app/package.json ./
+USER app
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/api/sante || exit 1
+# init (PID 1) propre : recoit SIGTERM, vide les connexions
+CMD ["node", "--max-old-space-size=768", "dist/server.js"]
+\end{codeconf}
+
+\begin{terminal}
+docker build -t nour/api:1.4.0 .
+docker run --rm -p 3000:3000 --env-file .env.production -m 512m --cpus 1 nour/api:1.4.0
+docker image ls          # taille : vise < 200 Mo pour une API Node
+docker compose up -d --build
+\end{terminal}
+
+Bonnes pratiques d'image~: une \'etape de build s\'epar\'ee, \verb|npm ci|, \verb|--omit=dev|,
+\verb|alpine| ou \verb|distroless|, utilisateur non-root, \verb|.dockerignore| complet,
+couches dans l'ordre de stabilit\'e (manifeste d'abord pour tirer parti du cache),
+scan~: \link{Trivy}{https://github.com/aquasecurity/trivy} (\cmd{trivy image mon/api:1.4.0}).
+
+\section{D\'eployer : les quatre chemins r\'ealistes}
+
+\begin{tabz}{lXll}
+  \headrow \thd{Chemin} \& \thd{Pour qui} \& \thd{Co\^ut indicatif} \& \thd{Liens} \\
+  \midrule
+  PaaS (Render, Railway, Fly.io) \& z\'ero ops, push et c'est en ligne \& 0--7~/mois \& \url{https://render.com/}, \url{https://railway.com/}, \url{https://fly.io/} \\
+  Plateformes front (Vercel, Netlify, Cloudflare Pages) \& sites statiques et fonctions serverless \& 0--20 \& \url{https://vercel.com/}, \url{https://www.netlify.com/}, \url{https://pages.cloudflare.com/} \\
+  VPS + Docker (+ Coolify/Dokploy) \& contr\^ole total, le plus formateur \& 4--8~/mois \& \url{https://coolify.io/}, \url{https://dokploy.com/} \\
+  Mutualis\'e PHP (OVH, o2switch, Hostinger) \& sites PHP/MySQL, tr\`es bon march\'e \& 3--8~/mois \& \url{https://www.ovhcloud.com/fr/}, \url{https://www.o2switch.fr/} \\
+\end{tabz}
+
+\etape{Le VPS, pas \`a pas (le chemin que je recommande d'apprendre)}
+\begin{terminal}
+# 1. Serveur : Hetzner Cloud, OVH, Contabo... Debian 12 ou Ubuntu 24.04 LTS
+ssh root@IP
+adduser deploy && usermod -aG sudo deploy
+rsync -avS ~/.ssh/id_ed25519.pub deploy@IP:.ssh/authorized_keys
+# coupe l'acces root par mot de passe : /etc/ssh/sshd_config -> PermitRootLogin no, PasswordAuthentication no
+systemctl restart ssh
+ufw allow OpenSSH && ufw allow 80 && ufw allow 443 && ufw enable
+apt update && apt install -y fail2ban qemu-guest-agent
+
+# 2. En tant que deploy
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+git clone https://github.com/nour/api.git && cd api
+cp .env.example .env && nano .env            # secrets reels, jamais dans Git
+docker compose up -d
+
+# 3. Nom de domaine : enregistre un A record vers l'IP (1h de propagation)
+# 4. TLS gratuit (Let's Encrypt) via Caddy, le plus simple des reverse proxies
+sudo apt install -y caddy
+cat > /etc/caddy/Caddyfile <<'CADDY'
+api.nour.dev {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+CADDY
+sudo systemctl reload caddy
+\end{terminal}
+
+\etape{Avec nginx \`a la place (le plus fr\'equent en entreprise)}
+\begin{codeconf}
+server {
+  listen 80;
+  server_name nour.dev www.nour.dev;
+  return 301 https://$host$request_uri;
+}
+server {
+  listen 443 ssl http2;
+  server_name nour.dev;
+  ssl_certificate     /etc/letsencrypt/live/nour.dev/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/nour.dev/privkey.pem;
+  client_max_body_size 12m;
+  gzip on; gzip_types text/css application/javascript application/json image/svg+xml;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;              # WebSocket
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 75s;                              # > keepAliveTimeout du serveur Node
+  }
+  location /assets/ {
+    root /var/www/nour/dist;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+}
+\end{codeconf}
+
+\begin{terminal}
+sudo certbot --nginx -d nour.dev -d www.nour.dev --redirect -m toi@example.com --agree-tos
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot renew --dry-run
+\end{terminal}
+
+\subsection{Processus~: systemd plut\^ot que \og ~node app.js~ \fg{} dans un terminal}
+
+\begin{codeconf}
+# /etc/systemd/system/nour-api.service
+[Unit]
+Description=API Nour
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=deploy
+WorkingDirectory=/home/deploy/api
+EnvironmentFile=/home/deploy/api/.env.production
+ExecStart=/usr/bin/docker compose up --remove-orphans
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/usr/bin/docker compose down -t 30
+Restart=always
+RestartSec=3
+MemoryMax=600M
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/deploy/api/data
+
+[Install]
+WantedBy=multi-user.target
+\end{codeconf}
+
+\begin{terminal}
+sudo systemctl daemon-reload && sudo systemctl enable --now nour-api
+journalctl -u nour-api -f
+\end{terminal}
+
+\section{Le d\'eploiement continu~: pousser = en ligne}
+\label{sec:ci-cd}
+
+\begin{codeyml}
+# .github/workflows/deploy.yml
+name: Deploiement
+on:
+  push: { branches: [main] }
+jobs:
+  livrer:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Deployer sur le VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: deploy
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ~/api
+            docker compose pull
+            docker compose up -d
+            curl -fsS https://nour.dev/api/sante
+\end{codeyml}
+
+Un d\'eploiement qui se passe bien a quatre propri\'et\'es~: \textbf{idempotent} (relancer ne casse rien),
+\textbf{atomique} (soit l'ancienne version, soit la nouvelle, jamais un m\'elange),
+\textbf{rapide \`a annuler} (une commande), \textbf{observ\'e} (journaux + m\'etriques pendant 5 minutes).
+Ajoute des \emph{migrations} versionn\'ees et r\'etrocompatibles~: la base \'evolue avant le code, jamais
+pendant.
+
+\section{Apr\`es la mise en ligne~: ce qui te sauvera}
+
+\begin{itemize}
+  \item \textbf{Sauvegardes}~: la r\`egle 3-2-1 (trois copies, deux supports, une hors site).
+        Un cron \verb|pg\_dump -Fc| compress\'e et copi\'e chez un autre fournisseur. Teste la
+        \emph{restauration}--- une sauvegarde non test\'ee n'existe pas.
+  \item \textbf{Surveillance}~: une page de statut, une alerte par courriel/SMS sur le healthcheck,
+        et des tableaux de bord~: \link{Uptime~Kuma}{https://github.com/louislam/uptime-kuma}
+        (auto-h\'eberg\'e, 10 minutes \`a installer), \link{Grafana~Cloud}{https://grafana.com/products/cloud/},
+        \link{Sentry}{https://sentry.io/} pour les erreurs JavaScript.
+  \item \textbf{Journaux}~: structur\'es (JSON), horodat\'es UTC, rotation, corr\'elation par identifiant
+        de requ\^ete. \verb|pino| + \link{loki}{https://grafana.com/oss/loki/} suffisent pour commencer.
+  \item \textbf{Secrets}~: jamais dans Git~; variables d'environnement du syst\`eme ou
+        gestionnaire d\'edi\'e~; rotation en cas de doute.
+  \item \textbf{Journal de bord}~: \`a chaque incident, \'ecris ce qui s'est pass\'e, la cause, la
+        correction. Dans un an, c'est ta meilleure documentation.
+\end{itemize}
+
+\begin{projet}[D\'eploiement complet]
+Mets ton API Node du \cref{ch:node} en ligne~: domaine, HTTPS, conteneur, healthcheck,
+journalisation, sauvegarde quotidienne de la base, pipeline de d\'eploiement, et rapport
+Lighthouse public. Tu auras alors fait le parcours complet~: coder, s\'ecuriser, tester, d\'eployer,
+surveiller. C'est exactement ce que l'on attend d'un profil junior~; tr\`es peu de candidats
+peuvent le montrer.
+\end{projet}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Ex\'ecute Lighthouse sur ton projet et corrige les trois recommandations au plus fort
+        impact. Note les chiffres avant/apr\`es dans ton carnet.
+  \item Divise ton bundle JavaScript par deux~: lazy-loading d'une route, remplacement d'une
+        d\'ependance lourde, suppression de code mort (\verb|knip|).
+  \item \'Ecris le \verb|Dockerfile| de ton application et mesure la taille de l'image avant et
+        apr\`es multi-\'etapes.
+  \item Monte un nginx/Caddy local avec HTTPS auto-sign\'e (mkcert) et v\'erifie la r\'e\'ecriture
+        des en-t\^etes \verb|X-Forwarded-*|.
+  \item Simule une coupure~: arr\^ete la base de donn\'ees, observe le comportement de l'API
+        (elle doit refuser proprement, pas corrompre), puis restaure.
+  \item Fais un faux d\'eploiement cass\'e~: la pipeline doit le d\'etecter, et une commande doit
+        revenir \`a la version pr\'ec\'edente en moins de 30 secondes.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item web.dev (mesure, optimisation, motifs) --- \url{https://web.dev/explore}
+  \item web.dev Vitals --- \url{https://web.dev/vitals/}
+  \item Docker docs (best practices images) --- \url{https://docs.docker.com/build/building/best-practices/}
+  \item Caddy --- \url{https://caddyserver.com/docs/} --- certbot --- \url{https://certbot.eff.org/}
+  \item \link{12~Factor~App}{https://12factor.net/fr/} --- la grammaire des applications web modernes
+  \item Awesome Selfhosted (tout l'\'ecosyst\`eme auto-h\'eberg\'e) --- \url{https://github.com/awesome-selfhosted/awesome-selfhosted}
+\end{itemize}
+\end{ressources}
+
+\index{performance}\index{Core~Web~Vitals}\index{Docker}\index{deploiement}\index{Caddy}

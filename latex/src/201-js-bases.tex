@@ -1,0 +1,372 @@
+% ============================================================================
+\chapter{Les bases de JavaScript}
+\label{ch:js-bases}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Ex\'ecuter du JavaScript dans un navigateur, dans la console, et dans Node.js.
+  \item Ma\^itriser variables, types, op\'erateurs, conversion de types et tests de v\'erit\'e.
+  \item \'Ecrire des conditions, des boucles et des fonctions dans toutes les formes modernes.
+  \item Comprendre la port\'ee (\emph{scope}), le hoisting et les fermetures (\emph{closures}).
+  \item Reconna\^itre les pi\`eges de typage faible (\verb|==|, \verb|NaN|, \verb|this|).
+\end{itemize}
+\end{objectif}
+
+\section{O\`u et comment ex\'ecuter du JavaScript}
+
+JavaScript est un \emph{moteur}~: V8 dans Chrome et Node, SpiderMonkey dans Firefox,
+JavaScriptCore dans Safari. Le langage est d\'efini par la norme \textbf{ECMAScript}
+(\link{ECMA-262}{https://262.ecma-international.org/}), \'edit\'ee chaque ann\'ee~; les fonctionnalit\'es
+d'ES2015 (dite ES6) \`a ES2024 sont aujourd'hui disponibles partout dans les navigateurs r\'ecents.
+
+\begin{tabz}{llX}
+  \headrow \thd{Terrain de jeu} \& \thd{Comment} \& \thd{Id\'eal pour} \\
+  \midrule
+  Console du navigateur \& \keys{F12} ou \keys{Ctrl+Shift+J} \& Explorer, tester une expression, apprendre le langage. \\
+  Fichier HTML \& \verb|<script src="app.js"></script>| \& Tout ce qui touche la page (chapitres DOM). \\
+  \link{Playground en ligne}{https://playcode.io/} / \link{CodePen}{https://codepen.io/} / \link{JSFiddle}{https://jsfiddle.net/} \& Ouvrir l'URL \& Partager un bug, prototyper. \\
+  Node.js \& \cmd{node fichier.js} ou \cmd{node} (REPL) \& Logique, scripts, outillage, serveurs. \\
+  \cmd{deno run} / \cmd{bun} \& \link{deno.com}{https://deno.com/}, \link{bun.sh}{https://bun.sh/} \& Alternatives modernes, rapide, sans configuration. \\
+\end{tabz}
+
+\begin{terminal}
+# Le REPL (Read-Eval-Print Loop) : la calculatrice geante
+$ node
+> 2 ** 10
+1024
+> "nour".toUpperCase()
+'NOUR'
+> .exit
+
+# Un fichier
+$ echo 'console.log("Bonjour le monde");' > hello.js
+$ node hello.js
+Bonjour le monde
+\end{terminal}
+
+\section{Sortir et entrer de l'information}
+
+\begin{codejs}
+// En page : la sortie est la console du navigateur
+console.log("normal");            // trace
+console.info("info"); console.debug("detaill\'e");
+console.warn("attention"); console.error("erreur");
+console.table([{ a: 1, b: 2 }, { a: 3, b: 4 }]);   // un tableau joliment affiche
+console.group("Etapes"); console.log("1"); console.groupEnd();
+console.count("appelee");                            // compte les appels
+console.time("boucle"); for (let i = 0; i < 1e6; i++); console.timeEnd("boucle");
+
+// Dans un terminal, avec Node :
+process.stdout.write("sans saut de ligne");
+const reponse = await import("node:readline/promises")
+  .then((m) => m.createInterface({ input: process.stdin, output: process.stdout }))
+  .then((rl) => rl.question("Ton pr\'enom ? "));
+console.log(`Salut ${reponse}`);
+\end{codejs}
+
+\section{Variables : \texttt{let}, \texttt{const} (et pourquoi pas \texttt{var})}
+
+\begin{codejs}
+const MAX = 100;          // lien immuable : on ne peut pas re-affectuer
+let compteur = 0;         // peut changer
+var ancienStyle = true;   // ne l'utilise plus : portee de fonction, hoisting piegeux
+
+// "const" ne rend pas la VALEUR immutable, seulement la RE-ASSIGNATION impossible :
+const user = { name: "Nour" };
+user.name = "Awa";          // parfaitement legal
+user = {};                  // TypeError: Assignment to constant variable.
+\end{codejs}
+
+R\`egle d'\'ecriture~: \texttt{const} par d\'efaut, \texttt{let} quand la r\'eassignation est n\'ecessaire,
+\texttt{var} jamais. Nomme en \verb|camelCase| les variables et fonctions, en
+\verb|SCREAMING\_SNAKE\_CASE| les constantes de module, en \verb|PascalCase| les classes.
+
+\subsection{Les huit types primitifs}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Type} \& \thd{Description} \& \thd{Exemple} \\
+  \midrule
+  \verb|string| \& S\'equence UTF-16 immuable \& \verb|"nour"|, \verb|'x'|, \verb|`a\${b}c`| \\
+  \verb|number| \& Flottant 64 bits (~\$2^{53}\$ entiers exacts) \& \verb|42|, \verb|3.14|, \verb|1e3|, \verb|0xff|, \verb|1\_000\_000| \\
+  \verb|bigint| \& Entier de taille arbitraire \& \verb|9007199254740993n| \\
+  \verb|boolean| \& \verb|true| / \verb|false| \& \\
+  \verb|undefined| \& Valeur non fournie \& \verb|let x;| \\
+  \verb|null| \& Absence volontaire de valeur \& \verb|document.getElementById("x")| \\
+  \verb|symbol| \& Cl\'e unique et immuable \& \verb|Symbol("id")| \\
+\end{tabz}
+
+Tout le reste est un \textbf{objet} (fonctions, tableaux, \verb|Map|, \verb|Date|, \verb|Error|\ldots).
+
+\begin{codejs}
+typeof 42;              // "number"
+typeof "a";             // "string"
+typeof true;            // "boolean"
+typeof undefined;       // "undefined"
+typeof Symbol();        // "symbol"
+typeof 10n;             // "bigint"
+typeof function () {};  // "function"
+typeof {};              // "object"
+typeof null;            // "object"  <-- BUG historique de 1995, jamais corrige. NE T'Y FIE PAS.
+typeof [];              // "object"  <-- un tableau EST un objet
+Array.isArray([]);      // true  <-- le VRAI test de tableau
+
+Number.isInteger(5);        // true
+Number.isNaN(NaN);          // true   (isNaN() global est faux : isNaN("toto") => true)
+Number.isSafeInteger(2**53);// false
+0.1 + 0.2 === 0.3;          // false  <-- arithmetique flottante : 0.30000000000000004
+Math.abs(0.1 + 0.2 - 0.3) < Number.EPSILON;   // true : la bonne facon de comparer
+\end{codejs}
+
+\begin{piege}
+\textbf{Trois pi\`eges de type, pour la vie.}
+(1) \verb|typeof null === "object"|~: teste avec \verb|x === null|.
+(2) \verb|0.1 + 0.2 !== 0.3|~: en mon\'etaire, travaille en centimes entiers ou avec une
+biblioth\`eque d\'ecimale (\link{decimal.js}{https://github.com/MikeMcl/decimal.js/}).
+(3) \verb|NaN| n'est \'egal \`a rien, pas m\^eme \`a lui-m\^eme~: utilise \verb|Number.isNaN(x)|.
+\end{piege}
+
+\section{Op\'erateurs}
+
+\begin{codejs}
+// Arithmetiques
+7 / 2; 7 % 2; 2 ** 10; -(2); Math.trunc(7 / 2); Math.floor(-7 / 2);
+(5.7).toFixed(2);              // "5.70"  -> RETOURNE UNE CHAINE
+parseInt("42abc", 10); parseFloat("3.14"); Number("42"); +"42";
+
+// Affectations combinees
+let n = 10;
+n += 5; n -= 2; n *= 3; n **= 2; n /= 4; n %= 7; n **= 2;
+n++; ++n;                       // postfixe renvoie l'ancienne valeur, prefixe la nouvelle
+
+// Comparaison --- la seule regle qui compte : TOUJOURS === et !==
+5 == "5";        // true   (coercion : convertit avant de comparer)  INTERDIT
+5 === "5";       // false  (comparaison stricte : type + valeur)
+null == undefined;   // true
+null === undefined;  // false
+NaN === NaN;         // false
+
+// Logiques
+true && false;    // false  (court-circuit : le 2e operande n'est pas evalue)
+true || false;    // true
+!true;            // false
+// Les formes modernes, tres utiles :
+user?.profile?.avatar ?? "/default.png";   // chainage optionnel + alternative nulle
+count ||= 10;     // assigne si falsy
+config ??= {};    // assigne seulement si null/undefined  (le bon choix)
+
+// Bit a bit (rare en web, courant en protocole/poids lourds)
+5 & 3, 5 | 3, 5 ^ 3, ~5, 5 << 2, 5 >>> 1;
+
+// Concatenation et template literal
+"bonjour" + " " + nom;
+`Bonjour ${nom}, tu as ${age} ans et ${[1, 2, 3].join(", ")} fruits.`;
+\end{codejs}
+
+\subsection{Conversion et \og ~falsy~ \fg{}}
+
+Sept valeurs sont \textbf{falsy}~: \verb|false|, \verb|0|, \verb|-0|, \verb|0n|,
+\verb|""|, \verb|null|, \verb|undefined|. Tout le reste est \textbf{truthy} -- y compris
+\verb|[]|, \verb|{}| et \verb|"0"|.
+
+\begin{codejs}
+Boolean("");        // false
+Boolean("0");       // true  <-- attention aux chaines non vides
+if (tab.length) { /* ... */ }         // idiome courant
+const nom = prenom || "Anonyme";      // remplace tout falsy (0, "", false)
+const age = ageSaisi ?? 18;           // ne remplace que null/undefined  <-- RECOMMANDE
+String(42); Number("42"); 42 + "";  +"42";
+[1, "2", "3"] .map(Number);            // [1, 2, 3]
+\end{codejs}
+
+\section{Conditions et boucles}
+
+\begin{codejs}
+const note = 14;
+
+if (note >= 16)       console.log("Tres bien");
+else if (note >= 10)  console.log("Admis");
+else                  console.log("Repasse");
+
+// Expression conditionnelle (ternaire) : une VALEUR, pas un bloc
+const mention = note >= 16 ? "tres bien" : note >= 10 ? "assez bien" : "insuffisant";
+
+// switch : arrets obligatoires, sinon le code du cas suivant s'execute aussi
+switch (jour) {
+  case "samedi":
+  case "dimanche":
+    console.log("week-end");
+    break;
+  default:
+    console.log("jour ouvrable");
+}
+
+// switch moderne : expression qui renvoie une valeur, correspondance par motifs
+const tarif = switch (type) {
+  case "enfant":        yield 5;
+  case "adulte":        yield 12;
+  default:              yield 8;
+};                      // (actif a partir de ES2025 / Node 22+, sinon : ternaires ou objet)
+
+const prix = { enfant: 5, adulte: 12, _default: 8 }[type] ?? 8;  // alternative simple et portative
+
+for (let i = 0; i < 10; i++) { if (i === 3) continue; if (i === 8) break; }
+let j = 0; while (j < 10) { j++; }
+let k = 0; do { k++; } while (k < 10);   // execute au moins une fois
+
+for (const v of [10, 20, 30]) {}          // itere sur les VALEURS (iterables)
+for (const i in tab) {}                    // itere sur les CLES (chaines) -- a eviter sur tableaux
+for (const [i, v] of tab.entries()) {}     // index + valeur
+\end{codejs}
+
+\begin{piege}
+\verb|for...in| parcourt aussi les propri\'et\'es h\'erit\'ees \'enum\'erables et renvoie des
+\emph{cha\^ines}. Sur un tableau, utilise \verb|for...of|, \verb|forEach| ou une boucle
+indice. \verb|break| et \verb|continue| ne fonctionnent pas dans \verb|forEach|~: si tu as besoin
+d'interrompre, c'est le signe qu'il te faut \verb|for...of|, \verb|some|, \verb|find| ou \verb|every|.
+\end{piege}
+
+\section{Fonctions}
+
+\begin{codejs}
+// Declaration (hoistee : utilisable avant sa definition)
+function additionne(a, b = 0) { return a + b; }
+
+// Expression de fonction (non hoistee)
+const multiply = function (a, b) { return a * b; };
+
+// Fleche : syntaxe compacte, pas de "this" propre
+const square = (x) => x * x;
+const toUser = (name, age) => ({ name, age, adult: age >= 18 });  // objet : parentheses obligatoires
+const somme = (...args) => args.reduce((a, b) => a + b, 0);       // reste des arguments
+
+// Arguments nommes + valeurs par defaut + valeurs de test
+function envoi({
+  destinataire,
+  sujet = "(sans objet)",
+  pieces = [],
+  priorite = "normale",
+} = {}) {
+  if (!destinataire) throw new TypeError("destinataire requis");
+  return { destinataire, sujet, pieces: pieces.length, priorite };
+}
+envoi({ destinataire: "nour@example.com", pieces: ["facture.pdf"] });
+
+// Fonctions a rappels (callbacks) et fonctions d'ordre superieur
+const appliquer = (fn, valeur) => fn(valeur);
+const multiplieur = (facteur) => (x) => x * facteur;   // fabrique de fonctions
+const triple = multiplieur(3); triple(5);               // 15
+
+// R\'ecursivite : toujours prevoir un cas de base
+function factorielle(n) {
+  if (n < 0) throw new RangeError("n doit etre >= 0");
+  return n <= 1 ? 1 : n * factorielle(n - 1);
+}
+\end{codejs}
+
+\subsection{Port\'ee, hoisting, fermetures}
+
+\begin{description}
+  \item[Port\'ee de bloc] \verb|let| et \verb|const| vivent dans les accolades les plus proches.
+        \verb|var| remonte jusqu'\`a la fonction~; c'est la source de bugs classiques dans les boucles.
+  \item[Hoisting] Les d\'eclarations \verb|function| et \verb|var| sont \og ~remont\'ees~ \fg{} en m\'emoire.
+        \verb|let|/\verb|const| existent mais sont dans la \og ~zone morte~ \fg{}~: y toucher avant
+        l\`eve \verb|ReferenceError|.
+  \item[Fermeture (closure)] Une fonction se souvient du environnement dans lequel elle a \'et\'e
+        cr\'e\'ee. C'est le fondement de la vie priv\'ee en JS, des fabriques, de la m\'emo\"isation,
+        des compteurs.
+\end{description}
+
+\begin{codejs}
+// Le bug classique de var, a comprendre une fois pour toutes
+for (var i = 0; i < 3; i++) setTimeout(() => console.log("var:", i)); // 3 3 3
+for (let j = 0; j < 3; j++) setTimeout(() => console.log("let:", j)); // 0 1 2
+
+// Fermeture : un compteur avec veritable encapsulation
+function creeCompteur(demarrage = 0, pas = 1) {
+  let valeur = demarrage;                       // prive : inaccessible de l'exterieur
+  return {
+    incrementer: () => (valeur += pas),
+    lire: () => valeur,
+    reinitialiser: () => (valeur = demarrage),
+  };
+}
+const c = creeCompteur(10, 2);
+c.incrementer(); c.incrementer(); c.lire();        // 14
+c.valeur;                                          // undefined -- c'est tout l'interet
+
+// Memoisation grace a une fermeture
+function memoise(fn, cle = (...a) => JSON.stringify(a)) {
+  const cache = new Map();
+  return (...args) => {
+    const k = cle(...args);
+    if (!cache.has(k)) cache.set(k, fn(...args));
+    return cache.get(k);
+  };
+}
+const fib = memoise(function f(n) { return n < 2 ? n : f(n - 1) + f(n - 2); });
+fib(70);   // immediat
+\end{codejs}
+
+\section{Le module commun : erreurs, piles, d\'ebogage}
+
+\begin{codejs}
+function diviser(a, b) {
+  if (b === 0) throw new RangeError("division par zero");
+  return a / b;
+}
+try {
+  const r = diviser(10, 0);
+} catch (err) {
+  if (err instanceof RangeError) console.error("Domaine invalide :", err.message);
+  else throw err;                        // ne JAMAIS avaler une erreur inconnue
+} finally {
+  console.log("toujours execute (fermer une connexion, logger, etc.)");
+}
+
+// Empilement des causes (ES2022) : precieux en production
+try {
+  JSON.parse("{oops");
+} catch (cause) {
+  throw new Error("Configuration invalide", { cause });
+}
+\end{codejs}
+
+D\'eboguer proprement~: un point d'arr\^et dans l'onglet \clic{Sources} de Chrome (\keys{F12}),
+puis \keys{F10} (pas \`a pas principal), \keys{F11} (entrer), \keys{F8} (continuer)~;
+\verb|debugger;| dans le code ; \verb|console.trace()| ; \verb|console.log(new Error().stack)|.
+La quasi-totalit\'e des d\'ebutants abuse de \verb|console.log|~: trois points d'arr\^et bien plac\'es
+valent cent traces.
+
+\begin{exercice}
+\begin{enumerate}
+  \item \textbf{FizzBuzz}~: affiche de 1 \`a 100, \og ~Fizz~ \fg{} si multiple de 3, \og ~Buzz~ \fg{} de 5,
+        \og ~FizzBuzz~ \fg{} des deux. \'Ecris-le trois fois~: avec \verb|if|, avec un ternaire imbriqu\'e,
+        avec une composition de fonctions.
+  \item \textbf{Pair ou impair}, \textbf{plus grand de trois nombres}, \textbf{reverse d'une cha\^ine}
+        (avec et sans \verb|split/reverse/join|).
+  \item \textbf{Palindrome normalis\'e}~: \verb|"\'Esope reste ici et se repose"| renvoie \verb|true|.
+        Retirer ponctuation, espaces, accents (\verb|String.prototype.normalize("NFD")|).
+  \item \textbf{Nombre premier}~: fonction \verb|estPremier(n)| avec boucle jusqu'\`a
+        \$\sqrt{n}\$~; puis \verb|premiersInfrieursA(100)|.
+  \item \textbf{Temperature}~: \verb|celsiusVersFahrenheit|, \verb|fahrenheitVersCelsius|,
+        et le sens inverse, \'ecrites comme fleches. V\'erifie que aller-retour redonne la valeur.
+  \item \textbf{Compteur de clics}~: avec la fermeture \verb|creeCompteur|, simule 5 clics
+        et affiche la valeur \`a chaque fois.
+  \item \textbf{Devine le r\'esultat} avant d'ex\'ecuter~: \verb|1 + "2"|, \verb|"5" - 3|,
+        \verb|"a" + + "b"|, \verb|[] + []|, \verb|[] + {}|, \verb|null + 1|,
+        \verb|undefined + 1|, \verb|true + true|, \verb|2 + 3 + "a"|, \verb|"a" + 2 + 3|.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- Guide JavaScript (la bible, en fran\c{c}ais) --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Guide}
+  \item \emph{JavaScript.info}, le meilleur cours libre du web --- \url{https://javascript.info/}
+  \item \emph{Eloquent JavaScript}, 3\textsuperscript{e} \'edition --- \url{https://eloquentjavascript.net/}
+  \item Table de compatibilit\'e des fonctionnalit\'es --- \url{https://compat-table.github.io/compat-table/es2016plus/}
+  \item \emph{You Don't Know JS Yet} (Deepankar) --- \url{https://github.com/getify/You-Dont-Know-JS}
+\end{itemize}
+\end{ressources}
+
+\index{JavaScript!bases}\index{variables}\index{closure}

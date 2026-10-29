@@ -1,0 +1,265 @@
+% ============================================================================
+\chapter{Le web en Java~: serveurs, API REST, s\'ecurit\'e, observabilit\'e}
+\label{ch:java-web}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Comprendre ce qu'un serveur HTTP Java fait d'une requ\^ete~: servlet, filtre, gestionnaire.
+  \item \'Ecrire une API REST compl\`ete~: routes, validation, erreurs RFC 9457, pagination, CORS.
+  \item Authentifi\'e~: sessions, JWT, OIDC~; et prot\'eger (en-t\^etes, limitation, secrets).
+  \item Rendre l'application observable~: sant\'e, mesures, traces, journaux structur\'es.
+  \item D\'eployer proprement~: conteneur, arr\^et gracieux, dimensionnement du pool.
+\end{itemize}
+\end{objectif}
+
+\section{Le mod\`ele~: un thread (ou un virtual thread) par requ\^ete}
+
+\begin{codeplain}
+Client --TCP--> Serveur HTTP (Jetty/Tomcat/Undertow/Netty/Vert.x/Kestrel-like)
+                    |
+                    +-- filtres (CORS, auth, logs, compression, limitation)
+                    +-- gestionnaire / servlet / contr\^oleur   <-- ton code
+                            +-- validation, service m\'etier, d\'ep\^ot (pool JDBC)
+                            +-- s\'erialisation JSON (Jackson)
+                    +-- r\'eponse : statut, en-t\^etes, corps
+Le "~servlet container~" historique (Jakarta Servlet 6) a \'et\'e supplant\'e dans les nouveaux
+projets par des cadres embarqu\'es : le serveur est une dependance du projet, pas un
+serveur d'application ou un WAR deploye a la main.
+\end{codeplain}
+
+\begin{tablez}[p{0.16\textwidth}p{0.14\textwidth}X]
+  \headrow Cadre \& Poids \& Usage typique \\
+  \midrule
+  Spring Boot 3.x \& lourd (mais complet) \& le choix par d\'efaut en entreprise~: tout est l\`a \\
+  Quarkus 3.x \& l\'eger, natif, r\'eactif \& cloud-native, serverless, Kotlin/Java, dev services \\
+  Micronaut 4.x \& compilation-time DI, natif \& microservices, peu de r\'eflexion, AWS Lambda \\
+  Helidon 4 \& Netty/loom, orient\'e API \& Oracle, r\'eactif et threads virtuels \\
+  Javalin / JFinal \& minimal (Jetty) \& petite API, outils internes, prototypes rapides \\
+  Vert.x \& \'ev\'enements non bloquants \& flux, websockets, d\'ebit extr\^eme \\
+  Dropwizard \& Jetty + Jackson + JDBI \& services monolithiques sobres \\
+\end{tablez}
+
+\section{Une API compl\`ete avec Javalin (le minimum vital, sans magie)}
+
+\begin{codejava}
+// Dependances : io.javalin:javalin:6.x + ch.qos.logback:logback-classic + jackson-databind
+public final class App {
+    public static void main(String[] args) {
+        var config = Config.lire();                          // env + application.yml
+        var pool = HikariFactory.create(config);              // cf. chapitre precedent
+        var depot = new DepotArticlesJdbc(pool);
+        var service = new ServiceArticles(depot, Clock.systemUTC());
+
+        var app = Javalin.create(cfg -> {
+            cfg.http.defaultContentType = "application/json";
+            cfg.bundledPlugins.enableCors(c -> c.addPolicy(p -> p.allowOrigins("https://blog.exemple.fr")
+                    .allowMethods("GET,POST,PATCH,DELETE").allowHeaders("Authorization,Content-Type")
+                    .maxAge(3600)));
+            cfg.plugins.enableDevLogging();                   // en dev seulement
+            cfg.staticFiles.add("/public", Location.CLASSPATH);
+            cfg.showJettyServerStartLogs = false;
+        });
+
+        // Filtre : requete -> contexte (chronometrage, identifiant de trace, correlation)
+        app.before(ctx -> {
+            ctx.attribute("debut", System.nanoTime());
+            ctx.res.setHeader("X-Request-Id", ctx.header("X-Request-Id") != null
+                    ? ctx.header("X-Request-Id") : UUID.randomUUID().toString());
+            ctx.res.setHeader("X-Content-Type-Options", "nosniff");
+            ctx.res.setHeader("Referrer-Policy", "same-origin");
+            ctx.res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+            // CSP : adaptee a ton frontend ; "default-src 'self'" est un bon point de depart
+            ctx.res.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data:");
+        });
+        app.after(ctx -> METRIQUES.enregistrer(ctx.method(), ctx.path(), ctx.status(),
+                System.nanoTime() - (long) ctx.attribute("debut")));
+
+        // Routes
+        app.get("/health", App::sante);
+        app.get("/ready", ctx -> ctx.result("pr\^et"));
+        app.get("/api/articles", ctx -> {
+            var page = PageRequest.de(ctx.queryInt("page", 0), ctx.queryInt("taille", 20));
+            ctx.json(Page.of(service.recents(page), page));
+        });
+        app.get("/api/articles/{id}", ctx -> ctx.json(service.obtenir(ctx.pathLong("id"))));
+        app.post("/api/articles", ctx -> {
+            var requete = BodyValidator.lire(ctx, RequeteArticle.class);      // 400 + details si invalide
+            var cree = service.creer(requete, ctx.attribute("utilisateur"));
+            ctx.status(201).header("Location", "/api/articles/" + cree.id()).json(cree);
+        });
+        app.patch("/api/articles/{id}", ctx -> ctx.json(service.modifier(ctx.pathLong("id"),
+                BodyValidator.lire(ctx, ModificationArticle.class))));
+        app.delete("/api/articles/{id}", ctx -> { service.supprimer(ctx.pathLong("id")); ctx.status(204); });
+
+        // Authentification : Bearer -> decodage -> sujet dans l'attribut de contexte
+        app.before("/api/*", ctx -> {
+            var entete = ctx.header("Authorization");
+            if (entete == null || !entete.startsWith("Bearer ")) { throw new ErreurHttp(401, "jeton requis"); }
+            ctx.attribute("utilisateur", jwt.verifier(entete.substring(7)));  // see chapitre Spring Security
+        });
+        app.get("/api/mes-articles", ctx -> ctx.json(service.parAuteur(ctx.attribute("utilisateur").id())));
+
+        // Gestion d'erreurs : UN SEUL endroit, format RFC 9457 (problem+json)
+        app.exception(ErreurValidation.class, (e, ctx) -> ctx.status(422).json(Probleme.de(ctx, 422,
+                "Donnees invalides", "validation", e.champs())));
+        app.exception(ErreurIntrouvable.class, (e, ctx) -> ctx.status(404).json(
+                Probleme.de(ctx, 404, e.getMessage(), "introuvable")));
+        app.exception(ErreurHttp.class, (e, ctx) -> ctx.status(e.statut()).json(Probleme.de(ctx, e.statut(), e.getMessage(), e.code())));
+        app.throwable((e, ctx) -> {
+            log.error("non ger\'e", e);
+            ctx.status(500).json(Probleme.de(ctx, 500, "erreur interne", "interne")
+                    .detail(config.isDev() ? e.toString() : null));     // jamais la stack en prod
+        });
+
+        app.start(config.port());
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            app.stop();
+            pool.close();                       // arret gracieux : finir les requetes en cours
+        }, "arret"));
+    }
+}
+\end{codejava}
+
+\subsection{Les formes que doit avoir une API (rappel utile en Java)}
+
+\begin{tabz}{p{0.24\textwidth}X}
+  \headrow \thd{Sujet} \& \thd{Conventions \`a tenir} \\
+  \midrule
+  Noms \& Pluriels, substantifs, pas de verbes~: \verb|/articles/12/tags| et non \verb|/getArticle|. \\
+  Verbes \& \verb|GET| (s\^ur, idempotent), \verb|POST|, \verb|PUT| (remplacement), \verb|PATCH| (partiel), \verb|DELETE| (204). \\
+  Codes \& 200/201/204~; 400 (corps illisible) 401 403 404 409 (conflit) 422 (s\'emantique) 429~; 500/503. \\
+  Erreurs \& \verb|application/problem+json| (RFC 9457)~: \verb|type, title, status, detail, instance| + \verb|errors|. \\
+  Pagination \& \verb|page/taille| ou curseur opaque~; renvoyer \verb|total| ou un \verb|Link: rel="next"|. \\
+  Filtrage \& \verb|?statut=PUBLIE\&depuis=2026-01-01|~; tri \verb|?tri=-publie\_le,titre|. \\
+  Versionnage \& \verb|/api/v1| \emph{ou} en-t\^ete \verb|Accept-API-Version|~: un seul style, document\'e. \\
+  Idempotence \& \verb|Idempotency-Key| sur les \verb|POST| qui \'ecrivent (paiements, publications). \\
+  D\'ebit \& limitation par token bucket~; \verb|Retry-After|~; file born\'ee en interne. \\
+\end{tabz}
+
+\section{Authentification et autorisation~: la gamme compl\`ete}
+
+\begin{codejava}
+// 1. Mots de passe : Argon2id (recommande), bcrypt (acceptable), NEVER plain/md5/sha1.
+//    dependance : de.mkammerer:argon2-jvm (liens natifs) ou Bouncy Castle.
+var argon = Argon2Factory.create(Argon2Factory.Argon2Types.ARGON2id);
+String empreinte = argon.hash(3, 64 * 1024, 1, motDePasse.toCharArray());   // t=3 m=64Mo p=1
+boolean ok = argon.verify(empreinte, motDePasse.toCharArray());
+if (argon.requiresRehash(empreinte)) { depot.nouvelleEmpreinte(user, argon.hash(...)); }  // cout qui baisse
+
+// 2. JWT (cf. chapitre PHP 308 pour les pieges : les memes s'appliquent)
+//    - verifie alg (pas "none"), exp/nbf/iat avec tolerance, iss/aud, kid ;
+//    - HS256 : secret >= 256 bits, tourne ; RS256/ES256 : cle privee cote auteur, JWK publics exposes.
+//    - ne JAMAIS mettre de donnees sensibles dans le payload (il est lisible).
+var lib = com.nimbusds.jose.JOSEObjects...       // nimbus-jose-jwt : la lib serieuse
+
+// 3. OIDC : deleguer l'authentification a un fournisseur (Keycloak, Auth0, Entra, Google, GitHub).
+//    Flux : authorization code + PKCE ; cote Java : spring-boot-starter-oauth2-resource-server
+//    ou Quarkus openid-connect. Tu ne geranges plus de mot de passe : c'est le but.
+//    Le jeton d'acces est opaque ou JWT ; verifie la signature via la JWK Set du fournisseur,
+//    mets les roles en claim, et fais l'autorisation dans TON code (pas dans le jeton seul).
+
+// 4. Sessions : pour un site avec navigateur, c'est souvent le MEILLEUR choix (revocation possible).
+//    Cookie : Secure, HttpOnly, SameSite=Lax, Path=/ ; expire ; rotation apres login ;
+//    cote serveur : table de sessions (ou Redis) avec TTL, et suppression a la deconnexion.
+
+// 5. Autorisation : centralise, declasre, testable.
+enum Permission { ARTICLE_CREER, ARTICLE_PUBLIER, ARTICLE_SUPPRIMER, USER_ADMIN }
+record Sujet(long id, String nom, Set<Permission> permissions) {
+    boolean peut(Permission p) { return permissions.contains(p); }
+}
+// Middleware : ctx.attribute(sujet) puis, dans chaque route : autoriser(ctx, Permission.ARTICLE_PUBLIER)
+// => l'oubli d'un controle devient une faute visible en revue, pas une surprise en production.
+\end{codejava}
+
+\section{Observabilit\'e~: ce qui te sauvera \`a 3 h}
+
+\begin{codejava}
+// Micrometer : la facade de mesures (le Prometheus client, OTLP, Datadog via registries)
+var registry = PrometheusMeterRegistry.prometheusNativeRegistry ? null : new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+Timer.Builder.builder("http.server.requests", registry)
+        .tag("uri", uri).tag("methode", meth).tag("statut", String.valueOf(code)).register(registry)
+        .record(duree, TimeUnit.NANOSECONDS);
+registry.summary("articles.taille", "tags").record(nbTags);
+// Exposition : GET /metrics (texte Prometheus) + une alerte si 5xx > 1 % sur 5 min.
+
+// Journaux structures (JSON) : logback + net.logstash.logback:logstash-logback-encoder
+//    <encoder class="net.logstash.logback.encoder.LogstashEncoder"><includeMdcKeyName>requestId</includeMdcKeyName>
+MDC.put("requestId", id);                       // propage a travers les threads (ou Scoped Values / OTel)
+try (var scope = Tracer.current().with(span)) { traitement(); }
+
+// OpenTelemetry : traces + metriques + logs, le standard qui remplace les proprietaires
+// io.opentelemetry.javaagent (agent zero-code) : java -javaagent:otel.jar -jar app.jar
+//    OTEL_SERVICE_NAME, OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_TRACES_SAMPLER=parentbased_traceidratio
+// Correlation : un meme requestId dans le log, la trace et le reponse HTTP (X-Request-Id).
+\end{codejava}
+
+\begin{terminal}
+# JVM utile en production
+java -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError \
+     -Xlog:gc*:file=/var/log/app/gc.log:time,uptime:filecount=5,filesize=20M \
+     -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/data/dumps \
+     --enable-native-access=ALL-UNNAMED \
+     -javaagent:/app/opentelemetry-javaagent.jar \
+     -jar /app/app.jar
+# Diagnostic a chaud
+jcmd 1 GC.run ; jcmd 1 Thread.print ; jcmd 1 VM.flags ; jcmd 1 VM.system_properties
+jstat -gcutil 1 1s 10            # old gen qui ne redescend pas = fuite : heap dump puis MAT/JProfiler
+\end{terminal}
+
+\etape{Le d\'eploiement qui tient la route}
+\begin{enumerate}
+  \item Conteneur non-root, \verb|readOnlyRootFilesystem|, \verb|drop ALL capabilities|, limites CPU/RAM~;
+  \item sonde \verb|/health| (liveness~: le processus vit) et \verb|/ready| (readiness~: pool,
+        migration, d\'ependances pr\^etes)~: deux endpoints diff\'erents, jamais un seul~;
+  \item arr\^et gracieux~: SIGTERM \$\rightarrow\$ stop accepting, attendre 15 s, rendre les connexions BDD, sortir.
+        En Kubernetes~: \verb|terminationGracePeriodSeconds: 30|, sinon tu perds des requ\^etes \`a chaque rollout.
+  \item Secrets hors de l'image~: variables d'environnement, fichiers mont\'es, Vault/Sealed Secrets.
+  \item Migration de sch\'ema \emph{avant} le d\'eploiement du code~: backwards-compatible toujours
+        (ajouter une colonne~: OK~; renommer~: en deux versions~: add+copy+switch, drop plus tard).
+  \item Build reproductible~: pas de \verb|SNAPSHOT| en prod, digest d'image \'epingl\'e, SBOM
+        (\link{CycloneDX Maven plugin}{https://github.com/CycloneDX/cyclonedx-maven-plugin})
+        + \link{OWASP dependency-check}{https://github.com/jeremylong/DependencyCheck} ou
+        \link{Trivy}{https://github.com/aquasecurity/trivy}.
+\end{enumerate}
+
+\begin{piege}
+Cinq blessures d'API Java en production~: (1) \verb|List| enti\`ere charg\'ee puis pagin\'ee en m\'emoire~;
+(2) \verb|@Transactional| sur une m\'ethode publique appel\'ee depuis la m\^eme classe~: l'intercepteur
+ne passe pas, la transaction n'existe pas~; (3) Jackson qui s\'erialise l'entit\'e JPA et d\'eclenche un
+chargement paresseux en cascade~: 40 requ\^etes par r\'eponse~; (4) pool JDBC plus grand que
+\verb|max\_connections| du serveur~: le pic de trafic tue la base~; (5) aucun timeout HTTP sortant
+sur les appels d'autres services~: un thread bloqu\'e pour toujours, puis tout le pool.
+\end{piege}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Reprise le projet du chapitre~9 et construis l'API en Javalin~: les 6 routes CRUD, les
+        erreurs 9457, la pagination~; et le fichier \verb|openapi.yaml| (valid\'e avec
+        \url{https://code.visualstudio.com/} ou Scalar).
+  \item Ajoute l'authentification~: inscription/connexion avec Argon2id, sessions en base,
+        cookies durcis, limitation \`a 5 tentatives~: puis une variante JWT (access 15 min + refresh).
+  \item \'Ecris les tests d'int\'egration de l'API~: RestAssured contre une instance r\'eelle avec
+        Testcontainers~; 25 cas~: dont chaque code d'erreur, chaque r\`egle d'autorisation.
+  \item Instrumente~: timer HTTP, compteur d'erreurs par code, jauge de taille du pool
+        (\verb|active|, \verb|idle|, \verb|pending|)~; puis \verb|/metrics| scrap\'e par Prometheus
+        local~: et un panneau Grafana de trois graphiques.
+  \item Fais le test de charge~: \link{k6}{https://k6.io/} ou \link{wrk}{https://github.com/wg/wrk}
+        sur \verb|GET /api/articles|~: trouve le point de rupture~; augmente la taille du pool,
+        puis le nombre de threads~: note laquelle des deux variables d\'eplace le d\'ebit, et explique.
+  \item Reprends la m\^eme API en Spring Boot (chapitre suivant)~: compte les fichiers et les lignes
+        n\'ecessaires~; c'est l'int\'er\^et (et le co\^ut) d'un cadre~: tu le verras en un apr\`es-midi.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Javalin --- \url{https://javalin.io/documentation} --- Jetty --- \url{https://www.eclipse.org/jetty/}
+  \item Micrometer --- \url{https://micrometer.io/} --- OpenTelemetry Java --- \url{https://opentelemetry.io/docs/languages/java/}
+  \item Nimbus JOSE+JWT --- \url{https://connect2id.com/products/libraries/nimbus-jose-jwt} --- Keycloak --- \url{https://www.keycloak.org/}
+  \item OWASP API Security Top 10 --- \url{https://owasp.org/API-Security/editions/2023/en/0x00-header/}
+  \item RFC 9457 (Problem Details) --- \url{https://www.rfc-editor.org/rfc/rfc9457.html} --- \link{12-factor App}{https://12factor.net/fr/}
+\end{itemize}
+\end{ressources}
+
+\index{serveur HTTP}\index{API REST}\index{JWT}\index{Micrometer}\index{OpenTelemetry}

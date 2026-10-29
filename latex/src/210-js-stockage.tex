@@ -1,0 +1,333 @@
+% ============================================================================
+\chapter{Stockage, cache et fonctionnement hors ligne}
+\label{ch:js-storage}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Choisir le bon stockage selon quatre crit\`eres~: taille, dur\'ee, origine, secret.
+  \item Utiliser \texttt{localStorage}/\texttt{sessionStorage} sans se faire pi\'eger par le JSON.
+  \item Lire/\'ecrire des cookies correctement (expire, SameSite, Secure, HttpOnly).
+  \item Manipuler IndexedDB proprement, y compris avec des index et des curseurs.
+  \item Poser un service worker pour un vrai mode hors ligne et une PWA installable.
+\end{itemize}
+\end{objectif}
+
+\section{Quoi stocker o\`u}
+
+\begin{tabz}{llllX}
+  \headrow \thd{M\'ecanisme} \& \thd{Capacit\'e typique} \& \thd{Dur\'ee} \& \thd{Serveur ?} \& \thd{Usage correct} \\
+  \midrule
+  cookie \& 4~Ko par domaine \& jusqu'\`a \verb|Expires| \& oui, \`a chaque requ\^ete \& session, pr\'ef\'erence lue c\^ot\'e serveur \\
+  \verb|localStorage| \& 5--10~Mo \& infini, par origine \& non \& pr\'ef\'erences, brouillon de formulaire, \'etat d'UI \\
+  \verb|sessionStorage| \& idem \& onglet courant \& non \& \'etat d'un wizard, jeton court \\
+  \verb|IndexedDB| \& centaines de Mo (jusqu'au quota disque) \& infini \& non \& grandes quantit\'es structur\'ees, recherche, hors ligne \\
+  OPFS (files) \& quota disque \& infini \& non \& fichiers, bases SQLite WASM, gros exports \\
+  Cache API \& quota \& infini \& non \& r\'eponses HTTP mises en cache par le service worker \\
+  \verb|caches|+SW \& --- \& --- \& --- \& application enti\`ere hors ligne \\
+\end{tabz}
+
+\begin{piege}
+\textbf{Aucun stockage c\^ot\'e navigateur n'est digne de confiance.} L'utilisateur peut lire,
+modifier, supprimer n'importe quoi (console, extension, disque). Ne stocke donc jamais l\`a~:
+un r\^ole \og ~admin~ \fg{}, un prix, un solde, une validation de paiement, un jeton de session sensible
+sans expiration courte. Le stockage local est un \emph{cache}, pas une source de v\'erit\'e.
+\end{piege}
+
+\section{Web Storage --- proprement, une fois pour toutes}
+
+\begin{codejs}
+// localStorage ne stocke QUE des chaines : un objet passe par JSON, et ca peut echouer.
+class Stockage {
+  constructor(prefixe = "app:", storage = localStorage) { Object.assign(this, { prefixe, storage }); }
+  #cle(k) { return this.prefixe + k; }
+  lire(k, defaut) {
+    try { const brut = this.storage.getItem(this.#cle(k)); return brut === null ? defaut : JSON.parse(brut); }
+    catch (e) { console.warn(`storage.lire(${k})`, e); this.effacer(k); return defaut; }
+  }
+  ecrire(k, valeur) {
+    try { this.storage.setItem(this.#cle(k), JSON.stringify(valeur)); return true; }
+    catch (e) {
+      if (e.name === "QuotaExceededError") { this.nettoyer(); return this.ecrire(k, valeur); }
+      console.warn(`storage.ecrire(${k})`, e); return false;
+    }
+  }
+  effacer(k) { this.storage.removeItem(this.#cle(k)); }
+  nettoyer() {  // enleve les cles trop vieilles ( convention : cle + "__t" = timestamp)
+    const ages = Object.keys(this.storage)
+      .filter((k) => k.startsWith(this.prefixe))
+      .map((k) => ({ k, t: Number(this.storage.getItem(`${k}__t`) ?? 0) }))
+      .sort((a, b) => a.t - b.t);
+    ages.slice(0, Math.ceil(ages.length / 2)).forEach(({ k }) => this.effacer(k.slice(this.prefixe.length)));
+  }
+  get taille() { let n = 0; for (const k of Object.keys(this.storage)) if (k.startsWith(this.prefixe)) n += this.storage.getItem(k).length; return n; }
+}
+export const store = new Stockage("carnet:");
+store.ecrire("articles", [{ id: 1 }]);
+store.lire("articles", []);
+
+// Synchro entre onglets : l'evenement "storage" se declenche sur les AUTRES onglets
+window.addEventListener("storage", ({ key, newValue, oldValue, url }) => {
+  if (key === "carnet:articles") rendre(JSON.parse(newValue ?? "[]"));
+});
+\end{codejs}
+
+\section{Cookies~: le seul stockage vu par le serveur}
+
+\begin{codejs}
+// Ecriture depuis JS : pas de HttpOnly (sinon JS ne peut pas le lire), 4 Ko max
+document.cookie = "theme=sombre; path=/; max-age=31536000; SameSite=Lax; Secure";
+
+const cookies = Object.fromEntries(
+  document.cookie.split("; ").map((p) => { const [k, ...v] = p.split("="); return [k, decodeURIComponent(v.join("="))]; })
+);
+const effacer = (nom) => { document.cookie = `${nom}=; path=/; max-age=0`; };
+\end{codejs}
+
+\begin{tabz}{lX}
+  \headrow \thd{Attribut} \& \thd{Effet} \\
+  \midrule
+  \verb|Expires| / \verb|Max-Age| \& dur\'ee de vie~; sans lui, cookie de session (mort \`a la fermeture). \\
+  \verb|Path| \& ne sera envoy\'e que sur ce chemin. \verb|/| dans 99 \% des cas. \\
+  \verb|Domain| \& sous-domaines inclus ; ne le mets pas sauf besoin r\'eel (\verb|.exemple.com| = large surface). \\
+  \verb|Secure| \& uniquement en HTTPS --- obligatoire si \verb|SameSite=None|. \\
+  \verb|HttpOnly| \& \textbfJavaScript ne peut pas le lire~: la meilleure d\'efense contre le vol de session par XSS. \\
+  \verb|SameSite=Lax|  \& d\'efaut moderne~; bloque la plupart des CSRF. \verb|Strict| = encore plus raide. \verb|None| = tiers, exige \verb|Secure|. \\
+  \verb|Partitioned| \& cookie cloisonn\'e par site parent (CHIPS) : pour les iframe tierces. \\
+\end{tabz}
+
+\begin{note}
+Depuis quelques ann\'ees, les navigateurs traitent un cookie \verb|SameSite=None| sans
+\verb|Secure| comme invalide, et bloquent les cookies tiers par d\'efaut. Conclusion~: une
+session doit \^etre un cookie \verb|HttpOnly; Secure; SameSite=Lax|, et ton JavaScript ne doit
+jamais avoir besoin de lire le jeton de session. Si tu stockes un jeton d'acc\`es dans
+\verb|localStorage| pour \'eviter cela, accepte d'\^etre vuln\'erable au XSS~: c'est le vrai d\'ebat
+JWT-localStorage vs cookie-HttpOnly, et la r\'eponse raisonnable est \og ~cookie + CSRF~ \fg{}.
+\end{note}
+
+\section{IndexedDB --- la base de donn\'ees du navigateur}
+
+C'est une base orient\'ee enregistrements~: magasins (\texttt{objectStore}), cl\'es, index,
+transactions. API de bas niveau verbeuse~; \link{idb}{https://github.com/jakearchibald/idb}
+(\cmd{npm i idb}) la rend supportable sans lui retirer sa puissance.
+
+\begin{codejs}
+import { openDB } from "idb";
+
+const db = await openDB("carnet", 2, {
+  upgrade(bdd, ancienne, nouvelle, t) {
+    if (!bdd.objectStoreNames.contains("articles")) {
+      const s = bdd.createObjectStore("articles", { keyPath: "id", autoIncrement: true });
+      s.createIndex("par-date", "creeLe");
+      s.createIndex("par-auteur-\'etat", ["auteur", "etat"], { multiEntry: false });
+      s.createIndex("pleine-texte", "recherche", { multiEntry: true });   // tableau de mots-cles
+    }
+    if (nouvelle === 2 && !bdd.objectStoreNames.contains("tags")) {
+      bdd.createObjectStore("tags", { keyPath: "nom" });
+    }
+  },
+});
+
+// Ecrire
+const id = await db.put("articles", { titre: "Apprendre JS", etat: "brouillon", creeLe: Date.now(), recherche: ["apprendre", "js"] });
+await db.add("articles", { titre: "unique" });           // echoue si la cle existe
+await db.bulkPut("articles", tableauDObjects);
+await db.delete("articles", id);
+await db.clear("articles");
+
+// Lire
+const un = await db.get("articles", id);
+const tous = await db.getAll("articles");
+const compte = await db.count("articles");
+const parDate = await db.getAllFromIndex("articles", "par-date", IDBKeyRange.bound(d1, d2));
+const cursor = await db.transaction("articles").store.index("par-date").openCursor(IDBKeyRange.lowerBound(Date.now() - 864e5), "prev");
+const page = [];
+while (cursor && page.length < 20) { page.push(cursor.value); cursor = await cursor.continue(); }
+const cleSuivante = await db.getAllKeys("articles", null, 1);   // pagination par cle, la scalable
+
+// Transaction multi-magasins, atomique
+const t = db.transaction(["articles", "tags"], "readwrite");
+await Promise.all([
+  t.objectStore("articles").put(article),
+  t.objectStore("tags").put({ nom: "js", nb: (await t.objectStore("tags").get("js"))?.nb + 1 ?? 1 }),
+]);
+await t.done;      // commit ; "aborted" en cas d'erreur -> tout est annule
+
+// Recherche pleine texte maison (index multiEntry) :
+const mots = requete.toLowerCase().split(/\s+/).filter(Boolean);
+const resultat = await db.getAllFromIndex("articles", "pleine-texte", IDBKeyRange.only(mots[0]));
+\end{codejs}
+
+\begin{astuce}
+Besoin de requ\^etes SQL, de jointures et de gros volumes dans le navigateur~?
+\link{SQL.js}{https://sql.js.org/}, \link{wa-sqlite}{https://github.com/rhashimoto/wa-sqlite} ou
+\link{TinyBase}{https://tinybase.org/} tournent sur IndexedDB/OPFS. Pour une application locale
+lourde (\'editeur, cartographie, comptabilit\'e), SQLite compil\'e en WASM sur OPFS est
+une architecture r\'eelle, pas un gadget.
+\end{astuce}
+
+\section{Service worker, cache et hors ligne}
+\label{sec:pwa}
+
+Un \emph{service worker} est un script qui s'installe dans le navigateur, hors de la page,
+et qui peut intercepter les requ\^etes r\'eseau. C'est ce qui rend un site installable, rapide en
+2\textsuperscript{e} visite, et utilisable sans r\'eseau.
+
+\begin{codejs}
+// sw.js --- a la racine du site (portee = son dossier et au-dessous)
+const CACHE = "v3";
+const ESSENTIELS = ["/", "/index.html", "/app.js", "/style.css", "/icone-192.png"];
+
+self.addEventListener("install", (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ESSENTIELS)).then(() => self.skipWaiting()));
+});
+self.addEventListener("activate", (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then((cles) => Promise.all(cles.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+self.addEventListener("fetch", (e) => {
+  const req = e.request;
+  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+
+  // 1) Resources applicatives : stale-while-revalidate
+  if (req.destination === "script" || req.destination === "style" || req.mode === "navigate") {
+    e.respondWith(
+      caches.match(req).then((cache) => {
+        const reseau = fetch(req)
+          .then((res) => { const clone = res.clone(); caches.open(CACHE).then((c) => c.put(req, clone)); return res; })
+          .catch(() => cache ?? Response.error());
+        return cache ?? reseau;
+      })
+    );
+    return;
+  }
+  // 2) API : network-first avec repli sur le cache (donnees legerement perimees > rien)
+  if (new URL(req.url).pathname.startsWith("/api/")) {
+    e.respondWith(
+      fetch(req)
+        .then((res) => { if (res.ok) caches.open(CACHE).then((c) => c.put(req, res.clone())); return res; })
+        .catch(() => caches.match(req).then((r) => r ?? new Response(JSON.stringify({ horsLigne: true }), { headers: { "content-type": "application/json" } })))
+    );
+  }
+});
+// Recevoir un message de la page pour demander une mise a jour
+self.addEventListener("message", (e) => { if (e.data?.type === "verifier") self.skipWaiting(); });
+\end{codejs}
+
+\begin{codejs}
+// enregistrement depuis la page
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  reg.addEventListener("updatefound", () => {
+    const nouveau = reg.installing;
+    nouveau?.addEventListener("statechange", () => {
+      if (nouveau.state === "installed" && navigator.serviceWorker.controller) {
+        notifier("Nouvelle version disponible", { action: { titre: "Recharger", clic: () => nouveau.postMessage({ type: "aktiver" }) } });
+      }
+    });
+  });
+}
+// Detection d'etat reseau
+const enLigne = navigator.onLine;
+window.addEventListener("online", reSynchroniser);
+window.addEventListener("offline", () => afficherBanniere("Mode hors ligne : tes saisies seront renvoyees plus tard"));
+// File d'attente d'arriere-plan officielle (Chromium + Firefox 2024+)
+if ("BackgroundSync" in window) { const reg = await navigator.serviceWorker.getRegistration(); await reg.sync.register("renvoi"); }
+\end{codejs}
+
+\begin{tabz}{lX}
+  \headrow \thd{Strat\'egie de cache} \& \thd{Quand} \\
+  \midrule
+  Cache-only \& ressources fig\'ees, versionn\'ees dans le nom. \\
+  Network-only \& appels non-idempotents, endpoints sensibles. \\
+  Network-first, cache en repli \& donn\'ees qui doivent \^etre fra\^iches (API, HTML). \\
+  Cache-first, r\'eseau en repli \& assets immuables, images. \\
+  Stale-while-revalidate \& le meilleur compromis pour une SPA~: affichage imm\'ediat + mise \`a jour en fond. \\
+  Race \& deux miroirs, on garde le premier arriv\'e (langueur r\'eseau \'elev\'ee). \\
+\end{tabz}
+
+\etape{Rendre la PWA installable}
+\begin{codejson}
+{
+  "name": "Carnet de Nour",
+  "short_name": "Carnet",
+  "id": "/?source=pwa",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay"],
+  "orientation": "any",
+  "theme_color": "#0b4f8a",
+  "background_color": "#ffffff",
+  "description": "Prise de notes rapide, hors ligne, chiffre cote appareil.",
+  "icons": [
+    { "src": "/icones/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icones/icone-512.png", "sizes": "512x512", "type": "image/png" }
+  ],
+  "shortcuts": [{ "name": "Nouvelle note", "url": "/?nouvelle", "icons": [{ "src": "/icones/note.png", "sizes": "96x96" }] }]
+}
+\end{codejson}
+
+\begin{terminal}
+npm i -D vite-plugin-pwa       # genere manifest, sw, icone, et le cycle de mise a jour
+npx @vite/pwa-assets-creator   # genere toutes les tailles d'icone depuis un SVG
+npx lighthouse --only-categories=pwa --output=html --output-path=rapport.html http://localhost:4173
+\end{terminal}
+
+\section{S\'ecurit\'e et confidentialit\'e du stockage}
+
+\begin{itemize}
+  \item Ne chiffre rien \og ~\`a la main~ \fg{} dans le code client en pensant que c'est secret~:
+        la clef est dans le bundle. Pour du secret \emph{par appareil}, la WebCrypto API avec une
+        clef non extractable (\verb|CryptoKey| \verb|extractable: false|) est correcte~; le reste
+        est une d\'eclaration d'intention.
+  \item Limite la r\'etention~: purge les cl\'es plus vieilles que X jours, vide le stockage \`a la
+        d\'econnexion (\verb|IndexedDB.deleteDatabase|, purge du cache, nettoyage SW).
+  \item RGPD~: un stockage local non-transmis reste une donn\'ee personnelle~; documente-le dans la
+        politique de confidentialit\'e.
+  \item \link{OPFS}{https://developer.mozilla.org/en-US/docs/Web/API/File\_System\_API/Origin\_private\_file\_system}
+        est priv\'e \`a l'origine~: plus rapide et plus gros que IndexedDB pour des fichiers.
+\end{itemize}
+
+\begin{terminal}
+# vider tout ce que le site a garde (DevTools > Application > Storage)
+const cachesKeys = await caches.keys(); await Promise.all(cachesKeys.map(k => caches.delete(k)));
+indexedDB.databases().then(dbs => dbs.forEach(d => indexedDB.deleteDatabase(d.name)));
+localStorage.clear(); sessionStorage.clear();
+navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister()));
+location.reload();
+\end{terminal}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Ajoute \`a ta liste de courses une sauvegarde automatique~: apr\`es chaque mutation,
+        \'ecrit dans \verb|localStorage| avec un \verb|debounce| de 400~ms, et restaure au
+        d\'emarrage en affichant \og ~brouillon restaur\'e~ \fg{}.
+  \item \'Ecris une fonction de \textbf{synchronisation}~: un tableau \verb|enAttente| dans
+        IndexedDB, renvoi automatique quand \verb|online| revient, avec gestion des doublons
+        par identifiant local.
+  \item Migre ton stockage de \verb|localStorage| vers IndexedDB~: garde une cl\'e de version,
+        et un code qui lit l'ancien format une seule fois puis le supprime.
+  \item Ajoute une exportation JSON (t\'el\'echargement du fichier via Blob) et une importation
+        valid\'ee par \verb|zod|~: refuse tout fichier malform\'e sans corrompre l'\'etat existant.
+    \item Rends ton application installable~: manifest, service worker, mode hors ligne
+        complet, et un indicateur visible \og ~derni\`ere synchronisation~ \fg{}.
+  \item V\'erifie dans DevTools \$\rightarrow\$ Application \$\rightarrow\$ Storage ce que ton site
+        garde r\'eellement~; supprime ce qui ne devrait pas y \^etre.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- Web Storage --- \url{https://developer.mozilla.org/fr/docs/Web/API/Window/localStorage}
+  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB\\\_API}
+  \item \emph{The Offline Cookbook} (Jake Archibald) --- \url{https://web.dev/articles/offline-cookbook}
+  \item idb --- \url{https://github.com/jakearchibald/idb}
+  \item PWA --- \url{https://web.dev/learn/pwa/} --- Workbox --- \url{https://developer.chrome.com/docs/workbox}
+\end{itemize}
+\end{ressources}
+
+\index{IndexedDB}\index{service worker}\index{PWA}\index{cookies}

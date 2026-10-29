@@ -1,0 +1,462 @@
+% ============================================================================
+\chapter{PHP objet~: classes, interfaces, \'enum\'erations, attributs}
+\label{ch:php-oop}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item \'Ecrire des classes modernes~: constructeur promotionnel, \verb|readonly|, typage complet.
+  \item Choisir entre interface, classe abstraite, trait et \'enum\'eration, et savoir pourquoi.
+  \item Comprendre l'autochargement (PSR-4) et l'injection de d\'ependances sans framework.
+  \item Utiliser les attributs pour d\'ecrire au lieu de configurer ailleurs.
+  \item Construire un petit noyau d'application (container, routeur, repository) en 200 lignes.
+\end{itemize}
+\end{objectif}
+
+\section{L'objet PHP moderne, en un exemple}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+namespace App\Domain\Article;
+
+use DateTimeImmutable;
+use Stringable;
+
+/**
+ * Un article. Entite riche : les regles metier vivent ICI, pas dans les controleurs.
+ */
+final class Article implements Stringable
+{
+    // Constantes de classe : valeurs immuables partagees
+    public const LONGUEUR_TITRE_MIN = 3;
+    public const LONGUEUR_TITRE_MAX = 160;
+
+    /** @var string[] */
+    private array $tags;
+
+    public function __construct(
+        private readonly ?int $id,
+        private string $titre,
+        private string $corps,
+        private Statut $statut,                       // enum : pas de chaine magique
+        private readonly Auteur $auteur,
+        private readonly DateTimeImmutable $creeLe,
+        private ?DateTimeImmutable $publieLe = null,
+        array $tags = [],
+    ) {
+        $this->titre = trim($titre);
+        $this->validerTitre();
+        $this->tags = array_values(array_unique(array_map(
+            static fn (string $t): string => mb_strtolower(trim($t)),
+            $tags
+        )));
+        if ($statut === Statut::Publie && $publieLe === null) {
+            throw new InvalidArgumentException('Un article publie doit avoir une date de publication.');
+        }
+    }
+
+    // --- Accesseurs : lecture seule. L'etat ne change que par des methodes qui ont un SENS. ---
+    public function id(): ?int { return $this->id; }
+    public function titre(): string { return $this->titre; }
+    public function statut(): Statut { return $this->statut; }
+    public function estPublie(): bool { return $this->statut === Statut::Publie; }
+
+    /** @return string[] */
+    public function tags(): array { return $this->tags; }
+
+    // --- Transitions d'etat : elles retournent une NOUVELLE instance (immutabilite) ---
+    public function publier(?DateTimeImmutable $quand = null): self
+    {
+        if ($this->statut === Statut::Archive) {
+            throw new LogicException('Un article archive ne se republicie pas.');
+        }
+        return new self(
+            $this->id, $this->titre, $this->corps, Statut::Publie, $this->auteur,
+            $this->creeLe, $quand ?? new DateTimeImmutable(), $this->tags,
+        );
+    }
+
+    public function renommer(string $nouveauTitre): self
+    {
+        $copie = clone $this;
+        $copie->titre = trim($nouveauTitre);
+        $copie->validerTitre();
+        return $copie;
+    }
+
+    public function __toString(): string { return sprintf('#%s %s', $this->id ?? 'nouveau', $this->titre); }
+
+    public function egal(Article $autre): bool
+    {
+        return $this->id !== null && $this->id === $autre->id;   // identite, pas similarite
+    }
+
+    private function validerTitre(): void
+    {
+        $longueur = mb_strlen($this->titre);
+        if ($longueur < self::LONGUEUR_TITRE_MIN || $longueur > self::LONGUEUR_TITRE_MAX) {
+            throw new DomainException(sprintf(
+                'Le titre doit faire entre %d et %d caracteres (%d donne).',
+                self::LONGUEUR_TITRE_MIN, self::LONGUEUR_TITRE_MAX, $longueur
+            ));
+        }
+    }
+}
+
+// Un objet valeur : petit, immuable, comparable par valeur
+final class Auteur
+{
+    public function __construct(public readonly string $nom, public readonly string $email)
+    {
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) { throw new DomainException("email invalide : {$email}"); }
+    }
+    public function equals(self $autre): bool
+    {
+        return $this->nom === $autre->nom && $this->email === $autre->email;
+    }
+}
+
+enum Statut: string
+{
+    case Brouillon = 'brouillon';
+    case Publie = 'publie';
+    case Archive = 'archive';
+
+    public function libelle(): string
+    {
+        return match ($this) {
+            self::Brouillon => 'Brouillon',
+            self::Publie => 'Publie',
+            self::Archive => 'Archive',
+        };
+    }
+    public function peutEditer(): bool { return $this !== self::Archive; }
+}
+\end{codephp}
+
+\subsection{Ce que le mot-cl\'e \texttt{final} change r\'eellement}
+
+Marquer \verb|final| toute classe qui n'est pas faite pour \^etre \'etendue est la d\'ecision
+d'architecture la rentable du PHP moderne~: tu gagnes le droit de changer l'impl\'ementation
+sans casser des h\'eritiers inconnus. R\`egle simple~: \verb|final| partout, \verb|abstract| ou
+interface quand tu con\c{c}ois \emph{volontairement} un point d'extension.
+
+\begin{tabz}{llX}
+  \headrow \thd{Modificateur} \& \thd{Depuis} \& \thd{Effet} \\
+  \midrule
+  \verb|final class| \& PHP 4/8 \& interdit d'\'etendre (et \verb|final public function| d'\'ecraser). \\
+  \verb|readonly class| \& 8.2 \& toutes les propri\'et\'es sont \verb|readonly|~; interdiction d'h\'eriter. \\
+  \verb|readonly public int \$x| \& 8.1 \& assign\'e une seule fois, typ\'e, non modifiable apr\`es. \\
+  \verb|public private(set) int \$x| \& 8.4 \& lisible partout, \'ecriture r\'eserv\'ee \`a la classe. \\
+  \verb|abstract| \& --- \& classe/m\'ethode inachev\'ee~; ne peut pas \^etre instanci\'ee. \\
+  \verb|static| \& --- \& appartient \`a la classe, pas \`a l'instance. \`A utiliser avec parcimonie. \\
+  \verb|clone| \& --- \& copie superficielle~; \verb|\_\_clone()| pour corriger les r\'ef\'erences partag\'ees. \\
+  \verb|unset()| sur une propri\'et\'e \& --- \& la fait revenir \`a \og ~non initialis\'ee~ \fg{} (erreur si on la lit). \\
+\end{tabz}
+
+\section{H\'eritage, interfaces, traits~: quand quoi}
+
+\begin{codephp}
+<?php
+interface DepotArticles                       // CONTRAT : ce que l'appelant peut faire
+{
+    public function trouver(int $id): ?Article;
+    /** @return Article[] */
+    public function recherche(?Statut $statut, int $limite = 50, int $decalage = 0): array;
+    public function enregistrer(Article $a): Article;
+}
+
+interface HorizonTTL { public function expireLe(): ?DateTimeImmutable; }
+
+abstract class Depot implements DepotArticles, HorizonTTL     // CODE PARTAGE + contrat
+{
+    public function __construct(protected \PDO $pdo) {}
+
+    final public function trouver(int $id): ?Article       // non ecrasable : invariants garantis
+    {
+        $stmt = $this->pdo->prepare('SELECT * FROM articles WHERE id = :id LIMIT 1');
+        $stmt->execute(['id' => $id]);
+        $ligne = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $ligne === false ? null : $this->hydrater($ligne);      // methode abstraite -> la suite
+    }
+
+    abstract protected function hydrater(array $ligne): Article;
+    public function expireLe(): ?DateTimeImmutable { return null; }
+}
+
+final class DepotSql extends Depot
+{
+    protected function hydrater(array $l): Article
+    {
+        return new Article(
+            (int) $l['id'], $l['titre'], (string) $l['corps'], Statut::from($l['statut']),
+            new Auteur($l['auteur_nom'], $l['auteur_email']),
+            new DateTimeImmutable($l['cree_le']),
+            $l['publie_le'] !== null ? new DateTimeImmutable($l['publie_le']) : null,
+            json_decode((string) $l['tags'], true) ?: [],
+        );
+    }
+    /* ... */
+}
+
+// Trait : REUTILISATION de code, pas un type. Pas d'etat partag\'e, pas de hierarchie.
+trait InitialiseTableau
+{
+    private ?array $tampon = null;
+    protected function tampon(): array { return $this->tampon ??= []; }
+    protected function pousser(mixed $v): void { $this->tampon()[] = $v; }
+}
+
+// Conflit de traits : au choix, renommer ou exclure
+class A { use Trait1, Trait2 { Trait1::auLieu insteadof Trait2; Trait2::methode as methodeB; } }
+\end{codephp}
+
+\begin{description}
+  \item[Interface] \og ~je sais faire~  \fg{}. Z\'ero code, plusieurs impl\'ementations~: mock en test,
+        MySQL/Postgres/InMemory, notificateur email/SMS. \`A privil\'egier.
+  \item[Classe abstraite] \og ~nous sommes de la m\^eme famille, et voici le code commun~  \fg{}.
+        Peut avoir de l'\'etat. Utilise-la quand tu factorises de l'impl\'ementation, pas pour imposer un type.
+  \item[Trait] \og ~voici un morceau de comportement~  \fg{}. Un plan B syntaxique~;
+        \'evite-le d\`es qu'il commence \`a avoir des accesseurs abstraits (signe qu'il lui manque un
+        collaborateur~: injecte-le).
+  \item[Enum] un ensemble \emph{ferm\'e} de valeurs nomm\'ees. Elle remplace
+        \verb|const|+\verb|switch|+\verb|string| avec des m\'ethodes et une s\'ecurit\'e de type.
+\end{description}
+
+\section{\'Enum\'erations~: le plus sous-utilis\'e des mots-cl\'es}
+
+\begin{codephp}
+<?php
+enum Role: string
+{
+    case Lecteur = 'lecteur';
+    case Auteur = 'auteur';
+    case Redacteur = 'redacteur';
+    case Admin = 'admin';
+
+    public const ORDRE = [self::Lecteur->value, self::Auteur->value, self::Redacteur->value, self::Admin->value];
+
+    public function peut(?self $autre): bool
+    {
+        return array_search($this->value, self::ORDRE, true) >= array_search(($autre?->value ?? 'x'), self::ORDRE, true);
+    }
+    public static function depuisHttp(string $v): self
+    {
+        return self::tryFrom($v) ?? throw new InvalidArgumentException("role inconnu : {$v}");
+    }
+}
+$role = Role::Admin;
+$role->name;   // 'Admin'        $role->value : 'admin'
+Role::from('redacteur');           // une ValueError si inconnu
+Role::tryFrom('xx');                // null
+array_map(fn (Role $r) => $r->value, Role::cases());
+
+// Enum sans valeur = "union de types d'evenement", le motif parfait d'un bus
+abstract class Evenement { }
+enum TypeEvenement { case ArticlePublie; case CommandePayee; case UtilisateurInscrit; }
+interface Traiteur { public function traite(TypeEvenement $type, object $payload): void; }
+\end{codephp}
+
+\begin{note}
+En base de donn\'ees~: une colonne \verb|enum('brouillon','publie','archive')| (MySQL) ou
+\verb|CREATE TYPE statut AS ENUM ...| (Postgres) donne une contrainte d'int\'egrit\'e gratuite.
+C\^ot\'e PHP, \verb|Statut::from()| dans l'hydratation transforme une donn\'ee corrompue en exception
+au lieu d'un \'etat absurde qui se propage pendant trois \'ecrans.
+\end{note}
+
+\section{Attributs~: d\'eclarer au lieu de configurer ailleurs}
+
+\begin{codephp}
+<?php
+#[Attribute(Attribute::TARGET_PROPERTY | Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
+final class Valide
+{
+    /** @param string[] $regles */
+    public function __construct(public readonly array $regles, public readonly ?string $champ = null) {}
+}
+
+#[Attribute(Attribute::TARGET_METHOD)]
+final class Route
+{
+    public function __construct(public readonly string $methode, public readonly string $chemin) {}
+}
+
+final class ControleurArticles
+{
+    public function __construct(private readonly DepotArticles $depots) {}
+
+    #[Route('GET', '/articles/{id:\d+}')]
+    #[Valide(['integer', 'min:1'], champ: 'id')]
+    public function lire(Request $r, Responder $res): Response
+    {
+        $article = $this->depots->trouver((int) $r->params['id']);
+        return $article === null ? $res->notFound() : $res->json($article->versTableau());
+    }
+}
+
+// Lecture des attributs (le role d'un framework, ou ton propre micro-scanner)
+$ref = new ReflectionMethod(ControleurArticles::class, 'lire');
+foreach ($ref->getAttributes(Route::class) as $a) {
+    $route = $a->newInstance();
+    printf("%s %s -> %s::%s\n", $route->methode, $route->chemin, $ref->class, $ref->name);
+}
+foreach ($ref->getAttributes(Valide::class) as $a) {
+    $v = $a->newInstance();
+    /* appliquer $v->regles au champ $v->champ */
+}
+\end{codephp}
+
+Les attributs sont exactement ce qu'utilisent Symfony (routes, validation, s\'erialisation),
+Doctrine (\verb|\#[Table]|, \verb|\#[ORM\Id]|), PHPUnit (\verb|\#[Test]|, \verb|\#[DataProvider]|)
+et Laravel. Les avoir \'ecrits une fois \og ~\`a la main~ \fg{} rend ces frameworks limpides.
+
+\section{Autochargement~: PSR-4 sans myst\`ere}
+
+Un fichier = une classe = un nom d'espace de lignes coh\'erent avec le chemin. Le reste est
+l'affaire de Composer (\cref{ch:php-composer}) ou de dix lignes de \verb|spl\_autoload\_register|.
+
+\begin{codephp}
+<?php
+// composer.json -> "autoload": { "psr-4": { "App\\": "src/" } }
+// App\Domain\Article\Article   =>   src/Domain/Article/Article.php
+
+// Version manuelle, pour comprendre ce que fait Composer :
+spl_autoload_register(static function (string $classe): void {
+    $prefixe = 'App\\';
+    if (!str_starts_with($classe, $prefixe)) { return; }
+    $chemin = __DIR__ . '/src/' . str_replace('\\', '/', substr($classe, strlen($prefixe))) . '.php';
+    if (is_file($chemin)) { require $chemin; }
+});
+
+// Un autoloader maison est une tres bonne exercice ; en production, installe Composer,
+// et gen\`ere l'optimise : composer dump-autoload -o  (une table classe -> fichier, pas de stat disque)
+\end{codephp}
+
+\section{Injection de d\'ependances~: le patron qui rend tout testable}
+
+\begin{codephp}
+<?php
+// Mauvais : le controleur FABRIQUE ses dependances -> inconciliable avec un test, un mock, un swap.
+final class ControleurArticlesMauvais
+{
+    public function __construct()
+    {
+        $this->depot = new DepotSql(new PDO('mysql:host=localhost', 'root', ''));  // secret + couplage
+    }
+}
+
+// Bon : on recoit des ABSTRACTIONS (interfaces). Le "qui cree quoi" est ailleurs : le conteneur.
+final class ControleurArticles
+{
+    public function __construct(
+        private readonly DepotArticles $depots,
+        private readonly Horloge $horloge,
+        private readonly Journal $journal,
+    ) {}
+
+    public function publier(int $id): Response
+    {
+        $article = $this->depots->trouver($id) ?? throw new NotFound('article');
+        $this->depots->enregistrer($article->publier($this->horloge->maintenant()));
+        $this->journal->info('article publie', ['id' => $id]);
+        return new Response(204);
+    }
+}
+
+// Un conteneur minimal (30 lignes) : c'est le coeur de Symfony, Laravel, PHP-DI.
+final class Conteneur
+{
+    /** @var array<string, callable> */ private array $definitions = [];
+    /** @var array<string, object> */   private array $instances = [];
+
+    public function set(string $id, callable $fabrique): void { $this->definitions[$id] = $fabrique; }
+
+    public function get(string $id): object
+    {
+        if (isset($this->instances[$id])) { return $this->instances[$id]; }
+        if (!isset($this->definitions[$id])) {
+            // resolution reflexive par type : on construit les arguments des constructeurs
+            return $this->instances[$id] = $this->autowire($id);
+        }
+        return $this->instances[$id] = ($this->definitions[$id])($this);
+    }
+
+    private function autowire(string $classe): object
+    {
+        $ref = new ReflectionClass($classe);
+        $constructeur = $ref->getConstructor();
+        $args = [];
+        foreach ($constructeur?->getParameters() ?? [] as $p) {
+            $type = $p->getType();
+            $args[] = $type instanceof ReflectionNamedType && !$type->isBuiltin()
+                ? $this->get($type->getName())
+                : ($p->getDefaultValue() ?? throw new RuntimeException("impossible de resoudre {$classe}::\${$p->getName()}"));
+        }
+        return $ref->newInstanceArgs($args);
+    }
+}
+$c = new Conteneur();
+$c->set(PDO::class, fn () => new PDO($_ENV['DATABASE_URL'], options: [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]));
+$c->set(DepotArticles::class, fn (Conteneur $c) => new DepotSql($c->get(PDO::class)));
+$controleur = $c->get(ControleurArticles::class);   // tout le graphe est construit, une fois chacun
+\end{codephp}
+
+\begin{astuce}
+Trois habitudes qui font 90 \% du \og ~code propre~ \fg{} en PHP~: (1) d\'ependre d'interfaces, pas
+d'impl\'ementations~; (2) ne jamais utiliser \verb|new| \`a l'int\'erieur d'une m\'ethode m\'etier pour une
+collaboration~; (3) rendre les objets immuables par d\'efaut. Le reste (Design Patterns, SOLID,
+DDD) est de la broderie sur ces trois points, utile \`a conna\^itre mais rarement \`a invoquer.
+\end{astuce}
+
+\subsection{La bo\^ite \`a outils d'objets utiles}
+
+\begin{tabz}{lXl}
+  \headrow \thd{\'El\'ement} \& \thd{Usage} \& \thd{Lien} \\
+  \midrule
+  \verb|spl\_object\_id| \& identifiant unique d'une instance, pour debug. \& --- \\
+  \verb|WeakMap| / \verb|WeakReference| \& m\'etadonn\'ees attach\'ees \`a un objet, sans fuite m\'emoire. \& \url{https://www.php.net/manual/en/class.weakmap.php} \\
+  \verb|SplObjectStorage| \& ensemble d'objets compar\'es par identit\'e. \& --- \\
+  \verb|ArrayObject| / \verb|ArrayIterator| \& tableau avec interface objet (countable, iterable). \& --- \\
+  \verb|IteratorAggregate| \& rendre ta collection it\'erable avec \verb|foreach|. \& --- \\
+  \verb|Countable|, \verb|JsonSerializable|, \verb|Stringable| \& petites interfaces qui branchent le langage sur ton objet. \& --- \\
+  \verb|\_\_invoke| \& rendre un objet appelable (\verb|\$obj()|)~: le mod\`ele des middlewares. \& --- \\
+  \verb|Serializable| (d\'epr\'eci\'e) / \verb|\_\_serialize| + \verb|\_\_unserialize| \& contr\^ole de la s\'erialisation. \& --- \\
+  \verb|Closure::bind| / \verb|Closure::fromCallable| \& ex\'ecuter du code avec un \verb|\$this| pr\^et\'e. \& --- \\
+\end{tabz}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris le mod\`ele complet d'un blog~: \verb|Article|, \verb|Commentaire|, \verb|Auteur|,
+        \verb|Statut| (enum), \verb|DepotArticles| (interface), \verb|DepotInMemory| et
+        \verb|DepotSql| (les deux impl\'ementations du m\^eme contrat), et un test qui passe
+        sur les deux sans changer une ligne.
+  \item Ajoute un objet valeur \verb|Email|, un \verb|Montant| (entier en centimes, op\'erations
+        typ\'ees, \verb|\_\_toString|) et un \verb|Identifiant| (UUIDv4). Interdis toute cha\^ine
+        \og ~brute~ \fg{} dans tes signatures.
+  \item \'Ecris une classe \verb|Resultat| (succ\`es ou \'echec)~: \verb|Resultat::ok(\$v)|,
+        \verb|Resultat::erreur(\$e)|, \verb|onSuccess()|, \verb|recover()|. Puis utilise-la pour
+        la validation d'un formulaire, sans exceptions.
+  \item Impl\'emente une \verb|Collection| immuable g\'en\'erique-ish~: \verb|map|, \verb|filter|,
+        \verb|reduce|, \verb|groupBy|, \verb|first|, \verb|isEmpty|, \verb|IteratorAggregate|,
+        \verb|Countable|, \verb|JsonSerializable|.
+  \item \'Ecris un petit routeur avec attributs~: \verb|\#[Route('GET','/articles/{id}')]~,
+        un scanner par r\'eflexion, compilation des motifs en regex, et r\'esolution des param\`etres.
+  \item Ajoute un conteneur DI \`a ton projet (le mod\`ele ci-dessus suffit), et fais-en sorte que
+        \verb|new| n'apparaisse plus nulle part dans \verb|src/| sauf dans le bootstrap.
+        C'est le d\'eclic \og ~framework~ \fg{}~: ensuite Symfony ou Laravel te semblera \'evident.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Manuel --- Objets et classes --- \url{https://www.php.net/manual/fr/language.oop5.php}
+  \item PHP The Right Way (sections autoloading, DI, standards) --- \url{https://phptherightway.com/}
+  \item PSR-4 --- \url{https://www.php-fig.org/psr/psr-4/} --- PSR-11 (conteneur) --- \url{https://www.php-fig.org/psr/psr-11/}
+  \item PHP-DI (le conteneur autonome de r\'ef\'erence) --- \url{https://php-di.org/}
+  \item \link{PHPStan (analyse statique)}{https://phpstan.org/} --- \url{https://phpstan.org/blog/how-to-start-typing}
+\end{itemize}
+\end{ressources}
+
+\index{PHP!objets}\index{interfaces}\index{enum}\index{attributs}\index{DI}

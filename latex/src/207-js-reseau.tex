@@ -1,0 +1,342 @@
+% ============================================================================
+\chapter{Communicuer avec le serveur : fetch, SSE, WebSockets, workers}
+\label{ch:js-reseau}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Ma\^itriser \texttt{fetch} dans tous ses usages~: JSON, en-t\^etes, erreurs, annulation,
+        progression, t\'el\'echargement, upload.
+  \item Structurer une couche API testable et agr\'eable (client HTTP maison, intercepteurs, cache).
+  \item Consommer des flux temps r\'eel~: Server-Sent Events, WebSockets, reconnexion.
+  \item D\'eplacer le travail lourd hors du fil principal~: Web Workers, OffscreenCanvas, WASM.
+  \item Comprendre CORS et le r\'egler c\^ot\'e client \emph{et} c\^ot\'e serveur.
+\end{itemize}
+\end{objectif}
+
+\section{Le strict minimum bien fait}
+
+\begin{codejs}
+async function getJSON(url, options = {}) {
+  const ctrl = new AbortController();
+  const minuterie = setTimeout(() => ctrl.abort(new Error("Timeout 10s")), 10_000);
+  try {
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      credentials: "same-origin",        // envoyer les cookies de session du meme site
+      headers: { accept: "application/json", ...options.headers },
+      ...options,
+    });
+    // fetch ne rejette PAS sur 404/500 : c'est a toi de le faire
+    if (!res.ok) {
+      const corps = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText} sur ${url}${corps ? ` -- ${corps.slice(0, 200)}` : ""}`);
+    }
+    if (res.status === 204) return null;
+    const type = res.headers.get("content-type") ?? "";
+    return type.includes("json") ? res.json() : res.text();
+  } finally {
+    clearTimeout(minuterie);
+  }
+}
+
+const creer = (donnees) => getJSON("/api/articles", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(donnees),
+});
+const supprimer = (id) => getJSON(`/api/articles/${id}`, { method: "DELETE" });
+\end{codejs}
+
+\begin{tabz}{lX}
+  \headrow \thd{Besoin} \& \thd{Solution} \\
+  \midrule
+  Envoi d'un formulaire simple \& \verb|await fetch(url, { method: "POST", body: new FormData(form) })| \\
+  Upload d'un fichier \& \verb|body: formData| avec \verb|File| dedans (jamais \verb|Content-Type| manuel) \\
+  Progression d'envoi \& \verb|XMLHttpRequest.upload.onprogress| ou \verb|fetch| + stream request (\verb|duplex: "half"|) \\
+  Progression de r\'eception \& \verb|res.body| + compteur d'octets (stream) \\
+  T\'el\'echargement binaire \& \verb|const blob = await res.blob()| puis \verb|URL.createObjectURL| \\
+  Requ\^ete annulable \& \verb|AbortController| (aussi pour \'eviter les r\'eponses hors ordre) \\
+  Cache HTTP fin \& \verb|cache: "no-store"|, \verb|"force-cache"|, \verb|"reload"| \\
+  Authentification par jeton \& en-t\^ete \verb|authorization: Bearer ...| \\
+  Cookies de session \& \verb|credentials: "include"| + \verb|SameSite=Lax| c\^ot\'e serveur \\
+  Streaming de texte (IA) \& \verb|res.body.pipeThrough(new TextDecoderStream())| + \verb|for await| \\
+\end{tabz}
+
+\subsection{Un mini-client HTTP r\'eutilisable}
+
+\begin{codejs}
+// api.js --- le fichier que j'ecris en premier dans tout projet
+const BASE = import.meta.env?.VITE_API_URL ?? "/api";
+
+class ErreurAPI extends Error {
+  constructor(message, { status, code, details } = {}) {
+    super(message);
+    this.name = "ErreurAPI"; this.status = status; this.code = code; this.details = details ?? null;
+  }
+}
+
+function creerClient({ baseURL = BASE, getJeton, on401 } = {}) {
+  const controles = new AbortController();
+  async function requete(methode, chemin, { corps, signaux, enTetes, raw = false, idempotent = methode === "GET" } = {}) {
+    let tentative = 0;
+    while (true) {
+      tentative++;
+      const url = new URL(chemin.replace(/^\//, ""), baseURL.endsWith("/") ? baseURL : `${baseURL}/`).href;
+      const jeton = await getJeton?.();
+      let res;
+      try {
+        res = await fetch(url, {
+          method: methode,
+          signal: AbortSignal.any([...(signaux ?? []), controles.signal]),
+          headers: {
+            accept: "application/json",
+            ...(corps !== undefined && !(corps instanceof FormData) ? { "content-type": "application/json" } : {}),
+            ...(jeton ? { authorization: `Bearer ${jeton}` } : {}),
+            ...enTetes,
+          },
+          ...(corps !== undefined ? { body: corps instanceof FormData || corps instanceof Blob ? corps : JSON.stringify(corps) } : {}),
+        });
+      } catch (err) {
+        if (err.name === "AbortError") throw new DOMException("Requete annulee", "AbortError");
+        if (idempotent && tentative < 3) { await new Promise((r) => setTimeout(r, 200 * 2 ** tentative)); continue; }
+        throw new ErreurAPI("Serveur injoignable", { code: "reseau", details: err.message });
+      }
+      if (res.status === 401) { await on401?.(); throw new ErreurAPI("Session expiree", { status: 401 }); }
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new ErreurAPI(payload.message ?? `HTTP ${res.status}`, { status: res.status, code: payload.code, details: payload.errors });
+      }
+      if (raw) return res;
+      if (res.status === 204) return null;
+      return (res.headers.get("content-type") ?? "").includes("json") ? res.json() : res.text();
+    }
+  }
+  return {
+    get: (c, o) => requete("GET", c, o),
+    post: (c, corps, o) => requete("POST", c, { ...o, corps }),
+    patch: (c, corps, o) => requete("PATCH", c, { ...o, corps }),
+    put: (c, corps, o) => requete("PUT", c, { ...o, corps }),
+    delete: (c, o) => requete("DELETE", c, o),
+    brut: (methode, c, o) => requete(methode, c, { ...o, raw: true }),
+    annulerTout: () => controles.abort(),
+  };
+}
+
+export const api = creerClient({
+  getJeton: () => sessionStorage.getItem("token"),
+  on401: async () => { sessionStorage.clear(); location.assign("/connexion"); },
+});
+const articles = await api.get("/articles?page=1&tri=recent");
+\end{codejs}
+
+\begin{note}
+Ne mets jamais un secret (cl\'e d'API priv\'ee, mot de passe base de donn\'ees) dans un bundle
+JavaScript~: le navigateur le montre \`a quiconque ouvre l'onglet Sources. Tout ce qui doit
+rester secret passe par ton propre serveur.
+\end{note}
+
+\section{CORS~: l'erreur que tout le monde rencontre}
+
+Le navigateur refuse qu'une page de \verb|https://a.dev| lise une r\'eponse de
+\verb|https://b.dev| sans autorisation explicite du serveur. Ce n'est \emph{pas} une s\'ecurit\'e
+pour le serveur (il re\c{c}oit bien la requ\^ete)~: c'est une protection du \emph{navigateur}
+pour l'utilisateur.
+
+\begin{codejs}
+// Cote serveur (ici en Express) --- les en-tetes qui debloquent la situation
+app.use((req, res, next) => {
+  const autorises = new Set(["http://localhost:5173", "https://nour.dev"]);
+  const origine = req.headers.origin;
+  if (autorises.has(origine)) {
+    res.setHeader("access-control-allow-origin", origine);
+    res.setHeader("vary", "origin");
+    res.setHeader("access-control-allow-credentials", "true");
+    res.setHeader("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.setHeader("access-control-allow-headers", "content-type,authorization,x-csrf-token");
+    res.setHeader("access-control-max-age", "600");
+  }
+  if (req.method === "OPTIONS") return res.sendStatus(204);   // pre-vol
+  next();
+});
+\end{codejs}
+
+\etape{Lire le vrai message}
+Dans la console~: \verb|Access to fetch at '...' has been blocked by CORS policy: No
+'Access-Control-Allow-Origin' header...|. La cause est dans la \emph{deuxi\`eme} ligne~:
+soit l'en-t\^ete manque, soit \verb|credentials: "include"| est utilis\'e avec
+\verb|allow-origin: *| (interdit), soit un en-t\^ete personnalis\'e n'est pas list\'e dans
+\verb|allow-headers|.
+
+\etape{Pendant le d\'eveloppement, la vraie solution}
+Ne touche pas au serveur~: fais passer les appels par le serveur de d\'eveloppement
+(m\^eme origine, donc pas de CORS).
+
+\begin{codejson}
+{
+  "server": {
+    "proxy": {
+      "/api": { "target": "http://localhost:8000", "changeOrigin": true }
+    }
+  },
+  "scripts": { "dev": "vite", "dev:api": "php -S localhost:8000 -t public" }
+}
+\end{codejson}
+
+\begin{codeplain}
+// vite.config.js --- la meme idee avec Vite
+import { defineConfig } from "vite";
+export default defineConfig({
+  server: {
+    proxy: {
+      "/api": { target: "http://localhost:8000", changeOrigin: true },
+      "/ws": { target: "ws://localhost:8000", ws: true },
+    },
+  },
+});
+\end{codeplain}
+
+\section{Server-Sent Events~: le temps r\'eel le plus simple du monde}
+
+Une connexion HTTP classique, un flux texte infini, reconnexion automatique par le navigateur.
+Parfait pour des notifications~; insuffisant pour du bidirectionnel.
+
+\begin{codejs}
+const sse = new EventSource("/api/stream");
+sse.onmessage = (e) => rendre(e.data);                 // evenement sans nom
+sse.addEventListener("notification", (e) => {
+  const data = JSON.parse(e.data);
+  notifier(data);
+});
+sse.onerror = () => { /* le navigateur se reconnecte seul ; a toi de gerer l'etat "hors ligne" */ };
+// Cote serveur (Node/Express) :
+// res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+// res.write(`event: notification\ndata: ${JSON.stringify(objet)}\n\n`);
+// res.write(": ping\n\n");     // commentaire de maintien en vie toutes les 20-30 s
+\end{codejs}
+
+\section{WebSockets~: bidirectionnel}
+
+\begin{codejs}
+class Socket {
+  #ws; #file = []; #retry = 0; #ctrl;
+  constructor(url, { surMessage, surOuverture } = {}) {
+    Object.assign(this, { url, surMessage, surOuverture });
+  }
+  ouvrir() {
+    this.#ws = new WebSocket(this.url);
+    this.#ws.onopen = () => {
+      this.#retry = 0;
+      this.#file.splice(0).forEach((m) => this.#ws.send(m));
+      this.surOuverture?.();
+    };
+    this.#ws.onmessage = (e) => {
+      const brut = typeof e.data === "string" ? e.data : lireBlob(e.data);
+      try { this.surMessage?.(JSON.parse(brut)); }
+      catch { this.surMessage?.(brut); }
+    };
+    this.#ws.onclose = (e) => {
+      if (e.code === 1000) return;                       // fermeture propre
+      this.#retry++;
+      const attente = Math.min(30_000, 500 * 2 ** this.#retry);
+      console.warn(`WebSocket ferme (${e.code}), reconnexion dans ${attente} ms`);
+      this.#t = setTimeout(() => this.ouvrir(), attente + Math.random() * 250);
+    };
+    this.#ws.onerror = () => this.#ws.close();
+  }
+  envoyer(objet) {
+    const msg = typeof objet === "string" ? objet : JSON.stringify(objet);
+    if (this.#ws?.readyState === WebSocket.OPEN) this.#ws.send(msg);
+    else this.#file.push(msg);                            // mettre en attente, pas jeter
+  }
+  fermer() { clearTimeout(this.#t); this.#ws?.close(1000); }
+  get enLigne() { return this.#ws?.readyState === WebSocket.OPEN; }
+}
+const lireBlob = async (blob) => blob.text();   // ou arrayBuffer() pour du binaire
+const ws = new Socket("wss://nour.dev/ws", { surMessage: (m) => console.log("recu", m) });
+ws.envoyer({ type: "abonner", salon: "general" });
+navigator.addEventListener("online", () => !ws.enLigne && ws.ouvrir());
+\end{codejs}
+
+\begin{note}
+WebSocket ne propose ni authentification par cookie de la m\^eme fa\c{c}on ni reconnexion~: tu les
+codes. C'est pourquoi, pour du simple temps r\'eel, SSE (serveur \$\rightarrow\$ client) ou une
+solution h\'eberg\'ee (\link{Pusher}{https://pusher.com/}, \link{Ably}{https://www.ably.io/},
+\link{Supabase Realtime}{https://supabase.com/}) est souvent le choix raisonnable.
+C\^ot\'e serveur Node, la biblioth\`eque de r\'ef\'erence est
+\link{ws}{https://github.com/websockets/ws} ou \link{Socket.IO}{https://socket.io/}.
+\end{note}
+
+\section{Web Workers : le CPU en parall\`ele}
+\label{sec:workers}
+
+Un worker est un fil JavaScript s\'epar\'e~: pas d'acc\`es au DOM, mais un CPU entier. On \'echange
+des messages (structur\'es, clonables) et des \emph{transferables} ( ArrayBuffer, sans copie).
+
+\begin{codeplain}
+// poids-lourd.js (le fichier du worker)
+self.onmessage = async (e) => {
+  const { type, payload } = e.data;
+  if (type === "ligner") {
+    const t0 = performance.now();
+    const resultat = calcul(payload);
+    self.postMessage({ type: "resultat", payload: resultat, ms: performance.now() - t0 });
+  }
+};
+function calcul(n) { let s = 0; for (let i = 0; i < n; i++) s += Math.sqrt(i); return s; }
+
+// main.js
+const w = new Worker(new URL("./poids-lourd.js", import.meta.url), { type: "module" });
+w.postMessage({ type: "ligner", payload: 5e7 });
+w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.payload} en ${e.data.ms.toFixed(0)} ms`; };
+// w.terminate();   // tuer le worker
+\end{codeplain}
+
+\begin{itemize}
+  \item \link{Comlink}{https://github.com/GoogleChromeLabs/comlink} rend l'appel de worker
+        presque banal (promesses \`a travers les fronti\`eres).
+  \item \verb|navigator.hardwareConcurrency| donne le nombre de coeurs~; un
+        \verb|WorkerPool| de \$n-1\$ workers traite les gros jeux de donn\'ees en parall\`ele.
+  \item \textbf{SharedArrayBuffer} + \verb|Atomics| partagent r\'eellement la m\'emoire
+        (n\'ecessite les en-t\^etes \verb|Cross-Origin-Opener-Policy| / \verb|Embedder-Opener-Policy|).
+  \item \textbf{OffscreenCanvas} d\'el\`egue le rendu WebGL/canvas \`a un worker~: l'interface ne
+        rame plus pendant les animations.
+  \item \textbf{OPFS} (\link{Origin Private File System}{https://developer.mozilla.org/en-US/docs/Web/API/File\_System\_API/Origin\_private\_file\_system})
+        est un stockage de fichiers rapide, isol\'e, utilisable depuis un worker~: c'est la voie
+        s\'erieuse pour des donn\'ees volumineuses c\^ot\'e client.
+  \item WebAssembly~: le langage des autres langages (Rust, C, Go). Appeler du WASM depuis JS
+        est triviale~; l'\'ecrire est un autre livre. D\'emo rapide~:
+        \link{Rust et wasm-pack}{https://rustwasm.github.io/wasm-pack/}.
+\end{itemize}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Consomme une API publique r\'eelle --- \url{https://api.github.com/repos/vitejs/vite} ou
+        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\_2m}
+        avec le mini-client~: affiche la temp\'erature de Thi\`es, g\`ere erreur r\'eseau et hors ligne.
+  \item Ajoute un cache~: garde la derni\`ere r\'eponse dans \verb|sessionStorage| avec son \^age,
+        affiche-la imm\'ediatement, puis rafra\^ichis en arri\`ere-plan (strat\'egie
+        \og ~stale-while-revalidate~ \fg{}).
+  \item Impl\'emente l'annulation~: taper une nouvelle recherche annule la requ\^ete pr\'ec\'edente,
+        et une r\'eponse hors ordre est jet\'ee.
+  \item \'Ecris un affichage temps r\'eel~: un petit serveur Node SSE qui \'emet l'heure toutes les
+        secondes, un client qui affiche, d\'etecte la d\'econnexion et affiche \og ~hors ligne~ \fg{}.
+  \item D\'eplace un calcul lourd (somme de 10\textsuperscript{8} racines carr\'ees, ou tri de
+        10\textsuperscript{6} nombres) dans un worker et mesure le gain sur le FPS d'une
+        animation~: utilise le panneau \clic{Performance}.
+  \item Ajoute la reprise sur erreur r\'eseau~: file d'attente des \'ecritures locales, renvoi
+        automatique quand \verb|online| revient, affichage du nombre d'op\'erations en attente.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\_API/Using\\\_Fetch}
+  \item MDN --- CORS --- \url{https://developer.mozilla.org/fr/docs/Web/HTTP/Guides/CORS}
+  \item \link{Async API tutorial (Node, SSE, WS)}{https://github.com/nodejs/node} --- docs \og ~http~ \fg{}
+  \item \link{web.dev : patterns de reseau}{https://web.dev/patterns/}
+  \item \link{MDN : Using Web Workers}{https://developer.mozilla.org/fr/docs/Web/API/Web\_Workers\_API/Using\_web\_workers}
+\end{itemize}
+\end{ressources}
+
+\index{fetch}\index{CORS}\index{WebSocket}\index{worker}

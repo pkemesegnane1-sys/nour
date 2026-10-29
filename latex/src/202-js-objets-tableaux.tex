@@ -1,0 +1,409 @@
+% ============================================================================
+\chapter{Objets, tableaux et cha\^ines de caract\`eres}
+\label{ch:js-struct}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Manipuler des objets : acc\`es, \'enum\'eration, copie, fusion, propri\'et\'es calcul\'ees.
+  \item Ma\^itriser les 25 m\'ethodes de tableau qui couvrent 95 \% du travail r\'eel.
+  \item \'Ecrire et lire des expressions r\'eguli\`eres utiles (validation, recherche, remplacement).
+  \item Travailler en immutabilit\'e avec le spread et la d\'estructuration.
+  \item Construire un mini-moteur de recherche et un panier de commande, de A \`a Z.
+\end{itemize}
+\end{objectif}
+
+\section{Objets}
+
+\begin{codejs}
+const user = {
+  prenom: "Nour",
+  age: 28,
+  "cle avec espace": 42,
+  0: "index numerique converti en chaine",
+  [Symbol("id")]: 7,
+  activite: { ville: "Thies", pays: "SN" },
+  saluer() { return `Bonjour ${this.prenom}`; },       // methode abregee
+  get majeur() { return this.age >= 18; },              // accesseur
+  set email(v) { this._email = String(v).toLowerCase(); },
+};
+
+// Acces
+user.prenom;
+user["cle avec espace"];
+user.activite?.ville;
+const ville = user?.activite?.ville;
+const pays = user?.["activite"]?.["pays"] ?? "inconnu";
+
+// Ecrire / effacer
+user.role = "admin";
+delete user.age;
+
+// Proteger une propriete
+Object.defineProperty(user, "id", { value: 1, writable: false, enumerable: true });
+Object.freeze(user);          // shallow : gele les proprietes de premier niveau
+Object.isFrozen(user);
+
+// Enumerer --- les trois niveaux
+Object.keys(user);        // ["prenom", "0", "id", ...]   proprietes propres enumerables
+Object.values(user);
+Object.entries(user);     // [["prenom","Nour"], ...]  : la porte d'entree vers les boucles
+Object.getOwnPropertyNames(user);   // y compris non enumerables
+Reflect.ownKeys(user);              // y compris symbols
+
+for (const [cle, valeur] of Object.entries(user)) {
+  if (typeof valeur === "object" && valeur !== null) continue;
+}
+
+// Construire a partir de tableaux / entries
+Object.fromEntries([["a", 1], ["b", 2]]);       // { a: 1, b: 2 }
+new Map([["a", 1]]);
+// Un Map est plus adapte que l'objet quand : cles non-string, taille variable,
+// iteration ordonnee, comptage frequent. Un Set enleve les doublons.
+const scores = new Map();
+scores.set("nour", 42).set("awa", 55);
+scores.get("inconnu");          // undefined
+scores.has("awa"); scores.size;
+[...scores.entries()]; [...scores.keys()]; [...scores.values()];
+const uniques = [...new Set([1, 1, 2, 3, 3, 3])];        // [1, 2, 3]
+\end{codejs}
+
+\subsection{Copies, fusions, \'egalit\'e}
+
+\begin{codejs}
+const base = { a: 1, b: { c: 2 }, liste: [1, 2] };
+
+const copieSuperficielle = { ...base };            // b et liste restent PARTAGES
+const memeSousObjet = copieSuperficielle.b === base.b;   // true  <-- source de bugs !
+
+const deep = structuredClone(base);                // natif (Node 17+, navigateurs 2022+)
+deep.b.c = 99; base.b.c;                            // 2 : la copie est independante
+
+const fusion = Object.assign({}, base, { a: 9, d: 4 });  // ancien, mais explicite
+const fusion2 = { ...base, ...{ a: 9 }, ...{ d: 4 } };
+
+// Alias et mutation : en JS, un objet est passe PAR REFERENCE
+const un = { n: 1 }, deux = un; deux.n = 99; un.n;   // 99
+const tab = [1, 2]; tab.push(3);                       // mute le tableau
+
+// Egalite structurelle "a la main" (sans dependance)
+const egales = (x, y) => {
+  if (Object.is(x, y)) return true;
+  if (typeof x !== "object" || typeof y !== "object" || x === null || y === null) return false;
+  const kx = Object.keys(x), ky = Object.keys(y);
+  return kx.length === ky.length && kx.every((k) => egales(x[k], y[k]));
+};
+egales({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] });   // true
+\end{codejs}
+
+\begin{piege}
+\verb|JSON.parse(JSON.stringify(obj))| est une vieille astuce de copie profonde. Elle est
+\textbf{lente} et \textbf{dangereuse}~: elle d\'etruit \verb|Date|, \verb|Map|, \verb|Set|,
+\verb|undefined|, les fonctions, les \verb|BigInt| et les cycles. Utilise \verb|structuredClone|.
+\end{piege}
+
+\section{Tableaux --- la bo\^ite \`a outils}
+
+\begin{codejs}
+const produits = [
+  { id: 1, nom: "Cafe",   prix: 12.5, qt: 3, tags: ["boisson", "matin"] },
+  { id: 2, nom: "The",    prix: 8,    qt: 0, tags: ["boisson"] },
+  { id: 3, nom: "Livre",  prix: 22,   qt: 1, tags: ["culture"] },
+  { id: 4, nom: "Cahier", prix: 3.5,  qt: 8, tags: ["culture", "bureau"] },
+];
+
+// CREATION
+Array.from({ length: 5 }, (_, i) => i * i);        // [0,1,4,9,16]
+Array(3).fill(0);                                  // [0,0,0]  (jamais Array(3).map !)
+[..."bonjour"];                                    // ["b","o","n","j","o","u","r"]
+structuredClone(produits);
+
+// LECTURE : les methodes qui repondent a une question
+produits.length;
+produits.at(-1);            // dernier element (aussi at(-2))
+produits.includes(x);
+produits.indexOf(obj) !== -1;    // N'utilise PAS pour des objets : comparaison d'identite
+produits.find(p => p.id === 3);            // le premier -> objet | undefined
+produits.findIndex(p => p.qt === 0);       // son index  -> -1 si absent
+produits.toSorted((a, b) => a.prix - b.prix);   // copie triee (ES2023, non mutant)
+produits.filter(p => p.qt > 0);
+produits.some(p => p.prix > 20);       // au moins un ?
+produits.every(p => p.prix > 0);       // tous ?
+produits.reduce((acc, p) => acc + p.prix * p.qt, 0);   // un total
+produits.findLast(p => p.tags.includes("culture"));    // depuis la fin
+
+// ECRITURE : ce qui mute vs ce qui copie
+const mute = [1, 2, 3];
+mute.push(4); mute.pop(); mute.shift(); mute.unshift(0);
+mute.splice(1, 2, "x");      // retire 2 elements a l'index 1 et inserx x
+mute.sort((a, b) => a - b);  // TRI NUMERIQUE : sans comparateur, on obtient [0,1,10,2,...] !
+mute.reverse(); mute.fill(0); mute.length = 0;
+
+const copie = [1, 2, 3];
+copie.toSorted((a, b) => b - a);
+copie.toReversed();
+const sansX = copie.with(0, 99);        // copie avec un element remplace
+
+// Transformations et combinaisons
+produits.map(p => ({ ...p, total: p.prix * p.qt }));
+produits.flatMap(p => p.tags);           // puis .flat() / .flat(Infinity) pour aplatir
+[...new Set(produits.flatMap(p => p.tags))];   // tags uniques
+[produits, [1, 2]].flat();                // un niveau
+
+// Groupage et comptage
+Object.groupBy(produits, p => (p.qt > 0 ? "dispo" : "rupture"));
+Map.groupBy(produits, p => p.tags.length);
+
+// Iterer proprement
+for (const [i, p] of produits.entries()) console.log(i, p.nom);
+for (const p of produits) { if (p.qt === 0) break; }     // le seul ou break marche
+\end{codejs}
+
+\subsection{Tris et donn\'ees complexes}
+
+\begin{codejs}
+const eleves = [{ n: "Awa", m: 14 }, { n: "Nour", m: 9 }, { n: "Ibra", m: 17 }];
+
+// 1. Tri multi-criteres stable (les tableaux se trient stablement depuis ES2019)
+const parNotePuisNom = [...eleves].sort((a, b) => b.m - a.m || a.n.localeCompare(b.n, "fr"));
+
+// 2. LocaleCompare est obligatoire pour les accents
+["echo", "ecole", "effort"].sort();                              // depend du code point
+["echo", "ecole", "effort"].sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+
+// 3. Dico de notes pour trier par un ordre metier
+const ordre = { TresBien: 4, Bien: 3, Passable: 2 };
+notes.sort((a, b) => ordre[b] - ordre[a]);
+
+// 4. Recherche + filtre combin
+const recherche = (q) => {
+  const norm = q.trim().toLowerCase();
+  if (!norm) return produits;
+  return produits.filter((p) => p.nom.toLowerCase().includes(norm) || p.tags.some((t) => t.includes(norm)));
+};
+\end{codejs}
+
+\begin{astuce}
+R\`egle d'immutabilit\'e dans un projet frontend~: une fonction qui transforme des donn\'ees
+\emph{retourne un nouveau tableau/objet} et ne mute pas l'entr\'ee. Cela rend le d\'ebogage trivial,
+permet l'annulation (undo), et rend r\'eactifs les frameworks. \verb|arr.push(x)| devient
+\verb|const next = [...arr, x]|.
+\end{astuce}
+
+\section{Cha\^ines de caract\`eres}
+
+\begin{codejs}
+const s = "  Le renard brun rapide saute par-dessus le chien paresseux  ";
+
+s.length; s.trim(); s.trimStart(); s.trimEnd();
+s.toLowerCase(); s.toUpperCase();
+s.includes("renard"); s.startsWith("  "); s.endsWith("x");
+s.indexOf("le"); s.lastIndexOf("le"); s.at(0);
+s.slice(3, 8); s.slice(-5);            // decoupe ; negatifs autorises
+s.replaceAll("le", "LE");               // chaines ou //g regex
+s.split(" "); s.split(/\s+/);            // mots ; en tenant compte des espaces multiples
+s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");   // retire les accents
+s.padStart(5, "0"); "42".padStart(3, "0");            // "042"
+"abc".charCodeAt(0); String.fromCharCode(65, 66); String.fromCodePoint(0x1F600);
+[..."a"].length;                      // 2 : le spread respecte les points de code
+"ligne1\nligne2".split(/\r?\n/);         // robuste Windows/Linux
+"a,b;;c".split(",").map(t => t.trim()).filter(Boolean);   // ["a","b","c"]
+
+// Template literals multi-lignes et balises
+const sql = (strings, ...vals) => strings.reduce((acc, str, i) => {
+  const v = vals[i - 1];
+  return acc + (v === undefined ? "" : `'${String(v).replaceAll("'", "''")}'`) + str;
+});
+sql`SELECT * FROM users WHERE nom = ${"O'Brien"}`;   // protege du injection la plus simple
+\end{codejs}
+
+\section{Expressions r\'eguli\`eres}
+
+Une regex est un objet \verb|RegExp|. \'Ecris-la d'abord en litt\'eral \verb|/.../flags|~;
+utilise le constructeur \verb|new RegExp(str)| quand le motif vient d'une variable.
+
+\begin{tablez}[p{0.28\textwidth}X]
+  \headrow \thd{Motif} \& \thd{Signification} \\
+  \midrule
+  \verb|\d \w \s| \& chiffre / lettre-digit-underscore / espace \\
+  \verb|\D \W \S| \& n\'egations \\
+  \verb|. ^ \$ | \& n'importe quel caract\`ere (sauf saut) / d\'ebut / fin \\
+  \verb|[abc] [^abc] [a-z]| \& ensemble / n\'egation / plage \\
+  \verb|* + ? {n,m} ?{1,}| \& 0+ / 1+ / 0-1 / r\'ep\'etition / non-gourmand \\
+  \verb|() (?:) (?<nom>)| \& groupe capturant / non capturant / nomm\'e \\
+  \verb|(?=) (?!) (?<=)| \& lookahead positif/n\'egatif, lookbehind \\
+  \verb|\b \B \ | \& limite de mot / non-limite / echapper un metacaractere \\
+  \verb|a|b| \& alternance \\
+\end{tablez}
+
+\begin{codejs}
+const flags = { i: "insensible a la casse", g: "global (toutes les occurrences)",
+  m: "multi-lignes", s: "le point matche les sauts", u: "unicode", y: "colle a lastIndex" };
+
+const email = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+email.test("nour@example.com");          // true
+
+// Extraction avec groupes nommes
+const entete = "Server: nginx/1.25.3 Date: Tue";
+const m = entete.match(/Server:\s*(?<logiciel>[\w./-]+)/);
+m.groups.logiciel;                        // "nginx/1.25.3"
+
+// Remplacements malins
+"jean-luc  picard".replace(/\b\w/g, (c) => c.toUpperCase());     // "Jean-Luc  Picard"
+"2026-01-31".replace(/(\d{4})-(\d2)-(\d2)/, "$3/$2/$1");         // "31/01/2026"
+"a1b2c3".replace(/\d/g, (d) => `[${d}]`);
+"un  deux   trois".replace(/\s+/g, " ");
+
+// Trouver tout, proprement, avec la position
+const texte = "le chat et le chien et le loup";
+for (const t of texte.matchAll(/\ble\s+(?<animal>\w+)/g)) {
+  console.log(t.index, t.groups.animal);
+}
+
+// Validations utiles a recopier
+const regles = {
+  tel: /^\+?[0-9][0-9 .-]{7,14}$/,
+  slug: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+  mdpFort: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{12,}$/,
+  ipv4: /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/,
+  hexColor: /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/,
+};
+const motDePasseValide = (mdp) => regles.mdpFort.test(mdp);
+\end{codejs}
+
+\begin{piege}
+Deux erreurs fr\'equentes~: (1) oublier le drapeau \verb|g| avec \verb|replace| -- seul la premi\`ere
+occurrence est remplac\'ee ; (2) une regex construite avec une entr\'ee utilisateur peut
+provoquer un d\'eni de service catastrophique (\emph{ReDoS}). Ne passe jamais une saisie
+brute dans un \verb|new RegExp()| sans la neutraliser avec
+\verb|s.replace(/[.*+?^\${}()|[\]\\]/g, "\\\$\&")|~; et garde les motifs simples.
+\end{piege}
+
+\section{D\'estructuration, valeurs par d\'efaut, objets et tableaux}
+
+\begin{codejs}
+// Tableaux
+const [premier, deuxieme] = produits;
+const [, , troisieme] = produits;
+const [tete, ...queue] = [1, 2, 3, 4];
+const [a = "defaut"] = [];
+
+// Objets (avec renommage et valeur par defaut)
+const { nom: appellation, prix: prixUnitaire = 0, tags: [premierTag = "aucun"] } = produits[0];
+
+// Fusion et suppression de proprietes
+const avecRemise = { ...produits[0], prix: produits[0].prix * 0.9 };
+const { qt: _ignorer, ...sansQt } = produits[0];       // "_" ou "_" prefixe = volonte d'ignorer
+
+// Parametres de fonction
+const carte = ({ x = 0, y = 0, zoom = 1 }) => `(${x},${y}) @${zoom}x`;
+carte({ y: 10 });
+
+// Affectation par decomposition (rare mais elegant)
+let gauche, droite; ({ gauche, droite } = { gauche: 1, droite: 2 });
+[gauche, droite] = [droite, gauche];                   // echange sans variable temporaire
+
+// Parametres de rendu : props -> variables locales
+function LigneProduit({ produit, quantite = 1, promo = false }) {
+  const { nom, prix } = produit ?? {};
+  return `${nom ?? "inconnu"} : ${(prix ?? 0) * (promo ? 0.8 : 1) * quantite} EUR`;
+}
+\end{codejs}
+
+\section{TP complet --- un panier de commande}
+
+\begin{codejs}
+// panier.js --- a taper entierement, puis a lancer avec : node panier.js
+const TVA = 0.2;
+
+const catalogue = new Map([
+  ["cafe",  { prix: 12.5, stock: 4, unite: "sachet" }],
+  ["the",   { prix: 8,    stock: 0, unite: "boite" }],
+  ["livre", { prix: 22,   stock: 6, unite: "exemplaire" }],
+  ["cahier",{ prix: 3.5,  stock: 12, unite: "unite" }],
+]);
+
+const creerPanier = () => ({ lignes: [], coupons: [] });
+
+const ajouter = (panier, ref, qte = 1) => {
+  const article = catalogue.get(ref);
+  if (!article) throw new Error(`Reference inconnue : ${ref}`);
+  const existante = panier.lignes.find((l) => l.ref === ref);
+  const nouvelleQte = (existante?.qte ?? 0) + qte;
+  if (nouvelleQte > article.stock) throw new RangeError(`Stock insuffisant pour ${ref}`);
+  return existante
+    ? { ...panier, lignes: panier.lignes.map((l) => (l === existante ? { ...l, qte: nouvelleQte } : l)) }
+    : { ...panier, lignes: [...panier.lignes, { ref, qte: nouvelleQte }] };
+};
+
+const retirer = (panier, ref) => ({ ...panier, lignes: panier.lignes.filter((l) => l.ref !== ref) });
+
+const appliquerCoupon = (panier, code) => ({ ...panier, coupons: [...panier.coupons, code] });
+
+const totaux = (panier) => {
+  const lignes = panier.lignes.map((l) => {
+    const a = catalogue.get(l.ref);
+    return { ...l, prixUnitaire: a.prix, totalLigne: a.prix * l.qte };
+  });
+  const brut = lignes.reduce((s, l) => s + l.totalLigne, 0);
+  const remise = brut * (panier.coupons.includes("BIENVENUE10") ? 0.1 : 0);
+  const ht = brut - remise;
+  return { lignes, nbArticles: lignes.reduce((s, l) => s + l.qte, 0), brut, remise, ht,
+           tva: ht * TVA, ttc: ht * (1 + TVA) };
+};
+
+const format = (n) => n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+
+const afficher = (panier) => {
+  const t = totaux(panier);
+  console.log("\n--- Panier ---");
+  for (const l of t.lignes) console.log(`${String(l.qte).padStart(2)} x ${l.ref.padEnd(7)} ${format(l.prixUnitaire)}  = ${format(l.totalLigne)}`);
+  console.table(t.lignes);
+  console.log(`Sous-total ${format(t.brut)} | Remise ${format(t.remise)}`);
+  console.log(`HT ${format(t.ht)} | TVA ${format(t.tva)} | TTC ${format(t.ttc)}`);
+};
+
+let p = creerPanier();
+p = ajouter(p, "cafe", 2);
+p = ajouter(p, "cahier", 3);
+p = ajouter(p, "cafe");            // 3 sachets au total
+p = retirer(p, "the");              // non present : aucune erreur
+p = appliquerCoupon(p, "BIENVENUE10");
+afficher(p);
+
+// Exercice immediat : ajoute la gestion des frais de port gratuits au-dela de 50 EUR
+// de commande, et un champ "pointsFidelite" egal a 1 point par euro TTC.
+\end{codejs}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \verb|supprimerDoublons(tab)|~: retourne un nouveau tableau sans doublons, en
+        pr\'eservant l'ordre, en une ligne (Set), puis sans Set.
+  \item \verb|grouperPar(tab, cle)|~: \verb|[{ville:'Dakar'},...]| devient
+        \verb|{ Dakar: [...], Thies: [...] }| (utilise \verb|reduce|, puis \verb|Object.groupBy|).
+  \item \verb|motsFreqents|~: \`a partir d'un texte, renvoie les 10 mots les plus fr\'equents de
+        plus de 3 lettres, avec compte, tri\'es, en ignorant la ponctuation et les accents.
+  \item \verb|aplatir(obj)|~: \verb|{a:{b:{c:1}}}| devient \verb|{"a.b.c": 1}|, r\'ecursif, en
+        g\'erant les tableaux et en \'evitant les cycles (Map \og ~vu~ \fg{}).
+  \item \verb|chunk(tab, taille)|, \verb|zip(a, b)|, \verb|sans(tab, ...valeurs)|,
+        \verb|intersection(a, b)|, \verb|difference(a, b)|~: les utilitaires que tout projet contient.
+  \item \verb|masquerEmail("nour.diop@example.com")| \$\rightarrow\$ \verb|"no***@example.com"| (regex + slice).
+  \item \textbf{Slugifieur}~: \og ~L'\'Ev\'enement de l'ann\'ee, \`a Thies !~ \fg{} \$\rightarrow\$ \verb|evenement-annee-thies|
+        (minuscules, accents retir\'es, non-alphanum\'eriques en tirets, tirets dupliqu\'es retir\'es).
+  \item \textbf{Validation}~: \'ecris un module \verb|validate.js| exportant \verb|email|,
+        \verb|tel|, \verb|motDePasse| (avec message d'erreur humain) et \verb|formulaire(donnees)|
+        qui renvoie \verb|{ ok, erreurs }|.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\_Objects/Array}
+  \item Tableau comparatif des m\'ethodes de tableaux --- \url{https://javascript.info/array-methods}
+  \item Constructeur et visualiseur de regex --- \url{https://regex101.com/} et \url{https://regexper.com/}
+  \item \verb|lodash| (\`a lire pour les noms de m\'ethodes, pas pour d\'ependre de lui) --- \url{https://lodash.com/docs/}
+  \item \emph{You Don't Know JS Yet~: this \& Object Prototypes} --- \url{https://github.com/getify/You-Dont-Know-JS}
+\end{itemize}
+\end{ressources}
+
+\index{JavaScript!objets}\index{JavaScript!tableaux}\index{expressions regulieres}

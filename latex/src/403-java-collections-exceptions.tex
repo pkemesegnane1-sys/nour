@@ -1,0 +1,285 @@
+% ============================================================================
+\chapter{G\'en\'eriques, collections et exceptions}
+\label{ch:java-collections}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Choisir la bonne structure~: \verb|ArrayList|, \verb|HashMap|, \verb|TreeMap|, \verb|Deque|,
+        \verb|Set| ordonn\'e, files concurrentes.
+  \item Comprendre les generics~: bornes, wildcards, PECS, effacement.
+  \item \'Ecrire des exceptions qui racontent une histoire~: v\'erifi\'ees, non v\'erifi\'ees, causes,
+        \verb|try-with-resources|.
+  \item \'Eviter les dix erreurs de collection qui reviennent dans chaque revue de code.
+\end{itemize}
+\end{objectif}
+
+\section{Collections~: l'arbre de d\'ecision}
+
+\begin{tabz}{lllX}
+  \headrow \thd{Besoin} \& \thd{Choisis} \& \thd{Complexit\'e cl\'e} \& \thd{Notes} \\
+  \midrule
+  liste index\'ee, append fr\'equent \& \verb|ArrayList| \& get O(1), add O(1) amorti, remove O(n) \& le d\'efaut. Cro\^it par recopie (\$\times\$1{,}5). \\
+  ajouts/retraits fr\'equents aux bords \& \verb|ArrayDeque| \& O(1) \& \textbf{ne jamais utiliser \verb|LinkedList| comme file}~: plus lent en pratique (cache). \\
+  liste li\'ee \& \verb|LinkedList| \& O(1) aux it\'erateurs \& rarement justifi\'e~; API \verb|Deque|+ \verb|List| \`a la fois = pi\`ege. \\
+  unicit\'e \& \verb|HashSet| \& O(1) \& ordre non garanti~; d\'epend de \verb|hashCode|. \\
+  unicit\'e tri\'ee \& \verb|TreeSet| \& O(\$\log n\$) \& exige \verb|Comparable| ou un \verb|Comparator|. \\
+  unicit\'e avec ordre d'insertion \& \verb|LinkedHashSet| \& O(1) \& le \og ~cache LRU-lite~ \fg{}, d\'eduction des doublons. \\
+  dictionnaire \& \verb|HashMap| \& O(1) \& cl\'es \verb|equals|/\verb|hashCode| coh\'erentes. \\
+  dictionnaire avec insertion en fin \& \verb|LinkedHashMap| \& O(1) \& \verb|removeEldestEntry| = cache LRU en 5 lignes. \\
+  dictionnaire tri\'e / plages \& \verb|TreeMap| \& O(\$\log n\$) \& \verb|subMap|, \verb|floorKey|, \verb|ceilingKey|. \\
+  dictionnaire immuable \& \verb|Map.of(...)| / \verb|Map.copyOf(..)| \& O(1) \& limite de 10 paires pour \verb|of| ; \verb|ofEntries| au-del\`a. \\
+  concurrent \& \verb|ConcurrentHashMap| \& O(1) sans verrou global \& \verb|computeIfAbsent|, \verb|merge|, \verb|reduce*. \\
+  files bloquantes (threads) \& \verb|ArrayBlockingQueue| / \verb|LinkedBlockingQueue| \& \& born\'ee = dos-pression. Base de tout producteur/consommateur. \\
+  tas de priorit\'e \& \verb|PriorityQueue| \& offre O(\$\log n\$) \& k-plus-grands, ordonnanceur, Dijkstra. \\
+  cl\'es par identit\'e (pas equals) \& \verb|IdentityHashMap| \& \& \verb|WeakHashMap| pour le cache sans fuite. \\
+\end{tabz}
+
+\begin{codejava}
+// Creation et initialisation : la forme moderne
+var noms = new ArrayList<String>(List.of("Awa", "Nour", "Ibra"));
+var notes = new HashMap<String, Integer>(Map.of("alg\`ebre", 14, "analyse", 17));
+var immuable = List.copyOf(noms);
+var setDeTag = new LinkedHashSet<>(List.of("php", "java", "php"));   // [php, java]
+
+// Lecture : les methodes qui remplacent une boucle
+notes.getOrDefault("geometrie", 0);
+notes.computeIfAbsent("geometrie", k -> new java.util.ArrayList<>() /* valeur */);
+notes.merge("analyse", 2, Integer::sum);                 // ajoute 2 a la cle (ou la cree)
+notes.putIfAbsent("proto", 9);
+notes.forEach((k, v) -> System.out.printf("%-10s %d%n", k, v));
+for (var e : notes.entrySet()) { }                        // entrySet : la seule facon propre d'iterer un Map
+var cles = notes.keySet(); var valeurs = notes.values();
+notes.containsKey("proto"); notes.containsValue(9);
+
+// List : tri, recherche, sous-listes
+noms.sort(Comparator.comparingInt(String::length).thenComparing(Comparator.naturalOrder()));
+Collections.sort(noms);                                    // ancien ; noms.sort(...) est preferable
+List<String> sous = noms.subList(1, 3);                     // VUE : ecrire dedans ecrit dans noms !
+int idx = Collections.binarySearch(trie, "Nour");            // <0 -> (-point d'insertion - 1)
+noms.removeIf(s -> s.length() < 3);
+noms.replaceAll(String::toUpperCase);
+var copieTriee = noms.stream().sorted().toList();
+
+// Les trois collections utilitaires a connaitre
+List<String> vid = List.of();                              // ou : Collections.emptyList()
+List<String> vueFixe = Collections.unmodifiableList(noms); // vue, pas une copie !
+var synchro = Collections.synchronizedList(new ArrayList<String>());  // legacy : prefere les classes java.util.concurrent
+
+// Ensembles : les operations qui ressemblent a ce qu'on veut vraiment
+var a = Set.of("php", "java", "js");
+var b = Set.of("java", "go");
+var union = new HashSet<>(a); union.addAll(b);
+var intersection = new HashSet<>(a); intersection.retainAll(b);   // ou : a.stream().filter(b::contains)
+var difference = new HashSet<>(a); difference.removeAll(b);
+a.containsAll(b);                                            // inclusion
+\end{codejava}
+
+\subsection{Ce qui casse les collections (les 10 classiques)}
+
+\begin{enumerate}
+  \item \verb|ConcurrentModificationException|~: modifier une collection pendant une
+        \verb|for-each|. Correction~: \verb|removeIf|, un \verb|Iterator\#remove|, ou une copie.
+  \item Cl\'e de \verb|HashMap| mutable~: l'objet change de \verb|hashCode| apr\`es insertion, et il est
+        perdu \`a jamais. Utilise des cl\'es immuables (records, \verb|String|, \verb|Long|).
+  \item \verb|equals| sans \verb|hashCode| (ou l'inverse)~: le Set accepte des doublons, le Get
+        \'echoue. Les records \'evitent le probl\`eme.
+  \item \verb|Arrays.asList(tab)|~: vue de taille fixe~; un \verb|add| l\`eve
+        \verb|UnsupportedOperationException|. \'Ecris \verb|new ArrayList<>(Arrays.asList(...))|.
+  \item \verb|List.of(...)| contient \verb|null|~: \verb|NullPointerException| imm\'ediate (c'est voulu).
+  \item Confondre \verb|isEmpty()| et \verb|size() == 0| avec un \verb|Optional|~: le premier est
+        une question, le second un d\'etail.
+  \item Utiliser un \verb|Vector|, un \verb|Hashtable|, un \verb|Stack|~: legacies synchronis\'es,
+        \`a remplacer respectivement par \verb|ArrayList| (d\'ej\`a s\^ur en lecture), \verb|ConcurrentHashMap|,
+        \verb|ArrayDeque|.
+  \item \verb|subList| et \verb|stream().toList()|~: le premier est une vue, le second immuable
+        depuis Java~16 (avant~: pas d'ordre garanti).
+  \item Comparaison de cha\^ines avec \verb|==| (voir chapitre pr\'ec\'edent) et tri non localis\'e~:
+        utilise \verb|Collator.getInstance(Locale.FRENCH)| pour un tri humain correct.
+  \item Modifier une collection partag\'ee sans synchronisation~: \verb|ConcurrentHashMap| et les
+        classes \verb|concurrent| existent pour \c{c}a~; \verb|Collections.synchronizedX| verrouille
+        tout l'objet (et n'est pas suffisant pour \verb|forEach|~: il faut verrouiller \`a la main).
+\end{enumerate}
+
+\section{G\'en\'eriques~: sans peur}
+
+\begin{codejava}
+// 1. Classe generique : un type parametre, pas un Object + casts
+public record Pageable<T>(int page, int taille, List<T> contenus, long total) {
+    public <R> Pageable<R> map(java.util.function.Function<? super T, ? extends R> f) {
+        return new Pageable<>(page, taille, contenus.stream().map(f).toList(), total);
+    }
+}
+
+// 2. Methode generique : le type est infer\'e a l'appel
+public static <T extends Comparable<T>> T max(List<T> l) {
+    return l.stream().max(Comparator.naturalOrder()).orElseThrow();
+}
+public static <T, K, V> Map<K, V> grouper(Collection<T> src, Function<T, K> cle, Function<T, V> valeur) {
+    return src.stream().collect(Collectors.toMap(cle, valeur, (a, b) -> a, LinkedHashMap::new));
+}
+
+// 3. Bornes : "T extends" veut aussi bien dire "implements"
+interface Identifiable { long id(); }
+static <T extends Identifiable & Comparable<T>> List<T> trierParId(List<T> l) { ... }
+static <T> void copier(List<? super T> dest, List<? extends T> src) {   // PECS : Producer Extends, Consumer Super
+    for (T t : src) { dest.add(t); }
+}
+// Lecture depuis une collection -> ? extends ; ecriture vers une collection -> ? super.
+
+// 4. Ce qui n'existe pas, et pourquoi (effacement des types)
+// new T()            -> impossible : T n'existe plus a l'execution
+// T[] tab = new T[n] -> impossible : prefere List<T> ; ou Array.newInstance(clazz, n)
+// catch (T e)        -> impossible
+// instanceof List<String> -> interdit ; autorise : instanceof List<?>
+// static T champ     -> impossible dans une classe generique (le type est par instance)
+
+// 5. Le "unchecked" honnete : circonscrire le warning a une ligne
+@SuppressWarnings("unchecked")
+private static <T> T[] tableauDe(List<T> l, Class<T> type) {
+    @SuppressWarnings("unchecked")
+    T[] tab = (T[]) java.lang.reflect.Array.newInstance(type, l.size());
+    return l.toArray(tab);
+}
+
+// 6. Les collections generiques de la bibliotheque : lis-les comme des signatures
+List<String> l = new ArrayList<>();          // <> : inf\'erence depuis le type d\'eclar\'e (Java 7+)
+var l2 = new ArrayList<String>();             // var : inf\'erence depuis l'initialisateur
+Map<String, List<Integer>> m = new HashMap<>();
+Comparator<? super Article> cmp = Comparator.comparingLong(Article::id);
+\end{codejava}
+
+\section{Exceptions~: le mod\`ele}
+
+\begin{codejava}
+/*
+  Throwable
+   \boxv \boxh \boxh Error                    : VMStackOverflow, OutOfMemoryError -- ne jamais capturer
+   \boxe \boxh \boxh Exception
+        \boxv \boxh \boxh RuntimeException    : NON v\'erifi\'ees (le compilateur n'exige rien)
+        \boxv \boxv \boxv   IllegalArgumentException, IllegalStateException, NullPointerException,
+        \boxv \boxv \boxv   IndexOutOfBoundsException, ClassCastException, NumberFormatException,
+        \boxv \boxv \boxv   ConcurrentModificationException, ArithmeticException, UnsupportedOperationException
+        \boxe \boxh \boxh Exception (autres)  : VERIFIEES ("checked") -> try/catch ou throws
+              IOException, SQLException, InterruptedException,
+              ClassNotFoundException, FileNotFoundException, URISyntaxException, ...
+
+  Regle de conception :
+    - verifiee   = "cela peut arriver, et l'appelant PEUT en faire quelque chose" (reessayer,
+                   demander un autre fichier, basculer sur un miroir).
+    - non verifiee = "bug, ou etat irr\'ecuperable ici" -> remonter, logguer, faire echouer.
+*/
+
+// 1. Le bloc complet
+public List<Article> charger(java.nio.file.Path chemin) throws IOException {
+    try {
+        return java.nio.file.Files.readAllLines(chemin).stream()
+                .map(String::trim).filter(s -> !s.isBlank()).map(Article::deLigne).toList();
+    } catch (java.nio.file.NoSuchFileException e) {
+        throw new IOException("configuration absente : " + chemin, e);   // CONTEXTE + CAUSE
+    } catch (java.nio.file.AccessDeniedException e) {
+        logger.log(Level.WARNING, "acces refuse, repli sur les defauts", e);
+        return List.of();
+    }
+    // pas de "catch (Exception e) { }" : c'est une ligne qui annule la securite du langage
+}
+
+// 2. finally : s'execute toujours (y compris sur un return du try) -- a reserver au nettoyage
+java.io.InputStream flux = null;
+try {
+    flux = new java.io.FileInputStream(fichier);
+    return lire(flux);
+} finally {
+    if (flux != null) { flux.close(); }
+}
+// 3. try-with-resources : la version correcte, ferme dans l'ordre inverse, supprime les exceptions
+//    masquees (elles sont ajoutees en "suppressed")
+try (var entree = new java.io.BufferedInputStream(new java.io.FileInputStream(fichier));
+     var sortie = new java.io.OutputStreamWriter(java.lang.System.out, java.nio.charset.StandardCharsets.UTF_8)) {
+    entree.transferTo(java.io.OutputStream.nullOutputStream());
+} catch (java.io.IOException e) {
+    throw new RuntimeException(e);
+}
+// Une ressource = AutoCloseable ; la methode close() ne doit pas lancer d'exception ->
+// pour les fermetures "douces" : try { c.close(); } catch (Exception ignore) { }
+
+// 4. Multi-catch : quand le traitement est identique, sans perdre le type
+try { traitement(); }
+catch (SQLException | IOException e) { throw new ErreurDonnees("acces aux donnees", e); }
+
+// 5. Les exceptions metier : nommees, specifiques, transportant le contexte
+public sealed class ErreurDomaine extends RuntimeException permits ErreurValidation, ErreurIntrouvable, ErreurConflit {
+    private final String code;
+    ErreurDomaine(String message, String code, Throwable cause) { super(message, cause); this.code = code; }
+    public String code() { return code; }
+}
+public final class ErreurValidation extends ErreurDomaine {
+    private final Map<String, List<String>> champs;
+    public ErreurValidation(Map<String, List<String>> champs) {
+        super(champs.size() + " champ(s) invalides", "validation", null);
+        this.champs = Map.copyOf(champs);
+    }
+    public Map<String, List<String>> champs() { return champs; }
+}
+
+// 6. Interruption : le seul cas ou le "swallow" est une faute grave
+try {
+    Thread.sleep(1000);
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();      // RESTAURE le drapeau : l'appelant doit pouvoir reagir
+    throw new IllegalStateException("interrompu", e);
+}
+
+// 7. Precondition en une ligne (le code d\'efensif propre)
+Objects.requireNonNull(liste, "liste");
+Objects.checkFromIndexSize(debut, longueur, tab.length);
+if (montant <= 0) { throw new IllegalArgumentException("montant=%d (attendu > 0)".formatted(montant)); }
+\end{codejava}
+
+\begin{piege}
+Trois anti-patterns d'exception, par ordre de nocivit\'e~: (1) \verb|catch (Exception e) {}| vide ---
+tu transformes une panne visible en corruption silencieuse~; (2) \verb|throw new Exception("erreur")|
+--- message sans contexte, cause perdue, type inutilisable~; (3) utiliser une exception pour un
+flux normal (une \og ~page suivante~ \fg{} est-elle une anomalie~? non~: renvoie \verb|Optional| ou un
+bool\'een). Une exception co\^ut\'e la construction d'un stack~: ne les utilise pas comme \og ~return~ \fg{}.
+\end{piege}
+
+\begin{astuce}
+Le message d'exception est une interface~: il doit contenir \emph{les valeurs} qui ont pos\'e probl\`eme
+(\verb|"montant=-3 pour la commande 42"| et non \verb|"montant invalide"|). Et conserve toujours la
+cause~: \verb|new ErreurX("...", e)|. Un \verb|RuntimeException| sans cause en production est une
+enqu\^ete qui commence par \og ~de toute fa\c{c}on on ne sait pas~ \fg{}.
+\end{astuce}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris \verb|LRUCache<K,V>| sur \verb|LinkedHashMap| (\verb|removeEldestEntry|)~: capacit\'e,
+        \verb|get|/ \verb|put|/ \verb|evict\'e s|, et 8 tests qui prouvent l'ordre d'\'eviction.
+  \item \'Ecris un \verb|Trie| (arbre de pr\'efixes) g\'en\'erique~: \verb|ajouter|, \verb|contient|,
+        \verb|commencePar|, \verb|autocompleter(prefixe, n)|~; compare la complexit\'e \`a un
+        \verb|HashSet| sur 100 000 mots.
+  \item Construis un \verb|TopK<T>| avec une \verb|PriorityQueue| \`a capacit\'e fix\'ee~; puis la
+        m\^eme approche avec un \verb|TreeMap<Score, Set<Id>| (ordre d\'ecroissant, scores \'egaux).
+  \item \'Ecris une hi\'erarchie d'exceptions m\'etier compl\`ete pour une boutique~: inventaire insuffisant,
+        coupon expir\'e, paiement refus\'e, adresse non livrable~: avec codes, donn\'ees contextuelles,
+        et un mapping vers les codes HTTP 400/404/409/422.
+  \item Migre un morceau de code du style \og ~\verb|null| retourn\'e~ \fg{} vers le style Java moderne~:
+        \verb|Optional| en retour, \verb|orElseThrow| avec exception m\'etier, \verb|Objects.requireNonNull|
+        aux entr\'ees~; et ajoute \verb|@Nullable| (JSpecify ou checkerframework) pour les fronti\`eres.
+  \item Fais tourner un \verb|-Xmx32m| avec une liste de 10 millions d'\'el\'ements~: observe
+        \verb|OutOfMemoryError|~; explique-le \`a voix haute~; puis r\'eduis la m\'emoire r\'eelle avec un
+        \verb|int[]| et compare les chiffres.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Trails de la doc Collections --- \url{https://docs.oracle.com/javase/tutorial/collections/}
+  \item Javadoc HashMap (l'impl\'ementation, les seuils d'arbre, la charge) --- \url{https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/HashMap.html}
+  \item Generics (tutoriel officiel + Angelika Langer's FAQ pour les cas tordus) --- \url{https://www.angelikalanger.com/GenericsFAQ/JavaGenericsFAQ.html}
+  \item \url{https://dev.java/learn/exceptions/} --- et \link{EJCH}{https://www.oreilly.com/library/view/effective-java-3rd/}
+  \item \link{JSpecify}{https://jspecify.dev/} pour les annotations de nullit\'e
+\end{itemize}
+\end{ressources}
+
+\index{collections}\index{generiques}\index{exceptions}\index{HashMap}

@@ -1,0 +1,425 @@
+% ============================================================================
+\chapter{Node.js : serveur, CLI, scripts d'automatisation}
+\label{ch:node}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Utiliser les modules de la biblioth\`eque standard~: \texttt{fs}, \texttt{path}, \texttt{os},
+        \texttt{crypto}, \texttt{child\_process}, \texttt{worker\_threads}.
+  \item \'Ecrire un serveur HTTP nu, puis un serveur Express complet~: routes, middleware,
+        validation, erreurs, logs, upload.
+  \item Structurer une application Node en couches, avec configuration par environnement.
+  \item \'Ecrire des scripts CLI utiles (et les rendre robustes~: signaux, exit codes, stdout/stderr).
+\end{itemize}
+\end{objectif}
+
+\section{Le mod\`ele, en trois phrases}
+
+Node ex\'ecute du JavaScript sur V8 avec une boucle d'\'ev\'enements non bloquante~: les entr\'ees/sorties
+sont d\'el\'egu\'ees \`a une pool de threads (libuv) et leurs rappels sont rejou\'es sur le fil principal.
+Un processus ne g\`ere donc \emph{qu'un calcul \`a la fois}~: pour utiliser plusieurs coeurs, on lance
+plusieurs processus (\verb|cluster|, \verb|pm2 -i max|, ou un conteneur par instance derri\`ere nginx).
+
+\section{La biblioth\`eque standard qui compte}
+
+\begin{codejs}
+// ---- path, fs, os
+import { join, dirname, basename, extname, resolve } from "node:path";
+import { readFile, writeFile, readdir, mkdir, stat, rm, cp, appendFile, access } from "node:fs/promises";
+import { existsSync, createReadStream, createWriteStream, watch } from "node:fs";
+import { homedir, tmpdir, cpus, totalmem } from "node:os";
+
+const here = dirname(new URL(import.meta.url).pathname);
+const data = await readFile(join(here, "data.json"), "utf8");
+await writeFile(join(here, "out.txt"), "ok\n", { flag: "a" });
+await mkdir(join(here, "a/b/c"), { recursive: true });
+await cp("src", "backup", { recursive: true, force: true });
+for (const entree of await readdir(here, { withFileTypes: true })) {
+  if (entree.isDirectory() && !entree.name.startsWith(".")) console.log(entree.name);
+}
+await access("fichier.txt").then(() => console.log("lisible")).catch(() => console.log("absent ou interdit"));
+
+// GROS fichier ligne a ligne sans le charger en memoire :
+import { createInterface } from "node:readline";
+const rl = createInterface({ input: createReadStream("gros.log"), crlfDelay: Infinity });
+let n = 0;
+for await (const ligne of rl) if (/ERR/.test(ligne)) n++;
+console.log(n, "lignes d'erreur");
+
+// GROS ecriture en flux (les backpressures sont gerees par pipeline)
+import { pipeline } from "node:stream/promises";
+import { createGzip } from "node:zlib";
+await pipeline(createReadStream("gros.csv"), createGzip(), createWriteStream("gros.csv.gz"));
+
+// Surveillance de fichiers
+const w = watch(here, { persistent: false }, (evt, filename) => console.log(evt, filename));
+w.close();
+
+// ---- crypto : hachage, jetons, chiffrement
+import { createHash, randomBytes, createHmac, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
+createHash("sha256").update("mot de passe + sel").digest("hex");
+randomUUID();                       // "d94b..." (v4)
+randomBytes(32).toString("base64url");   // jeton d'API
+const sel = randomBytes(16);
+const cle = await promisify(scrypt)(mdp, sel, 64);   // derive de cle (en prod : argon2 ou bcrypt)
+timingSafeEqual(a, b);              // comparaison sans fuite temporelle
+
+// ---- child_process
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
+const run = promisify(execFile);
+const { stdout, stderr } = await run("git", ["rev-parse", "--short", "HEAD"]);
+const ff = spawn("ffmpeg", ["-i", "in.mov", "out.mp4"], { stdio: "inherit" });
+ff.on("exit", (code, sig) => console.log("fini", code, sig));
+
+// ---- process : signaux, code de sortie, arguments
+const args = process.argv.slice(2);
+const opts = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) => {
+  const [k, v = "true"] = a.replace(/^--/, "").split("=");
+  return [k, v === "true" ? true : v];
+}));
+process.on("SIGINT", () => arretPropre(130));
+process.on("SIGTERM", () => arretPropre(143));
+async function arretPropre(code) {
+  await Promise.allSettled([serveur.closeAsync?.(), db.end()]);
+  process.exitCode = code;      // ne pas appeler process.exit brutalement : on perd les bufferisations
+}
+console.error("aller sur stderr"); process.exitCode = 1;   // exit code correct pour les scripts
+\end{codejs}
+
+\section{Le serveur HTTP nu, pour comprendre}
+
+\begin{codejs}
+import { createServer } from "node:http";
+
+const serveur = createServer(async (req, res) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const json = (status, objet) => {
+    const corps = JSON.stringify(objet);
+    res.writeHead(status, {
+      "content-type": "application/json; charset=utf-8",
+      "content-length": Buffer.byteLength(corps),
+      "x-powered-by": "node nu",
+    });
+    res.end(corps);
+  };
+  try {
+    if (url.pathname === "/api/sante") return json(200, { ok: true, uptime: process.uptime() });
+    if (url.pathname === "/api/echo" && req.method === "POST") {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      return json(200, { recu: JSON.parse(Buffer.concat(chunks).toString() || "{}") });
+    }
+    json(404, { erreur: `route inconnue ${req.method} ${url.pathname}` });
+  } catch (e) {
+    json(400, { erreur: e.message });
+  }
+});
+serveur.listen(3000, () => console.log("http://localhost:3000"));
+serveur.keepAliveTimeout = 65_000;            // > au timeout du reverse proxy (sinon 502 aleatoires)
+serveur.requestTimeout = 300_000;
+process.on("SIGTERM", () => serveur.close(() => process.exit(0)));
+\end{codejs}
+
+\section{Express~: le cadre minimaliste de r\'ef\'erence}
+
+Documentation~: \link{expressjs.com/fr}{https://expressjs.com/fr/}. Version~5 (2024+) g\`ere
+enfin les erreurs des fonctions \texttt{async} sans encapsulation.
+
+\begin{terminal}
+mkdir api && cd api && npm init -y
+npm pkg set type=module
+npm i express helmet cors compression morgan zod dotenv
+npm i -D nodemon eslint
+\end{terminal}
+
+\begin{codejs}
+// src/app.js
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import morgan from "morgan";
+import { routers } from "./routes/index.js";
+import { environement } from "./config.js";
+import { gestionErreur } from "./erreurs.js";
+
+export function creerApp() {
+  const app = express();
+  app.disable("x-powered-by");
+  app.set("trust proxy", 1);                       // derriere nginx : lire X-Forwarded-*
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+  app.use(cors({ origin: environement.origines, credentials: true }));
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "100kb" }));
+  app.use(morgan(environement.prod ? "combined" : "dev", {
+    skip: (req) => req.path === "/favicon.ico",
+  }));
+  app.use("/static", express.static("public", { maxAge: "7d", immutable: true }));
+
+  routers.forEach(([chemin, r]) => app.use(chemin, r));
+  app.use((req, res) => res.status(404).json({ erreur: "introuvable", chemin: req.path }));
+  app.use(gestionErreur);
+  return app;
+}
+
+// src/routes/articles.js
+import { Router } from "express";
+import { z } from "zod";
+import { asyncHandler, HttpError } from "../erreurs.js";
+import { depot } from "../depot.js";
+
+const schemaArticle = z.object({
+  titre: z.string().trim().min(3).max(160),
+  contenu: z.string().trim().min(10),
+  tags: z.array(z.string().min(1).max(30)).max(12).default([]),
+  publie: z.boolean().default(false),
+});
+
+export const routeArticles = Router();
+
+routeArticles.get("/", asyncHandler(async (req, res) => {
+  const q = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    taille: z.coerce.number().int().min(1).max(100).default(20),
+    recherche: z.string().trim().max(120).optional(),
+  }).parse(req.query);
+  const { items, total } = await depot.liste({ ...q });
+  res.links({ next: total > q.page * q.taille ? `?page=${q.page + 1}` : undefined });
+  res.json({ items, total, page: q.page });
+}));
+
+routeArticles.get("/:id(\\d+)", asyncHandler(async (req, res) => {
+  const article = await depot.parId(Number(req.params.id));
+  if (!article) throw new HttpError(404, "Article introuvable");
+  res.set("etag", `W/"${article.maj}"`).vary("accept-encoding");
+  res.status(200).json(article);
+}));
+
+routeArticles.post("/", asyncHandler(async (req, res) => {
+  const donnees = schemaArticle.parse(req.body);
+  const cree = await depot.creer(donnees);
+  res.location(`/api/articles/${cree.id}`).status(201).json(cree);
+}));
+
+routeArticles.delete("/:id(\\d+)", asyncHandler(async (req, res) => {
+  await depot.supprimer(Number(req.params.id));
+  res.status(204).end();
+}));
+
+// src/erreurs.js
+export class HttpError extends Error {
+  constructor(status, message, details) { super(message); this.status = status; this.details = details; }
+}
+export const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+export function gestionErreur(err, req, res, _next) {
+  if (err?.name === "ZodError") {
+    return res.status(422).json({ erreur: "Donnees invalides", details: err.issues.map((i) => ({ champ: i.path.join("."), message: i.message })) });
+  }
+  const status = err.status ?? err.statusCode ?? 500;
+  if (status >= 500) console.error({ msg: err.message, stack: err.stack, url: req.originalUrl, ip: req.ip });
+  res.status(status).json({ erreur: status >= 500 ? "Erreur interne" : err.message });
+}
+\end{codejs}
+
+\subsection{Configuration par environnement~: la bonne habitude d\`es le premier jour}
+\label{sec:node-config}
+
+\begin{codejs}
+// src/config.js --- une seule porte d'entree, validee au demarrage
+import "dotenv/config";
+import { z } from "zod";
+
+const schema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().default(3000),
+  DATABASE_URL: z.string().url(),
+  JWT_SECRET: z.string().min(32),
+  LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  ORIGINES: z.string().default("http://localhost:5173"),
+  UPLOAD_MAX_MO: z.coerce.number().default(5),
+});
+const parsed = schema.safeParse(process.env);
+if (!parsed.success) {
+  console.error("Configuration invalide :", parsed.error.flatten().fieldErrors);
+  process.exit(1);
+}
+export const environement = {
+  ...parsed.data,
+  prod: parsed.data.NODE_ENV === "production",
+  origines: parsed.data.ORIGINES.split(",").map((s) => s.trim()),
+};
+\end{codejs}
+
+Jamais de secret dans le code, dans Git, ni dans une variable expos\'ee au navigateur.
+\verb|.env| pour le dev local, variables d'environnement r\'eelles en production
+(\link{Doppler}{https://doppler.com/}, \link{1Password~CLI}{https://developer.1password.com/docs/cli/},
+ou simplement le fichier d'environnement de systemd / de ton h\'ebergeur).
+
+\section{Ce qu'Express ne fait pas pour toi (et qu'il faut ajouter)}
+
+\begin{itemize}
+  \item \textbf{Cookies et sessions}~: \link{cookie-parser}{https://github.com/pillarjs/cookie-parser},
+        \link{express-session}{https://github.com/expressjs/session} (ou des sessions sign\'ees sans
+        \'etat, cf. \cref{ch:js-secu}).
+  \item \textbf{Upload}~: \link{multer}{https://github.com/expressjs/multer}, avec taille maximale,
+        liste blanche de types et stockage hors de la racine web.
+  \item \textbf{Limitation de d\'ebit}~: \link{express-rate-limit}{https://github.com/nickdesclos/express-rate-limit}.
+  \item \textbf{Corr\'elation et logs structur\'es}~: \link{pino}{https://github.com/pinojs/pino}
+        (JSON, tr\`es rapide) plut\^ot que \verb|console.log|.
+  \item \textbf{T\^aches diff\'er\'ees}~: \link{BullMQ}{https://docs.bullmq.io/} sur Redis.
+  \item \textbf{Temps r\'eel}~: \link{Socket.IO}{https://socket.io/fr/} ou WebSocket brut.
+\end{itemize}
+
+\begin{codejs}
+// Exemple d'upload durci
+import multer from "multer";
+import { extname } from "node:path";
+import { randomUUID } from "node:crypto";
+
+const TYPES = new Map([["image/png", ".png"], ["image/jpeg", ".jpg"], ["image/webp", ".webp"]]);
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: "var/uploads",
+    filename: (req, file, cb) => cb(null, `${randomUUID()}${TYPES.get(file.mimetype) ?? ".bin"}`),
+  }),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => cb(TYPES.has(file.mimetype) ? null : new Error("type refuse"), TYPES.has(file.mimetype)),
+});
+route.post("/avatar", upload.single("fichier"), asyncHandler(async (req, res) => {
+  if (!req.file) throw new HttpError(422, "Fichier manquant ou type non autorise");
+  res.json({ url: `/u/${req.file.filename}` });
+}));
+\end{codejs}
+
+\section{Alternatives \`a Express, et quand les choisir}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Cadre} \& \thd{Id\'ee directrice} \& \thd{Lien} \\
+  \midrule
+  \link{Hono}{https://hono.dev/} \& ultra-l\'eger, tourne sur Node, Bun, Deno, Cloudflare Workers, navigateur. Mon choix pour une API neuve. \& 14 kB \\
+  \link{Fastify}{https://fastify.dev/} \& plus rapide qu'Express, sch\'emas JSON int\'egr\'es, plugins. \& \$\approx\$2x \\
+  \link{Koa}{https://koajs.com/} \& le \og ~Express repens\'e~ \fg{} par les auteurs d'Express. \& minimaliste \\
+  \link{NestJS}{https://nestjs.com/} \& architecture d\'ecorateurs/injection, tr\`es TypeScript, \'equipes Java qui passent au Node. \& complet \\
+  \link{Next.js}{https://nextjs.org/} \& React fullstack~: pages, API routes, rendu serveur. \& cadre UI \\
+  \link{Express~5}{https://expressjs.com/fr/} \& le standard historique, documentation immense. \& classique \\
+\end{tabz}
+
+\section{Un CLI utile en 60 lignes}
+
+\begin{codejs}
+#!/usr/bin/env node
+// scripts/rename.js --- renomme en lot : node rename.js --dossier ./photos --prefix 2026 --debut 1
+import { readdir, rename, stat } from "node:fs/promises";
+import { join, extname } from "node:path";
+
+const opts = Object.fromEntries(process.argv.slice(2).map((a) => {
+  const [k, v = "true"] = a.replace(/^--/, "").split("=");
+  return [k, v];
+}));
+
+if (opts.aide) {
+  console.log(`Usage : rename --dossier CHEMIN --prefix TEXTE [--debut N] [--sec]
+
+  --dossier  dossier a traiter (obligatoire)
+  --prefix   debut du nouveau nom
+  --debut    numero de depart (defaut 1)
+  --sec      applique vraiment (sinon : simulation)`);
+  process.exit(0);
+}
+const dossier = opts.dossier ?? process.exit(fail("--dossier est requis"));
+const prefix = opts.prefix ?? "fichier";
+let compteur = Number(opts.debut ?? 1);
+
+const fichiers = (await readdir(dossier))
+  .filter((f) => !f.startsWith("."))
+  .sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
+
+for (const f of fichiers) {
+  const neuf = `${prefix}-${String(compteur++).padStart(3, "0")}${extname(f).toLowerCase()}`;
+  if (neuf === f) continue;
+  const { size, mtime } = await stat(join(dossier, f));
+  console.log(`${f}  ->  ${neuf}   (${(size / 1024).toFixed(0)} Ko, ${mtime.toISOString().slice(0, 10)})`);
+  if (opts.sec) await rename(join(dossier, f), join(dossier, neuf));
+}
+if (!opts.sec) console.log("\nSimulation. Relance avec --sec pour appliquer.");
+
+function fail(msg) { console.error(`Erreur : ${msg}`); return 1; }
+\end{codejs}
+
+\subsection{Automatiser~: Makefile et scripts de d\'eveloppement}
+
+\begin{codeconf}
+# Makefile --- la interface unique du projet (fais `make` pour voir la liste)
+.PHONY: help dev check test lint db-reset docker-up docker-down
+
+help:            ## affiche cette aide
+	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+dev:             ## lance API + site en parallle
+	@npm run dev
+check: lint test ## tout verifier (lint + typecheck + tests)
+	npm run typecheck
+lint:            ## analyse statique
+	npm run lint -- --fix
+test:            ## tests unitaires
+	npm test
+db-reset:        ## recree la base et la remplit
+	node scripts/migrate.js --fresh && node scripts/seed.js
+docker-up:       ## demarre les services (MySQL, Redis, Mailpit)
+	docker compose up -d
+docker-down:     ## arrete tout
+	docker compose down
+\end{codeconf}
+
+\begin{codejson}
+{
+  "name": "projet-node",
+  "scripts": { "dev": "node --watch --env-file=.env src/server.js" },
+  "devDependencies": { "nodemon": "^3.1.0" }
+}
+\end{codejson}
+
+Depuis Node 18.11, \cmd{node --watch} suffit au quotidien. Pour recharger aussi au changement de
+fichier non-JS (views, .env), \link{nodemon}{https://nodemon.io/} reste pratique. Pour red\'emarrer
+proprement un processus en production~: \link{pm2}{https://pm2.keymetrics.io/} (ou mieux~: systemd).
+
+\begin{terminal}
+# pm2 en production (si tu n'as pas de orchestrateur)
+npm i -g pm2
+pm2 start src/server.js -i max --name api --node-args="--max-old-space-size=1024"
+pm2 logs api --lines 100
+pm2 monit ; pm2 reload api ; pm2 save ; pm2 startup
+\end{terminal}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris un serveur HTTP nu qui sert un fichier statique depuis \verb|public/| avec les
+        en-t\^etes corrects~: \verb|content-type| (par extension), \verb|cache-control|, ETag
+        bas\'e sur taille+date, et gestion du \verb|If-None-Match| (304).
+  \item Reprends-le en Express, en ajoutant~: route \verb|/api/sante|, validation par
+        \verb|zod| d'un POST, gestion d'erreur centralis\'ee, et logs \verb|pino|.
+  \item Construis une API CRUD compl\`ete pour un blog (articles + commentaires) stock\'ee sur
+        disque en JSON, avec pagination, recherche, et code de sortie correct partout.
+        \emph{Ce sera ta base de comparaison avec les versions PHP et Java.}
+  \item \'Ecris un CLI \verb|depense|~: \verb|add "cafe" 2.5 --cat=alimentation|,
+        \verb|list --month=2026-01|, \verb|total --by=category|, donn\'ees dans
+        \verb|~/.depenses.json|. Ajoute \verb|--json| pour la sortie machine.
+  \item \'Ecris un script qui v\'erifie la sant\'e de ton API (5 requ\^etes, timeouts, format) et
+        retourne un code de sortie non nul en cas d'\'echec~: utilisable dans un cron ou une CI.
+  \item Lance deux instances derri\`ere \cmd{node --cluster} (ou l'option \verb|-i max| de pm2)
+        et mesure le d\'ebit avec \link{autocannon}{https://github.com/mcollina/autocannon} :
+        explique le r\'esultat avec le mod\`ele mono-fil.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Docs Node (la r\'ef\'erence absolue) --- \url{https://nodejs.org/fr/docs/latest/api/}
+  \item Node --- \emph{Learn JavaScript on the server} --- \url{https://nodejs.org/learn}
+  \item Express guide --- \url{https://expressjs.com/fr/guide/routing.html}
+  \item \link{Node Best practices (Goldberd)}{https://github.com/goldberio/express-nodejs-best-practices}
+  \item \link{Node Security Workshop}{https://github.com/ThankyouForComing/Node-Security-Workshop} --- et \url{https://snyk.io/fr/blog/}
+\end{itemize}
+\end{ressources}
+
+\index{Node.js}\index{Express}\index{CLI}\index{serveur}

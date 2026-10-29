@@ -1,0 +1,482 @@
+% ============================================================================
+\chapter{\'Ev\'enements, formulaires et interaction utilisateur}
+\label{ch:js-events}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Ma\^itriser les trois phases de propagation et l'art de d\'el\'eguer un \'ecouteur.
+  \item Exploiter les options d'\texttt{addEventListener} (\texttt{signal}, \texttt{once},
+        \texttt{capture}, \texttt{passive}).
+  \item Valider un formulaire c\^ot\'e client \emph{et} comprendre pourquoi ce n'est qu'un confort.
+  \item Envoyer des fichiers, g\'erer upload avec progression, et les \'ev\'enements clavier/souris.
+  \item Construire les composants UI courants (menu, modale, autocomplete, toast).
+\end{itemize}
+\end{objectif}
+
+\section{Le cycle de vie d'un \'ev\'enement}
+
+Un clic sur un \verb|<span>| dans un \verb|<button>| dans une \verb|<form>| parcourt l'arbre
+deux fois~: \textbf{capture} (du plus grand vers la cible), \textbf{target} (la cible),
+\textbf{bulle} (de la cible vers le plus grand). La plupart du temps on \'ecoute en phase de
+bulle, c'est pour \c{c}a que la d\'el\'egation fonctionne.
+
+\begin{codejs}
+form.addEventListener(
+  "submit",
+  (e) => {
+    e.preventDefault();                  // empeche le comportement par defaut (rechargement)
+    console.log(e.type, e.target, e.currentTarget);   // currentTarget = l'element quiecoute
+    console.log(e.clientX, e.clientY, e.timeStamp);
+  },
+  { signal: abort.signal }               // la meilleure facon de nettoyer
+);
+
+const options = {
+  capture: true,        // ecouter en phase descendante
+  once: true,           // se desabonne apres le premier declenchement
+  passive: true,        // promet de ne pas appeler preventDefault -> scroll plus fluide
+  signal: new AbortController().signal,   // desabonnement en masse
+};
+window.addEventListener("wheel", onWheel, { passive: true });
+
+// Stopper la propagation vs empecher l'action par defaut : DEUX choses differentes
+e.stopPropagation();        // les parents ne seront pas notifies (mais l'action a lieu)
+e.stopImmediatePropagation(); // ni les autres ecouteurs du MEME element
+e.preventDefault();         // l'action par defaut est annulee (la propagation continue)
+
+// Evenements sans bulle : focus, blur, mouseenter, load, scroll (sur element)
+// => pour les deleguer, ecouter en capture :
+conteneur.addEventListener("focusin", onFocus);      // focusin/focusout, eux, bullent
+conteneur.addEventListener("focus", onFocus, true);  // capture : marche aussi
+\end{codejs}
+
+\section{La d\'el\'egation~: un \'ecouteur pour mille lignes}
+
+C'est LE motif qui fait la diff\'erence entre un script qui vieillit bien et un script
+qu'on r\'e\'ecrit chaque fois qu'on ajoute un \'el\'ement.
+
+\begin{codejs}
+// ANTI-PATTERN : attacher un ecouteur par ligne, a reattacher a chaque rendu
+document.querySelectorAll(".suppr").forEach((b) => b.addEventListener("click", supprimer));
+
+// DELEGATION : un seul ecouteur sur un conteneur stable
+document.getElementById("liste").addEventListener("click", (e) => {
+  const boutonSuppr = e.target.closest("[data-action=supprimer]");
+  if (boutonSuppr) return supprimer(boutonSuppr.closest("li").dataset.id);
+
+  const coche = e.target.closest("[data-action=cocher]");
+  if (coche) return cocher(coche.closest("li").dataset.id);
+
+  const lien = e.target.closest("a");
+  if (lien) { e.preventDefault(); naviguer(lien.href); }
+});
+\end{codejs}
+
+Un utilitaire de bus d'\'ev\'enements, \`a copier dans ton projet (il remplace avantageusement
+les r\'ef\'erences crois\'ees entre modules)~:
+
+\begin{codejs}
+export function creerBus() {
+  const ecouteurs = new Map();
+  return {
+    on(type, fn, options = {}) {
+      if (!ecouteurs.has(type)) ecouteurs.set(type, new Set());
+      ecouteurs.get(type).add(fn);
+      return () => this.off(type, fn);
+    },
+    once(type, fn) { const off = this.on(type, (p) => { off(); fn(p); }); return off; },
+    off(type, fn) { ecouteurs.get(type)?.delete(fn); },
+    emit(type, detail) {
+      for (const fn of ecouteurs.get(type) ?? []) {
+        try { fn(detail); } catch (err) { console.error(`ecouteur "${type}"`, err); }
+      }
+      if (typeof CustomEvent === "function") {
+        document.dispatchEvent(new CustomEvent(type, { detail, bubbles: true }));
+      }
+    },
+    clear() { ecouteurs.clear(); },
+  };
+}
+// Evenements personnalises, la norme DOM :
+document.body.dispatchEvent(new CustomEvent("panier:maj", { detail: { total: 42 }, bubbles: true, composed: true }));
+document.body.addEventListener("panier:maj", (e) => afficher(e.detail.total));
+\end{codejs}
+
+\section{Nettoyer : le pi\`ege n\${}^{\text{o}}\$1 des SPA}
+
+Un \'ecouteur ajout\'e et jamais retir\'e = fuite de m\'emoire + rappels fant\^omes sur des \'el\'ements
+d\'etruits. Trois strat\'egies, de la plus simple \`a la plus propre.
+
+\begin{codejs}
+// 1. once : pour un evenement unique
+btn.addEventListener("click", demarrer, { once: true });
+
+// 2. AbortController : le standard moderne, et le plus pratique
+const ctrl = new AbortController();
+window.addEventListener("resize", surResize, { signal: ctrl.signal });
+document.addEventListener("keydown", surTouche, { signal: ctrl.signal });
+form.addEventListener("submit", surEnvoi, { signal: ctrl.signal, passive: false });
+function detruire() { ctrl.abort(); }       // retire TOUT, en une ligne
+
+// 3. Un mini-cycle de vie pour tes propres composants
+function creerComposant(racine, { montar, demonter }) {
+  const ctrl = new AbortController();
+  montar(racine, ctrl.signal);
+  return {
+    destroy() { ctrl.abort(); demonter?.(racine); racine.replaceChildren(); },
+  };
+}
+\end{codejs}
+
+\section{Formulaires---lecture, \'ecriture, validation}
+
+\begin{codejs}
+const form = document.querySelector("form");
+
+// Lecture moderne : FormData
+const data = new FormData(form);
+const obj = Object.fromEntries(data.entries());           // { nom: "...", qte: "2" }
+const roles = data.getAll("role");                         // checkbox multiple -> tableau
+const fichier = data.get("avatar");                        // File | null
+data.set("nom", "Nour"); data.append("tag", "admin");
+// Renvoyer un objet typ\'e, propre a envoyer en JSON :
+const lire = (form) => {
+  const o = Object.fromEntries(new FormData(form).entries());
+  for (const [k, v] of Object.entries(o)) {
+    if (v === "on") o[k] = true;
+    else if (v === "off") o[k] = false;
+    else if (v !== "" && !Number.isNaN(Number(v)) && form.elements[k]?.type === "number") o[k] = Number(v);
+  }
+  return o;
+};
+
+// Validation native (le navigateur la fait deja, et gratuitement)
+const champ = form.elements.email;
+champ.checkValidity();          // booleen
+champ.validity.tooLong; champ.validationMessage;
+form.reportValidity();          // affiche les bulles, met le focus sur le 1er invalide
+champ.setCustomValidity("Choisis un email @exemple.com");   // remplace le message
+champ.setCustomValidity("");     // ne pas oublier de le reinitialiser !
+
+// Les attributs HTML qui font 80 % du travail :
+// required, type, pattern, minlength/maxlength, min/max/step, inputmode, autocomplete,
+// autocapitalize, multiple, accept, list (datalist)
+\end{codejs}
+
+\subsection{Validation sur mesure, r\'eutilisable}
+
+\begin{codejs}
+const regles = {
+  requis: (v) => (v === null || v === undefined || String(v).trim() === "") && "Champ obligatoire",
+  email: (v) => v && !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v) && "Adresse email invalide",
+  min: (n) => (v) => [...String(v ?? "")].length < n && `Au moins ${n} caracteres`,
+  nombre: (min, max) => (v) => {
+    const x = Number(v);
+    if (v === "" || !Number.isFinite(x)) return "Nombre attendu";
+    if (min !== undefined && x < min) return `Minimum ${min}`;
+    if (max !== undefined && x > max) return `Maximum ${max}`;
+  },
+  mdpFort: (v) => {
+    if (!v) return;
+    const manques = [];
+    if (v.length < 12) manques.push("12 caracteres minimum");
+    if (!/[A-Z]/.test(v)) manques.push("une majuscule");
+    if (!/[a-z]/.test(v)) manques.push("une minuscule");
+    if (!/\d/.test(v)) manques.push("un chiffre");
+    if (!/[^\w\s]/.test(v)) manques.push("un caractere special");
+    return manques.length && `Mot de passe faible : ${manques.join(", ")}`;
+  },
+};
+
+export function valider(form, schema) {
+  const erreurs = {};
+  for (const [nom, liste] of Object.entries(schema)) {
+    const champ = form.elements[nom];
+    const valeur = champ?.type === "checkbox" ? champ.checked : champ?.value;
+    for (const regle of liste) {
+      const message = typeof regle === "function" ? regle(valeur, form) : regles[regle]?.(valeur, form);
+      if (message) { erreurs[nom] = message; break; }
+    }
+  }
+  return { ok: Object.keys(erreurs).length === 0, erreurs };
+}
+
+// Branchement : invalider a la sortie, revalider a la frappe une fois l'erreur affichee
+const champ = form.elements.email;
+const afficherErreur = (msg) => {
+  const zone = champ.closest(".champ");
+  zone.classList.toggle("invalide", Boolean(msg));
+  zone.querySelector(".erreur").textContent = msg ?? "";
+  champ.setAttribute("aria-invalid", String(Boolean(msg)));
+  champ.setAttribute("aria-describedby", msg ? "err-email" : "");
+};
+champ.addEventListener("blur", () => afficherErreur(regles.email(champ.value)));
+champ.addEventListener("input", () => champ.closest(".champ").classList.contains("invalide")
+  && afficherErreur(regles.email(champ.value)));
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const { ok, erreurs } = valider(form, {
+    email: ["requis", "email"],
+    age: [regles.nombre(18, 120)],
+    mdp: [regles.mdpFort],
+  });
+  if (!ok) {
+    const premier = form.elements[Object.keys(erreurs)[0]];
+    afficherErreur(erreurs.email);
+    premier?.focus();
+    return;
+  }
+  await soumettre(Object.fromEntries(new FormData(form)));
+});
+\end{codejs}
+
+\begin{piege}
+Un formulaire doit \^etre soumis par un vrai \verb|<button type="submit">| et r\'epondre \`a
+\verb|Enter|~: c'est ce que la touche Entr\'ee, les lecteurs d'\'ecran et les gestionnaires de mots
+de passe attendent. Un simple \verb|onclick| sur une \verb|<div>| casse tout cela~;
+la validation native ne se d\'eclenche m\^eme pas.
+\end{piege}
+
+\section{Fichiers : s\'election, lecture, envoi, progression}
+
+\begin{codejs}
+const input = document.querySelector('input[type=file]');
+
+input.addEventListener("change", async () => {
+  for (const file of input.files) {
+    // Garde-fous cote client (le serveur refait TOUJOURS les siens)
+    if (file.size > 5 * 1024 ** 2) { alert(`${file.name} depasse 5 Mo`); continue; }
+    if (!/^image\/(png|jpe?g|webp|avif)$/.test(file.type)) continue;
+
+    const url = URL.createObjectURL(file);            // lecture immediate pour preview
+    document.querySelector("#apercu").src = url;
+
+    const texte = await file.text();                  // File -> string (Promise)
+    const buffer = await file.arrayBuffer();          // binaire (hash, analyse)
+    const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", buffer))]
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(file);
+    });
+    URL.revokeObjectURL(url);                         // liberer la memoire !
+    console.log(file.name, file.size, file.type, file.lastModified, hash.slice(0, 12));
+  }
+});
+
+// Envoi : multipart via FormData, le navigateur met le Content-Type tout seul
+async function envoyer(form) {
+  const fd = new FormData(form);
+  const ctrl = new AbortController();
+  const xhr = new XMLHttpRequest();           // seul moyen simple d'avoir la progression
+  xhr.open("POST", "/upload");
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) barre.style.width = `${(e.total * 100 / e.loaded).toFixed(0)}`;
+  };
+  xhr.send(fd);
+}
+
+// Upload en chunk (gros fichiers) : decoupage, envoi parallele, reprise
+async function uploaderParMorceaux(file, taille = 5 * 1024 ** 2) {
+  const sessions = await fetch("/upload/init", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ nom: file.name, taille: file.size, morceaux: Math.ceil(file.size / taille) }),
+  }).then((r) => r.json());
+  const envois = [];
+  for (let i = 0; i * taille < file.size; i++) {
+    const morceau = file.slice(i * taille, (i + 1) * taille);
+    envois.push(fetch(`/upload/${sessions.id}/${i}`, { method: "PUT", body: morceau }));
+    if (envois.length >= 3) await Promise.race(envois);       // limiter la concurrence
+  }
+  await Promise.all(envois);
+  return fetch(`/upload/${sessions.id}/complete`, { method: "POST" });
+}
+
+// Telecharger un fichier genere cote serveur, sans quitter la page
+const reponse = await fetch("/export.csv");
+const blob = await reponse.blob();
+const a = Object.assign(document.createElement("a"), {
+  href: URL.createObjectURL(blob), download: "export.csv",
+});
+a.click(); URL.revokeObjectURL(a.href);
+\end{codejs}
+
+\section{Clavier, souris, glisser, tactile}
+
+\begin{codejs}
+// Clavier : toujours tester la touche + les modificateurs, et menager les accessifs
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, [contenteditable]")) {
+    if (!(e.ctrlKey || e.metaKey)) return;      // ne pas capturer les touches de saisie
+  }
+  const mod = e.metaKey || e.ctrlKey ? "Mod+" : "";
+  const combo = `${mod}${e.shiftKey ? "Shift+" : ""}${e.key.toLowerCase()}`;
+  const raccourcis = {
+    "Mod+k": () => ouvrirPalette(),
+    "Mod+Enter": () => soumettre(),
+    "Mod+Shift+p": () => basculerMode(),
+    Escape: () => fermerTout(),
+    "?": () => ouvrirAide(),
+  };
+  const fn = raccourcis[combo];
+  if (fn) { e.preventDefault(); fn(); }
+});
+
+// Souris : coalescer le mouvement (60+ evenements par frame sinon)
+let last = { x: 0, y: 0 };
+el.addEventListener("pointermove", (e) => {
+  const [evt] = e.getCoalescedEvents?.() ?? [e];     // regroupe les evements perdus
+  last = { x: evt.clientX, y: evt.clientY };
+}, { passive: true });
+
+// Pointer events : UN seul modele pour souris + stylet + doigt (oublie touch*)
+const points = new Map();
+el.addEventListener("pointerdown", (e) => {
+  el.setPointerCapture(e.pointerId);
+  points.set(e.pointerId, { x: e.clientX, y: e.clientY });
+});
+el.addEventListener("pointermove", (e) => points.get(e.pointerId) && pince(e, points));
+el.addEventListener("pointerup", (e) => points.delete(e.pointerId));
+
+// Double-clic, clic droit, molette, drag natif
+el.addEventListener("dblclick", zoom);
+el.addEventListener("contextmenu", (e) => { e.preventDefault(); menu.positionner(e.clientX, e.clientY); });
+el.addEventListener("wheel", (e) => { if (e.ctrlKey) { e.preventDefault(); zoomPar(e.deltaY); } }, { passive: false });
+el.draggable = true;
+el.addEventListener("dragstart", (e) => e.dataTransfer.setData("text/plain", el.dataset.id));
+zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("sur"); });
+zone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  deplacer(e.dataTransfer.getData("text/plain"), indexApres(e));
+});
+// Drag de fichiers depuis le bureau
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", (e) => { e.preventDefault(); traiter(e.dataTransfer.files); });
+\end{codejs}
+
+\section{Quatre composants UI, sans biblioth\`eque}
+
+\begin{codejs}
+// 1. Menu deroulant accessible (fleches, Echap, clic exterieur, focus)
+function menu(bouton, liste) {
+  bouton.addEventListener("click", () => {
+    const ouvert = liste.hasAttribute("hidden");
+    liste.toggleAttribute("hidden", !ouvert);
+    bouton.setAttribute("aria-expanded", String(ouvert));
+    if (ouvert) liste.querySelector('[role="menuitem"]')?.focus();
+  });
+  liste.addEventListener("keydown", (e) => {
+    const items = [...liste.querySelectorAll('[role="menuitem"]:not([disabled])')];
+    const i = items.indexOf(document.activeElement);
+    const bouger = (n) => { e.preventDefault(); items[(i + n + items.length) % items.length].focus(); };
+    if (e.key === "ArrowDown") bouger(1);
+    else if (e.key === "ArrowUp") bouger(-1);
+    else if (e.key === "Home") bouger(-i);
+    else if (e.key === "End") bouger(items.length - 1 - i);
+    else if (e.key === "Escape") { bouton.click(); bouton.focus(); }
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-menu]") && !liste.contains(e.target)) {
+      liste.setAttribute("hidden", ""); bouton.setAttribute("aria-expanded", "false");
+    }
+  });
+}
+
+// 2. Toast (notification auto-detruite)
+const toasts = (conteneur => ({
+  show(message, { type = "info", duree = 4000 } = {}) {
+    const t = document.createElement("div");
+    t.className = `toast toast--${type}`; t.setAttribute("role", "status"); t.textContent = message;
+    conteneur.append(t);
+    t.addEventListener("click", () => t.remove());
+    setTimeout(() => { t.classList.add("out"); t.addEventListener("transitionend", () => t.remove(), { once: true }); }, duree);
+  },
+}))(document.getElementById("toasts"));
+toasts.show("Enregistre", { type: "succes" });
+
+// 3. Autocompletion (combobox) avec debounce + annulation + navigation clavier
+function autocomplete(input, liste, chercher) {
+  let ctrl = null, index = -1;
+  const fermer = () => { liste.setAttribute("hidden", ""); index = -1; };
+  input.addEventListener("input", debounce(async () => {
+    ctrl?.abort(); ctrl = new AbortController();
+    const q = input.value.trim();
+    if (q.length < 2) return fermer();
+    let items;
+    try { items = await chercher(q, ctrl.signal); } catch (e) { if (e.name !== "AbortError") throw e; return; }
+    if (!items.length) return fermer();
+    liste.replaceChildren(...items.map((it, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("role", "option"); li.textContent = it.label; li.dataset.value = it.value;
+      li.id = `ac-${i}`;
+      return li;
+    }));
+    liste.removeAttribute("hidden");
+    input.setAttribute("aria-expanded", "true");
+  }, 220));
+  input.addEventListener("keydown", (e) => {
+    const opts = [...liste.querySelectorAll("[role=option]")];
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      index = (index + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, i) => o.setAttribute("aria-selected", String(i === index)));
+      input.setAttribute("aria-activedescendant", opts[index]?.id ?? "");
+    } else if (e.key === "Enter" && index >= 0) {
+      e.preventDefault(); input.value = opts[index].dataset.value; fermer();
+    } else if (e.key === "Escape") fermer();
+  });
+  liste.addEventListener("click", (e) => {
+    const o = e.target.closest("[role=option]"); if (!o) return;
+    input.value = o.dataset.value; fermer(); input.focus();
+  });
+}
+
+// 4. Scroll infini (la seule bonne impl, sans listener de scroll)
+function infini(sentinelle, charger) {
+  let enCours = false;
+  const io = new IntersectionObserver(async ([e]) => {
+    if (!e.isIntersecting || enCours) return;
+    enCours = true;
+    const fini = await charger();
+    enCours = false;
+    if (fini) io.disconnect();
+  }, { rootMargin: "400px" });
+  io.observe(sentinelle);
+  return () => io.disconnect();
+}
+\end{codejs}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Reprends la liste de courses et remplace tous les \'ecouteurs par un seul syst\`eme de
+        d\'el\'egation + un \verb|AbortController| global.
+  \item \'Ecris un formulaire d'inscription complet~: nom, email, mot de passe (jauge de force
+        en temps r\'eel), confirmation, conditions (case \`a cocher). Validation \`a la sortie du champ,
+        messages sous le champ, \verb|aria-invalid|, focus sur la premi\`ere erreur.
+  \item Construis un s\'electeur de date \og ~calendrier~ \fg{}~: grille 7\$\times\$6, navigation mois,
+        \keys{\$\leftarrow\$} \keys{\$\rightarrow\$}, plage interdite, valeur au format \verb|YYYY-MM-DD| dans un champ cach\'e.
+  \item Ajoute un glisser-d\'eposer de fichiers sur toute la page, avec aper\c{c}u des images,
+        rejet des types interdits et affichage de la taille.
+  \item \'Ecris une barre de progression de t\'el\'echargement r\'ealiste~: \verb|fetch| +
+        \verb|ReadableStream| pour compter les octets re\c{c}us (sans \verb|XMLHttpRequest|).
+  \item Fais un raccourci clavier global \og ~palette de commandes~ \fg{} (Ctrl+K) avec recherche
+        floue, haut/bas, Entr\'ee, et focus pi\'eg\'e.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- \'Ev\'enements --- \url{https://developer.mozilla.org/fr/docs/Web/API/EventTarget/addEventListener}
+  \item MDN --- Constraint Validation API --- \url{https://developer.mozilla.org/fr/docs/Web/API/HTMLConstraintValidation}
+  \item \emph{Form Validation Design Patterns} (GOV.UK) --- \url{https://design-system.service.gov.uk/patterns/validation/}
+  \item \link{a11y-collective / ARIA Authoring Practices}{https://www.w3.org/WAI/ARIA/apg/patterns/} (mod\`eles de composants accessibles)
+  \item \link{File Picking, les 10 commandes}{https://web.dev/file-system-access/}
+\end{itemize}
+\end{ressources}
+
+\index{evenements}\index{formulaire}\index{validation}\index{accessibilite}

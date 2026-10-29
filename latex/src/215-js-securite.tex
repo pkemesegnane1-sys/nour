@@ -1,0 +1,282 @@
+% ============================================================================
+\chapter{S\'ecurit\'e web : ce qu'on doit savoir avant de mettre en ligne}
+\label{ch:js-secu}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Int\'egrer une r\`egle unique~: \textbf{toute donn\'ee qui vient de l'ext\'erieur est hostile}.
+  \item Comprendre et bloquer les six attaques qui font 90 \% des incidents~: XSS, CSRF,
+        injection SQL, IDOR, upload malveillant, d\'ependance compromise.
+  \item Configurer en-t\^etes, cookies, CSP et politique de session correctement.
+  \item Hacher un mot de passe comme il faut, et ne jamais \og ~inventer de la cryptographie~ \fg{}.
+  \item Savoir o\`u chercher quand on veut aller plus loin (OWASP, outils, pratiques).
+\end{itemize}
+\end{objectif}
+
+\section{Les trois principes qui rendent tout le reste \'evident}
+
+\begin{enumerate}
+  \item \textbf{Sortie encod\'ee, pas entr\'ee filtr\'ee.} Ne cherche pas \`a nettoyer une saisie pour
+        qu'elle soit \og ~s\^ure~ \fg{}~: encode-la \emph{au moment de l'afficher}, selon le contexte
+        (HTML, attribut, URL, JS, SQL). Un \verb|<script>alert(1)</script>| dans un champ \og ~nom~ \fg{}
+        est une donn\'ee valide~; c'est son rendu qui doit devenir inoffensif.
+  \item \textbf{D\'enominateur de confiance.} Le navigateur ne sait pas qui tu es~: il ne peut pas
+        authentifier un appel. La confiance vient d'un secret partag\'e (cookie \verb|HttpOnly|,
+        jeton sign\'e) \emph{et} d'une v\'erification d'autorisation \`a chaque requ\^ete.
+  \item \textbf{Moindre privil\`ege.} Un utilisateur ne voit que ses donn\'ees. Un compte de base de
+        donn\'ees n'a pas \verb|DROP|. Un conteneur ne tourne pas en root. Un jeton d'API a une
+        port\'ee et une dur\'ee.
+\end{enumerate}
+
+\section{XSS~: le script malveillant dans ta page}
+
+Un XSS, c'est du code que l'attaquant fait ex\'ecuter \emph{avec tes droits} dans le navigateur de
+la victime~: vol de session, usurpation d'actions, enregistrement des frappes.
+
+\begin{codejs}
+// VULNERABLE : du texte utilisateur rendu comme du HTML
+el.innerHTML = commentaire.texte;                      // <img src=x onerror="steal(document.cookie)">
+document.querySelector("#u").innerHTML = `<a href="${utilisateur.site}">site</a>`;  // href="javascript:..."
+
+// SUR : le texte reste du texte
+el.textContent = commentaire.texte;
+a.href = new URL(utilisateur.site, location.href).protocol.startsWith("http") ? utilisateur.site : "#";
+
+// SI tu dois absolument rendre du HTML (markdown, richtext) : passer par un assainisseur
+import DOMPurify from "dompurify";
+el.innerHTML = DOMPurify.sanitize(markdownVersHtml(commentaire.texte), {
+  ALLOWED_TAGS: ["p", "strong", "em", "a", "ul", "ol", "li", "code", "pre", "blockquote"],
+  ALLOWED_ATTR: ["href", "title", "class"],
+  ALLOW_DATA_ATTR: false,
+  ADD_FORBID_TAGS: ["style"],
+});
+// Cote serveur, pour du contenu stocke une fois pour toutes : sanitize-html, DOMPurify,
+// ou DOMPurify en JSDOM. Ne stocke JAMAIS du HTML non filtre.
+\end{codejs}
+
+\etape{Content Security Policy~: le filet de s\'ecurit\'e}
+La CSP ne remplace pas l'encodage~; elle rend l'exploitation tr\`es difficile en interdisant
+le JS inline et les sources inconnues.
+
+\begin{codeconf}
+# En-tete envoye par ton serveur (Express : helmet l'fait pour toi, personnalise-le)
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none';
+  frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests;
+  script-src 'self' https://cdn.example.com 'nonce-{NONCE}';
+  style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self';
+  connect-src 'self' https://api.nour.dev; report-uri /csp-report
+Report-To: {"group":"csp","max_age":10886400,"endpoints":[{"url":"https://csp.nour.dev/reports"}]}
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+Cross-Origin-Resource-Policy: same-origin
+\end{codeconf}
+
+Avec une nonce~: \verb|<script nonce="{valeur-aleatoire-par-requete}">|~; le JS inline sans nonce
+est bloqu\'e. \'Evite \verb|unsafe-inline| et \verb|unsafe-eval|~: si tu les mets, la CSP est
+d\'ecorative. Pour les frameworks qui exigent du style inline, utilise
+\verb|style-src 'self' 'unsafe-inline'| (moins grave) ou un hachage.
+
+\begin{itemize}
+  \item G\'en\'erateur et validateur~: \link{CSP~Evaluator}{https://csp-evaluator.withgoogle.com/}.
+  \item \texttt{Trusted Types} (Chrome/Edge/Firefox r\'ecents) rend \texttt{innerHTML} refus\'e sans
+        une politique explicite~: \url{https://developer.mozilla.org/en-US/docs/Web/API/Trusted\\\_Types\\\_API}.
+  \item \texttt{SRI} pour les scripts tiers~: \verb|<script src="..." integrity="sha384-..." crossorigin>|.
+\end{itemize}
+
+\section{CSRF~: le site d'un autre fait des requ\^etes en ton nom}
+
+Un \verb|POST /compte/modifier-email| accept\'e sur la seule base du cookie de session est
+exploitable depuis n'importe quelle page web. Trois d\'efenses, cumulables~:
+
+\begin{enumerate}
+  \item Cookie \verb|SameSite=Lax| (d\'efaut des navigateurs modernes)~: bloque la plupart des cas.
+  \item V\'erifier l'\verb|Origin|/\verb|Referer| de la requ\^ete mutante~: peu co\^uteux, tr\`es efficace.
+  \item Jeton CSRF~: une valeur secr\`ete al\'eatoire par session, renvoy\'ee dans le formulaire ou
+        un en-t\^ete \verb|X-CSRF-Token|, recontr\^ol\'ee c\^ot\'e serveur pour toute m\'ethode
+        non s\^ure (POST/PUT/PATCH/DELETE).
+\end{enumerate}
+
+\begin{codejs}
+// Generation (cote serveur) puis controle. Le jeton est lie a la session, pas au navigateur.
+import { randomBytes, timingSafeEqual } from "node:crypto";
+
+function nouveauJeton(req) {
+  req.session.csrf ??= randomBytes(32).toString("base64url");
+  return req.session.csrf;
+}
+function verifierJeton(req) {
+  const recu = req.get("x-csrf-token") ?? req.body?._csrf;
+  const attendu = req.session?.csrf;
+  if (!attendu || !recu) return false;
+  const a = Buffer.from(recu), b = Buffer.from(attendu);
+  return a.length === b.length && timingSafeEqual(a, b);       // comparaison temps constant
+}
+app.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  if (!verifierJeton(req)) return res.status(403).json({ erreur: "jeton CSRF manquant ou invalide" });
+  next();
+});
+\end{codejs}
+
+\section{Injection---le classique qui n'a pas vieilli}
+
+\begin{codesql}
+-- Ce que produit une concatenation naive :
+SELECT * FROM users WHERE nom = '' OR '1'='1' -- '   -> TOUS les utilisateurs
+-- En PHP comme en Node comme en Java : REQUETE PREPAREE, TOUJOURS.
+\end{codesql}
+
+\begin{codejs}
+// Node + Postgres : les placeholders font le travail
+const { rows } = await pool.query("SELECT * FROM articles WHERE slug = $1 AND publie = true", [slug]);
+
+// Morceau de requete dynamique (tri, colonnes) : les placeholders ne suffisent pas.
+// On ne fait jamais confiance a la chaine : on la CONFRONTE a une liste blanche.
+const COLONNES = { recent: "cree_le", prix: "prix", nom: "nom" };
+const ordre = COLONNES[req.query.tri] ?? "cree_le";
+const sens = String(req.query.ordre).toLowerCase() === "asc" ? "ASC" : "DESC";
+await pool.query(`SELECT * FROM articles ORDER BY ${ordre} ${sens} LIMIT $1 OFFSET $2`, [taille, decale]);
+\end{codejs}
+
+Le m\^eme principe prot\`ege des injections dans un shell~: ne jamais construire une commande avec
+de la concat\'enation~; passe un \emph{tableau d'arguments} (\verb|execFile("git", [args])|,
+\verb|execFile| et non \verb|exec|). Et pour les noms de fichiers~: \verb|path.resolve| puis
+v\'erifier que le r\'esultat commence par le dossier autoris\'e.
+
+\section{IDOR, autorisation, et le pi\`ege du \og ~c'est mon id~ \fg{}}
+
+\begin{codejs}
+// VULNERABLE : l'identifiant fourni par le client designe la ressource, sans controle
+app.get("/api/factures/:id", async (req, res) => res.json(await facture(req.params.id)));
+// -> n'importe qui remplace :id par celui du voisin.
+
+// CORRECT : la requete est FILTREE par le proprietaire authentifie
+app.get("/api/factures/:id", async (req, res) => {
+  const f = await facturePour(req.user.id, req.params.id);   // WHERE id = $1 AND utilisateur_id = $2
+  if (!f) return res.status(404).json({ erreur: "introuvable" });   // pas 403 : ne pas fuiter l'existence
+  res.json(f);
+});
+
+// Autorisation centralisee, pas diss\'eminee dans les controleurs
+const politiques = {
+  "article:lire": (u, a) => a.publie || u.id === a.auteurId || u.roles.includes("editeur"),
+  "article:ecrire": (u, a) => u.id === a.auteurId || u.roles.includes("editeur"),
+  "compte:modifier": (u) => true,
+};
+export function autoriser(u, action, ressource) {
+  const p = politiques[action];
+  if (!p) throw new Error(`action inconnue : ${action}`);
+  return Boolean(p(u, ressource));
+}
+\end{codejs}
+
+\section{Mots de passe, sessions, jetons}
+
+\begin{codejs}
+// Hachage : argon2id (le meilleur) ou bcrypt (le plus courant). Jamais sha256(mdpmot + sel).
+import argon2 from "argon2";
+const hash = await argon2.hash(mdp, { type: argon2.argon2id, memoryCost: 19_456, timeCost: 2, parallelism: 1 });
+await argon2.verify(hash, mdpSoumis);        // temps constant, sel int\'egr\'e
+
+// Politique raisonnable (NIST SP 800-63B) : longueur >= 12, pas de composition absurde,
+// comparaison aux mots de passe fuit\'es, pas de date d'expiration arbitraire.
+import { createHash } from "node:crypto";
+const hain = createHash("sha1").update(mdp).digest("hex");
+const [prefixe, ...reste] = [hain.slice(0, 5), hain.slice(5)];
+const rep = await fetch(`https://api.pwnedpasswords.com/range/${prefixe}`);
+if ((await rep.text()).split("\n").some((l) => l.startsWith(reste.join("")))) {
+  throw new Error("Ce mot de passe figure dans des fuites connues : choisis-en un autre");
+}
+
+// Reinitialisation : jeton a usage unique, aleatoire, court (15 min), stocke HACHE en base,
+// envoye par email, invalide la session precedente, et reponse identique que l'email existe ou non.
+\end{codejs}
+
+\begin{tabz}{lX}
+  \headrow \thd{Sujet} \& \thd{R\'eglage s\^ur} \\
+  \midrule
+  Cookie de session \& \verb|HttpOnly; Secure; SameSite=Lax; Path=/|, expiration 30 min -- 12 h. \\
+  Rotation \& r\'eg\'en\'erer l'identifiant de session \`a la connexion et \`a l'\'el\'evation de privil\`ege. \\
+  D\'econnexion \& invalider c\^ot\'e serveur (pas seulement effacer le cookie). \\
+  \og ~Rester connect\'e~ \fg{} \& cookie longue dur\'ee avec un jeton \emph{stock\'e c\^ot\'e serveur}, r\'eversible. \\
+  JWT \& courte dur\'ee (5--15 min), \verb|alg| \'epingl\'e (refuser \verb|none|), pas de donn\'ees sensibles, r\'evocation par liste ou refresh en cookie. \\
+  Cl\'e API \& port\'ee minimale, rotation, jamais dans le code ni dans un bundle. \\
+  CSRF \& jeton ou \verb|SameSite| + v\'erification d'\verb|Origin|. \\
+  2FA \& TOTP \link{otplib}{https://github.com/yeqown/otplib} ou WebAuthn (bien meilleur) --- \url{https://webauthn.guide/} \\
+\end{tabz}
+
+\section{En-t\^etes de base, \`a poser partout}
+
+\begin{codeconf}
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY                     (redondant avec frame-ancestors 'none', encore utile)
+Referrer-Policy: strict-origin-when-cross-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+Content-Security-Policy: (voir plus haut)
+Server: (retirer ou rendre vague)
+X-Powered-By: (retirer)
+\end{codeconf}
+
+\section{Upload, liens, et les petits d\'etails qui tuent}
+
+\begin{itemize}
+  \item \textbf{Upload}~: limite la taille, liste blanche d'\emph{extensions ET} de types MIME
+        (v\'erifi\'es par analyse du contenu, pas par le nom), stocke hors racine web avec un nom
+        g\'en\'er\'e, sert avec \verb|content-disposition: attachment| pour le HTML/svg, et jamais
+        ex\'ecutable. Un \verb|.svg| peut contenir un \verb|<script>|~; un \verb|.php.jpg| peut
+        tromper une v\'erification na\"ive.
+  \item \textbf{Redirections ouvertes}~: \verb|?next=//evil.com|~: n'accepte que des chemins
+        relatifs ou une liste blanche d'h\^otes.
+  \item \textbf{Regex et ReDoS}~: limite la longueur avant de matcher.
+  \item \textbf{D\'eni de service par requ\^ete co\^uteuse}~: paginer obligatoirement, limiter la
+        taille des listes, mettre un cache.
+  \item \textbf{Logs}~: ne jamais journaliser mot de passe, jeton, cookie, carte, document
+        d'identit\'e. Masque et tronque.
+  \item \textbf{Erreurs}~: en production, aucune stack trace, aucun SQL, aucun chemin de fichier
+        au visiteur. (Les logs c\^ot\'e serveur, eux, gardent tout.)
+  \item \textbf{D\'ependances}~: \verb|npm audit|, \link{Socket}{https://socket.dev/},
+        lockfile verrouill\'e, \link{Renovate}{https://github.com/renovatebot/renovate} ou
+        Dependabot pour les mises \`a jour automatiques.
+\end{itemize}
+
+\begin{terminal}
+# Auto-\'evaluation d'un site que TU poss\`edes (ou un localhost que tu montes)
+npx @lhce/lighthouse-cli --only-categories=security http://localhost:4173
+npm i -D zap-baseline && npx zap-baseline.py -t http://localhost:3000 -r rapport.html
+# ZAP (benchmarks OWASP) : https://www.zaproxy.org/   ---   Nuclei : https://github.com/projectdiscovery/nuclei
+# Test manuel des en-tetes : https://securityheaders.com/  (public)
+\end{terminal}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Fais tomber toi-m\^eme ton application de la semaine pr\'ec\'edente~: XSS stock\'e dans un
+        commentaire, XSS par URL dans un lien, redirection ouverte, IDOR sur les factures,
+        CSRF sur le changement d'email. \emph{Note l'exploit exact}, puis corrige-le, puis
+        rejoue-le pour v\'erifier.
+  \item Ajoute une CSP fonctionnelle en mode \verb|Content-Security-Policy-Report-Only|,
+        corrige toutes les violations remont\'ees, puis active-la vraiment.
+  \item \'Ecris un test automatis\'e pour chaque faille corrig\'ee (un test = une vuln\'erabilit\'e
+        referm\'ee pour toujours).
+  \item Audite ton \verb|package.json|~: nombre de d\'ependances transitives, licences, \^age des
+        versions, paquets inutilis\'es~; remplace ce qui doit l'\^etre.
+  \item Rends ta page d'authentification conforme~: cookie \verb|HttpOnly|, rotation de session,
+        limitation de d\'ebit (5 essais/minute/IP), message identique que l'email existe ou non.
+  \item Lis le OWASP Top~10 en une heure et, pour chaque point, \'ecris une ligne sur la fa\c{c}on
+        dont ton projet actuel s'en prot\`ege ou ne s'en prot\`ege pas.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item OWASP Top~10 (la r\'ef\'erence) --- \url{https://owasp.org/Top10/fr/}
+  \item OWASP Cheat Sheet Series (fiches courtes et pr\'ecises) --- \url{https://cheatsheetseries.owasp.org/}
+  \item MDN S\'ecurit\'e web --- \url{https://developer.mozilla.org/fr/docs/Web/Security}
+  \item PortSwigger Web Security Academy (gratuit, exercices interactifs, le meilleur cours pratique) --- \url{https://portswigger.net/web-security}
+  \item OWASP ZAP --- \url{https://www.zaproxy.org/} --- securityheaders.com
+  \item \url{https://haveibeenpwned.com/} --- v\'erifier une fuite de son propre email.
+\end{itemize}
+\end{ressources}
+
+\index{securite}\index{XSS}\index{CSRF}\index{CSP}
