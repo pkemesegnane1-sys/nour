@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Asynchrone : boucle d'\'ev\'enements, promesses, \texttt{async/await}}
-\label{ch:js-async}
+\label{ch-js-async}
 % ============================================================================
 
 \begin{objectif}
@@ -47,7 +47,7 @@ f();
 \begin{note}
 \og ~JS est mono-thread donc il ne peut pas faire de calcul~ \fg{} est faux pour les calculs lourds~:
 on les d\'eplace dans un \textbf{Web Worker} (navigueur) ou un \textbf{worker thread} (Node),
-et on communique par messages. Voir \cref{sec:workers}.
+et on communique par messages. Voir \cref{sec-workers}.
 \end{note}
 
 \section{Rappels --- et pourquoi on les a quitt\'es}
@@ -326,8 +326,8 @@ console.log("G");
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\\_Objects/Promise}
-  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML\\\\\\_DOM\\\\\\_API/Microtask\\\\\\_guide}
+  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Promise}
+  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide}
   \item Visualiseur interactif de la boucle d'\'ev\'enements --- \url{https://www.jsv9000.app/}
   \item Node --- Streams --- \url{https://nodejs.org/api/stream.html}
   \item Jake Archibald --- \emph{In The Loop} (la r\'ef\'erence sur l'ordre d'ex\'ecution) --- \url{https://jakearchibald.com/2015/events-based-runtimes/}

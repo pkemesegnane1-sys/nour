@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Fichiers, flux, dates et internationalisation}
-\label{ch:java-io}
+\label{ch-java-io}
 % ============================================================================
 
 \begin{objectif}
@@ -202,7 +202,7 @@ msg.format(new Object[]{"Nour", 3});
 ResourceBundle rb = ResourceBundle.getBundle("messages", francais);
 String bienvenue = rb.getString("titre");
 // La pratique moderne : les fichiers .properties encodes en UTF-8, ou un fichier unique JSON/YAML
-// charge a la main ; et java.text/icu4j (IBM) pour les besoins serieux.
+// charge a la main ; et java.text/icu4j (IBM) pour les besoins s\'erieux.
 var icu = com.ibm.icu.text.RuleBasedNumberFormat(Locale.FRENCH, com.ibm.icu.text.RuleBasedNumberFormat.SPELLOUT);
 icu.format(42);                                              // "quarante-deux" (bibliotheque externe)
 \end{codejava}

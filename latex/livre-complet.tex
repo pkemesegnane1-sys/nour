@@ -27,7 +27,9 @@
 \usepackage{microtype}
 
 % ------------------------------ Polices -----------------------------------
-\usepackage[default]{libertine}
+\usepackage{libertine}
+\usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage[scaled=0.92]{inconsolata}
 
 % ------------------------------ Liens / navigation ------------------------
@@ -47,12 +49,16 @@
 
 % ------------------------------ Tableurs / listes -------------------------
 \usepackage{graphicx}
-\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{longtable}
-\usepackage{tabularx}
-\usepackage{ltablex}
 \usepackage{array}
+% X = colonne a largeur fixe (tabularx/ltablex sont abandonnes :
+% leur re-mesure du corps cassait \verb a l'interieur des cellules)
+\newcolumntype{X}{>{\raggedright\arraybackslash}p{0.30\textwidth}}
+% tabularx n'est plus charge : on le remappe proprement sur longtable
+\newenvironment{tabularx}[2][\textwidth]{\rowcolors{2}{white}{tralight}\small
+  \setlength{\tabcolsep}{5pt}\begin{longtable}{#2}}
+  {\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
 \usepackage{enumitem}
 \setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.5em}
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
@@ -98,11 +104,15 @@
   showstringspaces=false,
   tabsize=2,
   numbers=none,
-  frame=none,
-  xleftmargin=0pt,
-  xrightmargin=0pt,
-  aboveskip=2pt,
-  belowskip=2pt,
+  frame=single,
+  rulecolor=\color{codeframe},
+  framerule=0.4pt,
+  framesep=4pt,
+  backgroundcolor=\color{codebg},
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=6pt,
   commentstyle=\color{codecom},
   keywordstyle=\color{codekw}\bfseries,
   stringstyle=\color{codestr},
@@ -123,30 +133,25 @@
 % ------------------------------ Boites (tcolorbox) -------------------------
 \usepackage[most]{tcolorbox}
 
-\tcbset{
-  codestyle/.style={
-    enhanced, breakable, colback=codebg, colframe=codeframe,
-    boxrule=0.4pt, arc=1.5mm, left=2mm,right=2mm,top=1.6mm,bottom=1.6mm,
-    boxsep=0pt, listing only
-  }
-}
+% (l'ancienne cle "codestyle" avec "listing only" est supprimee : c'est le
+% mecanisme de fichier temporaire output.listing qui faisait planter la
+% compilation, et il n'est plus necessaire)
 
-\newtcblisting{codejs}{listing options={style=jscode},codestyle}
-\newtcblisting{codephp}{listing options={style=phpcode},codestyle}
-\newtcblisting{codejava}{listing options={style=javacode},codestyle}
-\newtcblisting{codesql}{listing options={style=sqlcode},codestyle}
-\newtcblisting{codeconf}{listing options={style=confcode},codestyle}
-\newtcblisting{codejson}{listing options={style=jsoncode},codestyle}
-\newtcblisting{codeyml}{listing options={style=ymlcode},codestyle}
-\newtcblisting{codeplain}{listing options={style=base},codestyle}
-
-\newtcblisting{terminal}{
-  enhanced, breakable, colback=ctermbg, colframe=ctermbg,
-  arc=1.5mm, boxrule=0pt, left=2.5mm,right=2mm,top=1.8mm,bottom=1.8mm,
-  boxsep=0pt, listing only,
-  listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},
-    keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
-}
+% Chaque bloc de code = un environnement listings autonome (il casse les
+% lignes tout seul, se coupe proprement en fin de page, et ne cree aucun
+% fichier temporaire).
+\lstnewenvironment{codejs}{\lstset{style=jscode}}{}
+\lstnewenvironment{codephp}{\lstset{style=phpcode}}{}
+\lstnewenvironment{codejava}{\lstset{style=javacode}}{}
+\lstnewenvironment{codesql}{\lstset{style=sqlcode}}{}
+\lstnewenvironment{codeconf}{\lstset{style=confcode}}{}
+\lstnewenvironment{codejson}{\lstset{style=jsoncode}}{}
+\lstnewenvironment{codeyml}{\lstset{style=ymlcode}}{}
+\lstnewenvironment{codeplain}{\lstset{style=base}}{}
+\lstnewenvironment{terminal}{\lstset{style=shellcode,frame=single,
+  rulecolor=\color{ctermbg},backgroundcolor=\color{ctermbg},
+  basicstyle=\ttfamily\small\color{ctermfg},
+  keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}}}{}
 
 \newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
   arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
@@ -187,7 +192,8 @@
 % ------------------------------ Macros pratiques ---------------------------
 \newcommand{\fichier}[1]{\texttt{\color{pathgreen}#1}}
 \newcommand{\rep}[1]{\texttt{\color{pathgreen}#1/}}
-\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
+\providecommand{\cmd}[1]{}%
+\renewcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
 \newcommand{\link}[2]{\href{#2}{#1}}
 \newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[src]}}}}
 \newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
@@ -196,11 +202,11 @@
 \newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large #1}\par\smallskip}
 \DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{#1}}}
 
-% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees
+% tableaux zebras : tabz = longtable (largeurs fixes) + lignes alternees
 \newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}%
-  \small\setlength{\tabcolsep}{5pt}%
-  \begin{tabularx}{\textwidth}{@{}#1@{}}\toprule}
-  {\bottomrule\end{tabularx}}
+  \small\setlength{\tabcolsep}{5pt}\setlength{\LTpre}{3pt}\setlength{\LTpost}{3pt}%
+  \begin{longtable}{@{}#1@{}}\toprule}
+  {\bottomrule\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
 \newcommand{\thd}[1]{\textbf{\color{white}#1}}
 \newcommand{\headrow}{\rowcolor{theadbg}}
 \makeatletter
@@ -239,10 +245,10 @@
   \vfill
   {\footnotesize Version du \today}
 \end{titlepage}
-
+%%>> 000-comment-utiliser.tex %%>>
 % ============================================================================
 \chapter{Comment utiliser ce manuel}
-\label{ch:comment}
+\label{ch-comment}
 % ============================================================================
 
 Ce livre a un objectif unique : te faire passer de \og je n'ai jamais \^ecrit une ligne de
@@ -270,27 +276,23 @@ tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e 
 
 \section{La convention typographique}
 
-\begin{tabz}
+\begin{tabz}{p{0.34\textwidth}X}
   \headrow \thd{\'El\'ement} \& \thd{Signification} \\
   \midrule
-  \verb|code\_en\_police\_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
+  \verb|code_en_police_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
   \cmd{npm install} \& Commande \`a taper dans un terminal.\\
   \fichier{src/app.js} \& Chemin de fichier, relatif \`a la racine de ton projet.\\
   \keys{Ctrl + S} \& Raccourci clavier.\\
-  \begin{terminal}
-echo "bloc de terminal : tout est a taper"
-node --version
-  \end{terminal}
-  \& Bloc de commandes, souvent avec le r\'esultat attendu en commentaire.\\
-  \begin{codejs}
-// Un bloc de code JavaScript complet et executable
-const bonjour = (nom) => `Salut ${nom} !`;
-console.log(bonjour("Nour"));
-  \end{codejs}
-  \& Code \`a recopier. Tout ce qui est affich\'e est r\'eel et fonctionnel.\\
+  \verb|console.log(1)| \& Dans un bloc \texttt{codejs}, \texttt{terminal}\dots : tout le code
+  affich\'e est r\'eel et fonctionnel, \`a recopier tel quel.\\
   \src{https://developer.mozilla.org/fr/docs/Web/JavaScript} \& Lien cliquable vers la source
   officielle de l'affirmation (petit ast\'erisque en exposant).\\
 \end{tabz}
+
+Deux types de blocs reviennent partout : \verb|terminal| (les commandes \`a taper, avec le
+r\'esultat attendu en commentaire) et les blocs de code \verb|codejs|, \verb|codephp|,
+\verb|codejava|, \verb|codesql|, \verb|codeconf|, \verb|codejson|, \verb|codeyml|,
+\verb|codeplain| (du code complet, \`a recopier puis \`a ex\'ecuter).
 
 \subsection{Les encadr\'es}
 
@@ -344,7 +346,7 @@ et c'est celle qui te rendra autonome.
 \section{Ordre de lecture conseill\'e}
 
 \begin{enumerate}
-  \item \Cref{ch:environnement} et \cref{ch:git} --- installation des outils, terminal, Git.
+  \item \Cref{ch-environnement} et \cref{ch-git} --- installation des outils, terminal, Git.
         \textbf{Non n\'egociable}, m\^eme si tu "~sais d\'eja faire~".
   \item \textbf{Partie I --- JavaScript}. C'est le langage qui donne un r\'esultat visible
         imm\'ediatement (une page web), donc la motivation ne retombe pas. Il couvre aussi la
@@ -436,7 +438,7 @@ php --version     # attendu : PHP 8.3.x ou 8.4.x
 java -version     # attendu : openjdk 21.x
 \end{terminal}
 
-Sinon, pas de panique~: \cref{ch:environnement} installe tout, ligne par ligne, pour
+Sinon, pas de panique~: \cref{ch-environnement} installe tout, ligne par ligne, pour
 Linux, macOS et Windows.
 
 \begin{center}
@@ -445,7 +447,7 @@ Pr\^et ? Le chapitre suivant commence par installer ta bo\^ite \`a outils.
 \end{center}
 
 \index{conventions}\index{methode de travail}
-
+%%<<
 \tableofcontents
 
 \begin{center}
@@ -458,9 +460,10 @@ Pr\^et ? Le chapitre suivant commence par installer ta bo\^ite \`a outils.
 \end{center}
 
 \mainmatter
+%%>> 101-environnement.tex %%>>
 % ============================================================================
 \chapter{Installer ton environnement de travail}
-\label{ch:environnement}
+\label{ch-environnement}
 % ============================================================================
 
 \begin{objectif}
@@ -528,7 +531,7 @@ C'est la plateforme la plus confortable pour ce livre : tout est \`a un \cmd{apt
 \etape{Node.js via nvm (la bonne m\'ethode)}
 Ne jamais installer Node avec \cmd{apt} : la version du d\'ep\^ot est vieille de plusieurs ann\'ees.
 On utilise \textbf{nvm} (Node Version Manager), qui permet d'installer, changer et r\'eparer
-de versions en une commande.\src{https://github.com/nvm-sh/nvm\#installing-and-updating}
+de versions en une commande.\src{https://github.com/nvm-sh/nvm#installing-and-updating}
 
 \begin{terminal}
 # installer nvm (la commande officielle, verifie la version sur le depot)
@@ -858,7 +861,7 @@ sqlite3 --version ; mysql --version ; psql --version
 
 Si \cmd{mvn} ou \cmd{gradle} manquent~: \cmd{sudo apt install maven} et \cmd{brew install maven},
 ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque projet
-(voir \cref{ch:java-build}).
+(voir \cref{ch-java-build}).
 
 \section{R\'eparation express}
 
@@ -894,7 +897,7 @@ ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque proje
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools\\\\\\_and\\\\\\_testing/Understanding\\\\\\_client-side\\\\\\_tools/Overview\#installing\\\\\\_node.js}
+  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Overview#installing_node.js}
   \item PHP --- \emph{Installation}~: \url{https://www.php.net/manual/en/install.php}
   \item OpenJDK --- \url{https://openjdk.org/install/} --- Adoptium Temurin~: \url{https://adoptium.net/fr/}
   \item Composer --- \url{https://getcomposer.org/download/}
@@ -904,9 +907,11 @@ ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque proje
 \end{ressources}
 
 \index{installation}\index{outils}\index{VS Code}
+%%<<
+%%>> 102-git-terminal.tex %%>>
 % ============================================================================
 \chapter{Terminal, Git, et bonnes habitudes de fichiers}
-\label{ch:git}
+\label{ch-git}
 % ============================================================================
 
 \begin{objectif}
@@ -1002,7 +1007,7 @@ Fichiers de configuration du shell (\`a \'editer une fois, puis \cmd{source})~:
 \begin{tabz}{llX}
   \headrow \thd{Shell} \& \thd{Fichier} \& \thd{Quand} \\
   \midrule
-  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\\\\\\\_profile} \& interactif / connexion \\
+  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\_profile} \& interactif / connexion \\
   zsh (macOS par d\'efaut) \& \fichier{\textasciitilde/.zshrc} \& les deux \\
   fish \& \fichier{\textasciitilde/.config/fish/config.fish} \& syntaxe diff\'erente, tr\`es convivial \\
   PowerShell \& \cmd{Notepad $PROFILE} \& Windows \\
@@ -1010,7 +1015,7 @@ Fichiers de configuration du shell (\`a \'editer une fois, puis \cmd{source})~:
 
 Les variables d'environnement d'\textbf{un projet} ne vont pas dans le shell mais dans un
 fichier \fichier{.env}, jamais versionn\'e, accompagn\'e d'un \fichier{.env.example} versionn\'e, lui.
-C'est le contrat standard en Node comme en PHP~; voir \cref{sec:dotenv,ch:php-bases}.
+C'est le contrat standard en Node comme en PHP~; voir \cref{sec-dotenv,ch-php-bases}.
 
 \subsection{Les shells qui changent la vie}
 
@@ -1138,7 +1143,7 @@ gh issue list --state open
   \item \link{Discussions}{https://docs.github.com/en/discussions} et
         \link{Pages}{https://pages.github.com/} pour h\'eberger un site statique gratuit.
   \item \link{Actions}{https://github.com/features/actions} pour l'int\'egration continue
-        (exemple complet en \cref{sec:ci-cd}).
+        (exemple complet en \cref{sec-ci-cd}).
   \item \link{Copilot}{https://github.com/features/copilot} gratuit pour les \'etudiants et
         les maintainers de projets open source populaires.
 \end{itemize}
@@ -1203,16 +1208,18 @@ pas seulement le r\'esultat.
 \begin{itemize}
   \item Pro Git (livre complet, gratuit, en fran\c{c}ais) --- \url{https://git-scm.com/book/fr/v2}
   \item GitHub Skills (cours officiels gratuits) --- \url{https://skills.github.com/}
-  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr\\\\\\_FR}
+  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr_FR}
   \item The Missing Semester (MIT) --- \url{https://missing.csail.mit.edu/2020/course-material/}
   \item Shellcheck (analyse tes scripts bash) --- \url{https://www.shellcheck.net/}
 \end{itemize}
 \end{ressources}
 
 \index{terminal}\index{git}\index{PATH}
+%%<<
+%%>> 103-methode.tex %%>>
 % ============================================================================
 \chapter{M\'ethode d'apprentissage et plan de 12 semaines}
-\label{ch:methode}
+\label{ch-methode}
 % ============================================================================
 
 Savoir quoi apprendre ne suffit pas~: il faut un rythme, une fa\c{c}on de stocker l'information
@@ -1256,7 +1263,7 @@ Si tu n'as que 25 minutes~: fais le bloc \og ~Code~ \fg{}. Jamais le bloc \og ~L
 Cr\'ee \fichier{carnet.md} dans chaque projet et note~: \emph{texte exact de l'erreur},
 \emph{contexte}, \emph{cause r\'eelle}, \emph{correction}, \emph{date}. En six mois tu auras un
 manuel de d\'epannage personnel qui vaut plus que n'importe quel tuto. Les annexes
-(\cref{ch:antisecche}) en sont une version g\'en\'erique~: tiens la tienne \`a jour.
+(\cref{ch-antisecche}) en sont une version g\'en\'erique~: tiens la tienne \`a jour.
 
 \begin{codeconf}
 ## 2026-01-14 - PHP - 500 blank page
@@ -1274,18 +1281,18 @@ une course, c'est un ordre.
 \begin{tabz}{llX}
   \headrow \thd{Semaine} \& \thd{Objet} \& \thd{Livrable concret \`a la fin de la semaine} \\
   \midrule
-  1 \& Outils, bases JS (\cref{ch:js-bases}) \& 30 petits scripts dans \verb|labo/js|, dont FizzBuzz, tri, palindrome. \\
-  2 \& Objets, tableaux, cha\^ines, regex (\cref{ch:js-struct}) \& Un analyseur de texte (nombre de mots, mots les plus fr\'equents). \\
-  3 \& S\'emantique avanc\'ee (\cref{ch:js-avance}) \& Un mini-syst\`eme d'\'ev\'enements \'ecrit \`a la main (20 lignes). \\
-  4 \& Asynchrone (\cref{ch:js-async}) \& Un script qui t\'el\'echarge 20 pages web en parall\`ele avec limitation de concurrence. \\
-  5 \& DOM et \'ev\'enements (\cref{ch:js-dom,ch:js-events}) \& Une page \og ~liste de courses~ \fg{} sans framework, avec filtre et tri. \\
-  6 \& Fetch, formulaires, stockage (\cref{ch:js-dom,ch:js-storage}) \& La m\^eme liste, persist\'ee en LocalStorage + API externe. \\
-  7 \& Node.js, modules, npm, CLI (\cref{ch:node,ch:js-outils}) \& Un outil de ligne de commande qui renomme en lot les fichiers d'un dossier. \\
-  8 \& TypeScript + tests + s\'ecurit\'e (\cref{ch:js-ts,ch:js-tests,ch:js-secu}) \& Le projet de la semaine~6 typ\'e, test\'e \`a 80 \%, sans XSS. \\
-  9 \& PHP bases, OOP, formulaires (\cref{ch:php-bases,ch:php-oop,ch:php-http}) \& Un mini-CRUD sur fichier JSON, puis sur MySQL. \\
-  10 \& PDO, sessions, auth, s\'ecurit\'e PHP (\cref{ch:php-db,ch:php-http,ch:php-secu}) \& Un blog complet avec inscriptions, r\^oles, upload d'images s\'ecuris\'e. \\
-  11 \& Java bases, OOP, collections, exceptions (\cref{ch:java-bases,ch:java-oop,ch:java-collections,ch:java-collections}) \& Un gestionnaire de biblioth\`eque console avec tests JUnit. \\
-  12 \& Streams, JDBC, Spring Boot, d\'eploiement (\cref{ch:java-fonctionnel,ch:java-db,ch:java-spring,ch:deploy}) \& Une API REST Spring Boot connect\'ee \`a PostgreSQL, d\'eploy\'ee sur un VPS. \\
+  1 \& Outils, bases JS (\cref{ch-js-bases}) \& 30 petits scripts dans \verb|labo/js|, dont FizzBuzz, tri, palindrome. \\
+  2 \& Objets, tableaux, cha\^ines, regex (\cref{ch-js-struct}) \& Un analyseur de texte (nombre de mots, mots les plus fr\'equents). \\
+  3 \& S\'emantique avanc\'ee (\cref{ch-js-avance}) \& Un mini-syst\`eme d'\'ev\'enements \'ecrit \`a la main (20 lignes). \\
+  4 \& Asynchrone (\cref{ch-js-async}) \& Un script qui t\'el\'echarge 20 pages web en parall\`ele avec limitation de concurrence. \\
+  5 \& DOM et \'ev\'enements (\cref{ch-js-dom,ch-js-events}) \& Une page \og ~liste de courses~ \fg{} sans framework, avec filtre et tri. \\
+  6 \& Fetch, formulaires, stockage (\cref{ch-js-dom,ch-js-storage}) \& La m\^eme liste, persist\'ee en LocalStorage + API externe. \\
+  7 \& Node.js, modules, npm, CLI (\cref{ch-node,ch-js-outils}) \& Un outil de ligne de commande qui renomme en lot les fichiers d'un dossier. \\
+  8 \& TypeScript + tests + s\'ecurit\'e (\cref{ch-js-ts,ch-js-tests,ch-js-secu}) \& Le projet de la semaine~6 typ\'e, test\'e \`a 80 \%, sans XSS. \\
+  9 \& PHP bases, OOP, formulaires (\cref{ch-php-bases,ch-php-oop,ch-php-http}) \& Un mini-CRUD sur fichier JSON, puis sur MySQL. \\
+  10 \& PDO, sessions, auth, s\'ecurit\'e PHP (\cref{ch-php-db,ch-php-http,ch-php-secu}) \& Un blog complet avec inscriptions, r\^oles, upload d'images s\'ecuris\'e. \\
+  11 \& Java bases, OOP, collections, exceptions (\cref{ch-java-bases,ch-java-oop,ch-java-collections,ch-java-collections}) \& Un gestionnaire de biblioth\`eque console avec tests JUnit. \\
+  12 \& Streams, JDBC, Spring Boot, d\'eploiement (\cref{ch-java-fonctionnel,ch-java-db,ch-java-spring,ch-deploy}) \& Une API REST Spring Boot connect\'ee \`a PostgreSQL, d\'eploy\'ee sur un VPS. \\
 \end{tabz}
 
 \section{Utiliser l'IA sans s'handicaper}
@@ -1365,11 +1372,12 @@ Tu peux les scanner une par une~: elles couvrent environ 80 \% des blocages de d
 \end{ressources}
 
 \index{methode}\index{plan d'etudes}
-
+%%<<
 \part{JavaScript : le langage du web et des serveurs}
+%%>> 201-js-bases.tex %%>>
 % ============================================================================
 \chapter{Les bases de JavaScript}
-\label{ch:js-bases}
+\label{ch-js-bases}
 % ============================================================================
 
 \begin{objectif}
@@ -1739,9 +1747,11 @@ valent cent traces.
 \end{ressources}
 
 \index{JavaScript!bases}\index{variables}\index{closure}
+%%<<
+%%>> 202-js-objets-tableaux.tex %%>>
 % ============================================================================
 \chapter{Objets, tableaux et cha\^ines de caract\`eres}
-\label{ch:js-struct}
+\label{ch-js-struct}
 % ============================================================================
 
 \begin{objectif}
@@ -2139,7 +2149,7 @@ afficher(p);
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\\_Objects/Array}
+  \item MDN --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Array}
   \item Tableau comparatif des m\'ethodes de tableaux --- \url{https://javascript.info/array-methods}
   \item Constructeur et visualiseur de regex --- \url{https://regex101.com/} et \url{https://regexper.com/}
   \item \verb|lodash| (\`a lire pour les noms de m\'ethodes, pas pour d\'ependre de lui) --- \url{https://lodash.com/docs/}
@@ -2148,9 +2158,11 @@ afficher(p);
 \end{ressources}
 
 \index{JavaScript!objets}\index{JavaScript!tableaux}\index{expressions regulieres}
+%%<<
+%%>> 203-js-semantique.tex %%>>
 % ============================================================================
 \chapter{S\'emantique avanc\'ee : prototypes, \texttt{this}, classes, Proxy}
-\label{ch:js-avance}
+\label{ch-js-avance}
 % ============================================================================
 
 \begin{objectif}
@@ -2458,18 +2470,20 @@ cop.liste.push(3);                  // src.liste vaut [1,2,3] !
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- Heritage et prototypes --- \url{https://developer.mozilla.org/fr/docs/Learn/JavaScript/Objects/Object\\\\\_prototypes}
+  \item MDN --- Heritage et prototypes --- \url{https://developer.mozilla.org/fr/docs/Learn/JavaScript/Objects/Object_prototypes}
   \item MDN --- Classes --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Classes}
-  \item MDN --- Proxy / Reflect --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\_Objects/Proxy}
+  \item MDN --- Proxy / Reflect --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Proxy}
   \item JavaScript.info --- \url{https://javascript.info/prototype-inheritance} (chapitres 8 et 21)
   \item \emph{Prototype pollution} (article de r\'ef\'erence) --- \url{https://medium.com/intrinsic/attacking-javascripts-prototype-pollution-7d2b66d64790}
 \end{itemize}
 \end{ressources}
 
 \index{JavaScript!prototypes}\index{this}\index{classes}\index{Proxy}
+%%<<
+%%>> 204-js-asynchrone.tex %%>>
 % ============================================================================
 \chapter{Asynchrone : boucle d'\'ev\'enements, promesses, \texttt{async/await}}
-\label{ch:js-async}
+\label{ch-js-async}
 % ============================================================================
 
 \begin{objectif}
@@ -2516,7 +2530,7 @@ f();
 \begin{note}
 \og ~JS est mono-thread donc il ne peut pas faire de calcul~ \fg{} est faux pour les calculs lourds~:
 on les d\'eplace dans un \textbf{Web Worker} (navigueur) ou un \textbf{worker thread} (Node),
-et on communique par messages. Voir \cref{sec:workers}.
+et on communique par messages. Voir \cref{sec-workers}.
 \end{note}
 
 \section{Rappels --- et pourquoi on les a quitt\'es}
@@ -2795,8 +2809,8 @@ console.log("G");
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global\\\\\\_Objects/Promise}
-  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML\\\\\\_DOM\\\\\\_API/Microtask\\\\\\_guide}
+  \item MDN --- Promises --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Promise}
+  \item MDN --- Event loop et microtasks --- \url{https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide}
   \item Visualiseur interactif de la boucle d'\'ev\'enements --- \url{https://www.jsv9000.app/}
   \item Node --- Streams --- \url{https://nodejs.org/api/stream.html}
   \item Jake Archibald --- \emph{In The Loop} (la r\'ef\'erence sur l'ordre d'ex\'ecution) --- \url{https://jakearchibald.com/2015/events-based-runtimes/}
@@ -2804,9 +2818,11 @@ console.log("G");
 \end{ressources}
 
 \index{JavaScript!asynchrone}\index{promesse}\index{async await}\index{event loop}
+%%<<
+%%>> 205-js-dom.tex %%>>
 % ============================================================================
 \chapter{Le navigateur : HTML, CSS et le DOM}
-\label{ch:js-dom}
+\label{ch-js-dom}
 % ============================================================================
 
 \begin{objectif}
@@ -3121,7 +3137,7 @@ function piegerFocus(conteneur) {
 
 \section{Mini-projet complet --- liste de courses persistante}
 
-Le fichier \fichier{app.js} branch\'e sur le HTML de la \cref{ch:js-dom}~; tout est comment\'e,
+Le fichier \fichier{app.js} branch\'e sur le HTML de la \cref{ch-js-dom}~; tout est comment\'e,
 et tu dois le retaper int\'egralement.
 
 \begin{codejs}
@@ -3221,7 +3237,7 @@ rendre();
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- R\'ef\'erence DOM --- \url{https://developer.mozilla.org/fr/docs/Web/API/Document\\\\\_Object\\\\\_Model}
+  \item MDN --- R\'ef\'erence DOM --- \url{https://developer.mozilla.org/fr/docs/Web/API/Document_Object_Model}
   \item web.dev Learn CSS / Learn Performance (Google, gratuit, excellent) --- \url{https://web.dev/learn/}
   \item Chrome DevTools, formation officielle --- \url{https://developer.chrome.com/docs/devtools/learn}
   \item Check-list d'accessibilit\'e --- \url{https://www.a11yproject.com/checklist/}
@@ -3230,9 +3246,11 @@ rendre();
 \end{ressources}
 
 \index{DOM}\index{navigateur}\index{accessibilite}
+%%<<
+%%>> 206-js-evenements.tex %%>>
 % ============================================================================
 \chapter{\'Ev\'enements, formulaires et interaction utilisateur}
-\label{ch:js-events}
+\label{ch-js-events}
 % ============================================================================
 
 \begin{objectif}
@@ -3712,9 +3730,11 @@ function infini(sentinelle, charger) {
 \end{ressources}
 
 \index{evenements}\index{formulaire}\index{validation}\index{accessibilite}
+%%<<
+%%>> 207-js-reseau.tex %%>>
 % ============================================================================
 \chapter{Communicuer avec le serveur : fetch, SSE, WebSockets, workers}
-\label{ch:js-reseau}
+\label{ch-js-reseau}
 % ============================================================================
 
 \begin{objectif}
@@ -3982,7 +4002,7 @@ C\^ot\'e serveur Node, la biblioth\`eque de r\'ef\'erence est
 \end{note}
 
 \section{Web Workers : le CPU en parall\`ele}
-\label{sec:workers}
+\label{sec-workers}
 
 Un worker est un fil JavaScript s\'epar\'e~: pas d'acc\`es au DOM, mais un CPU entier. On \'echange
 des messages (structur\'es, clonables) et des \emph{transferables} ( ArrayBuffer, sans copie).
@@ -4026,7 +4046,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 \begin{exercice}
 \begin{enumerate}
   \item Consomme une API publique r\'eelle --- \url{https://api.github.com/repos/vitejs/vite} ou
-        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\\\_2m}
+        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79&longitude=-16.67&current=temperature_2m}
         avec le mini-client~: affiche la temp\'erature de Thi\`es, g\`ere erreur r\'eseau et hors ligne.
   \item Ajoute un cache~: garde la derni\`ere r\'eponse dans \verb|sessionStorage| avec son \^age,
         affiche-la imm\'ediatement, puis rafra\^ichis en arri\`ere-plan (strat\'egie
@@ -4045,7 +4065,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\\\_API/Using\\\\\_Fetch}
+  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch_API/Using_Fetch}
   \item MDN --- CORS --- \url{https://developer.mozilla.org/fr/docs/Web/HTTP/Guides/CORS}
   \item \link{Async API tutorial (Node, SSE, WS)}{https://github.com/nodejs/node} --- docs \og ~http~ \fg{}
   \item \link{web.dev : patterns de reseau}{https://web.dev/patterns/}
@@ -4054,9 +4074,11 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 \end{ressources}
 
 \index{fetch}\index{CORS}\index{WebSocket}\index{worker}
+%%<<
+%%>> 208-js-modules.tex %%>>
 % ============================================================================
 \chapter{Modules, npm et outillage}
-\label{ch:js-modules}
+\label{ch-js-modules}
 % ============================================================================
 
 \begin{objectif}
@@ -4286,7 +4308,7 @@ dans \verb|scripts| vaut mieux qu'une usine \`a gaz.
         \cmd{npm run dev -- --port 4000} passe les arguments apr\`es \verb|--|.
   \item Node~20.6+ lit un fichier d'environnement tout seul~: \cmd{node --env-file=.env app.js},
         et \link{dotenv}{https://github.com/motdotla/dotenv} fait la m\^eme chose depuis plus longtemps.
-        \label{sec:dotenv}
+        \label{sec-dotenv}
 \end{itemize}
 
 \section{Choisir une d\'ependance (la check-list anti-regret)}
@@ -4317,7 +4339,7 @@ dans \verb|scripts| vaut mieux qu'une usine \`a gaz.
   \link{nanoid}{https://github.com/ai/nanoid} ou \verb|crypto.randomUUID()| \& identifiants. \\
   \link{picocolors}{https://github.com/alexeyraspopov/picocolors} \& couleurs en CLI, 2~Ko. \\
   \link{commander}{https://github.com/tj/commander.js} / \link{yargs}{https://yargs.js.org/} / \link{citty}{https://github.com/unjs/citty} \& cr\'eer un CLI. \\
-  \link{p-limit}{https://github.com/sindresorhus/p-limit} / \link{throat}{https://github.com/ForbesLindesay/throat} \& concurrence born\'ee (ou ta version maison, cf. \cref{ch:js-async}). \\
+  \link{p-limit}{https://github.com/sindresorhus/p-limit} / \link{throat}{https://github.com/ForbesLindesay/throat} \& concurrence born\'ee (ou ta version maison, cf. \cref{ch-js-async}). \\
   \link{fast-glob}{https://github.com/mrmlnc/fast-glob} \& recherche de fichiers par motif. \\
   \link{chalk}{https://github.com/chalk/chalk} \& sortie CLI styl\'ee. \\
   \link{vitest}{https://vitest.dev/} \& runner de test rapide, compatible Jest, int\'egr\'e \`a Vite. \\
@@ -4374,9 +4396,11 @@ avec \verb|NODE\_AUTH\_TOKEN| et un registre \link{GitHub Packages}{https://gith
 \end{ressources}
 
 \index{modules}\index{npm}\index{package.json}\index{semver}
+%%<<
+%%>> 209-js-node.tex %%>>
 % ============================================================================
 \chapter{Node.js : serveur, CLI, scripts d'automatisation}
-\label{ch:node}
+\label{ch-node}
 % ============================================================================
 
 \begin{objectif}
@@ -4599,7 +4623,7 @@ export function gestionErreur(err, req, res, _next) {
 \end{codejs}
 
 \subsection{Configuration par environnement~: la bonne habitude d\`es le premier jour}
-\label{sec:node-config}
+\label{sec-node-config}
 
 \begin{codejs}
 // src/config.js --- une seule porte d'entree, validee au demarrage
@@ -4637,7 +4661,7 @@ ou simplement le fichier d'environnement de systemd / de ton h\'ebergeur).
 \begin{itemize}
   \item \textbf{Cookies et sessions}~: \link{cookie-parser}{https://github.com/pillarjs/cookie-parser},
         \link{express-session}{https://github.com/expressjs/session} (ou des sessions sign\'ees sans
-        \'etat, cf. \cref{ch:js-secu}).
+        \'etat, cf. \cref{ch-js-secu}).
   \item \textbf{Upload}~: \link{multer}{https://github.com/expressjs/multer}, avec taille maximale,
         liste blanche de types et stockage hors de la racine web.
   \item \textbf{Limitation de d\'ebit}~: \link{express-rate-limit}{https://github.com/nickdesclos/express-rate-limit}.
@@ -4799,9 +4823,11 @@ pm2 monit ; pm2 reload api ; pm2 save ; pm2 startup
 \end{ressources}
 
 \index{Node.js}\index{Express}\index{CLI}\index{serveur}
+%%<<
+%%>> 210-js-stockage.tex %%>>
 % ============================================================================
 \chapter{Stockage, cache et fonctionnement hors ligne}
-\label{ch:js-storage}
+\label{ch-js-storage}
 % ============================================================================
 
 \begin{objectif}
@@ -4968,7 +4994,7 @@ une architecture r\'eelle, pas un gadget.
 \end{astuce}
 
 \section{Service worker, cache et hors ligne}
-\label{sec:pwa}
+\label{sec-pwa}
 
 Un \emph{service worker} est un script qui s'installe dans le navigateur, hors de la page,
 et qui peut intercepter les requ\^etes r\'eseau. C'est ce qui rend un site installable, rapide en
@@ -5124,7 +5150,7 @@ location.reload();
 \begin{ressources}
 \begin{itemize}
   \item MDN --- Web Storage --- \url{https://developer.mozilla.org/fr/docs/Web/API/Window/localStorage}
-  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB\\\\\_API}
+  \item MDN --- IndexedDB --- \url{https://developer.mozilla.org/fr/docs/Web/API/IndexedDB_API}
   \item \emph{The Offline Cookbook} (Jake Archibald) --- \url{https://web.dev/articles/offline-cookbook}
   \item idb --- \url{https://github.com/jakearchibald/idb}
   \item PWA --- \url{https://web.dev/learn/pwa/} --- Workbox --- \url{https://developer.chrome.com/docs/workbox}
@@ -5132,9 +5158,11 @@ location.reload();
 \end{ressources}
 
 \index{IndexedDB}\index{service worker}\index{PWA}\index{cookies}
+%%<<
+%%>> 211-js-outils.tex %%>>
 % ============================================================================
 \chapter{Outillage : formatage, analyse, d\'ebogage, structure}
-\label{ch:js-outils}
+\label{ch-js-outils}
 % ============================================================================
 
 \begin{objectif}
@@ -5412,9 +5440,11 @@ plus fr\'equente en d\'eveloppement Node.
 \end{ressources}
 
 \index{Prettier}\index{ESLint}\index{debogage}\index{structure de projet}
+%%<<
+%%>> 212-js-frameworks.tex %%>>
 % ============================================================================
 \chapter{Interface moderne : Vite, composants, React/Vue/Svelte, Astro}
-\label{ch:js-frameworks}
+\label{ch-js-frameworks}
 % ============================================================================
 
 \begin{objectif}
@@ -5675,9 +5705,11 @@ Svelte ou Astro gagnent.
 \end{ressources}
 
 \index{Vite}\index{React}\index{Vue}\index{Svelte}\index{framework}
+%%<<
+%%>> 213-js-typescript.tex %%>>
 % ============================================================================
 \chapter{TypeScript~: rendre les erreurs visibles avant l'ex\'ecution}
-\label{ch:js-ts}
+\label{ch-js-ts}
 % ============================================================================
 
 \begin{objectif}
@@ -5934,7 +5966,7 @@ une fois les props d\'efinies.
 
 \begin{exercice}
 \begin{enumerate}
-  \item Reprends ton panier de la \cref{ch:js-struct} en TypeScript~: types \verb|Article|,
+  \item Reprends ton panier de la \cref{ch-js-struct} en TypeScript~: types \verb|Article|,
         \verb|Ligne|, \verb|Panier|, \verb|Totaux|~; \verb|Resultat<T> = {ok:true,valeur:T}| ...
         et aucun \verb|any|~; \verb|noUncheckedIndexedAccess| activ\'e.
   \item \'Ecris un type \verb|Schema<T>| (g\'en\'erique) et trois fonctions typ\'ees
@@ -5961,9 +5993,11 @@ une fois les props d\'efinies.
 \end{ressources}
 
 \index{TypeScript}\index{generiques}\index{tsconfig}
+%%<<
+%%>> 214-js-tests.tex %%>>
 % ============================================================================
 \chapter{Tester son code~: Vitest, Jest, Playwright}
-\label{ch:js-tests}
+\label{ch-js-tests}
 % ============================================================================
 
 \begin{objectif}
@@ -6296,9 +6330,11 @@ jobs:
 \end{ressources}
 
 \index{tests}\index{Vitest}\index{Playwright}\index{mock}
+%%<<
+%%>> 215-js-securite.tex %%>>
 % ============================================================================
 \chapter{S\'ecurit\'e web : ce qu'on doit savoir avant de mettre en ligne}
-\label{ch:js-secu}
+\label{ch-js-secu}
 % ============================================================================
 
 \begin{objectif}
@@ -6378,7 +6414,7 @@ d\'ecorative. Pour les frameworks qui exigent du style inline, utilise
 \begin{itemize}
   \item G\'en\'erateur et validateur~: \link{CSP~Evaluator}{https://csp-evaluator.withgoogle.com/}.
   \item \texttt{Trusted Types} (Chrome/Edge/Firefox r\'ecents) rend \texttt{innerHTML} refus\'e sans
-        une politique explicite~: \url{https://developer.mozilla.org/en-US/docs/Web/API/Trusted\\\\\_Types\\\\\_API}.
+        une politique explicite~: \url{https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API}.
   \item \texttt{SRI} pour les scripts tiers~: \verb|<script src="..." integrity="sha384-..." crossorigin>|.
 \end{itemize}
 
@@ -6578,9 +6614,11 @@ npm i -D zap-baseline && npx zap-baseline.py -t http://localhost:3000 -r rapport
 \end{ressources}
 
 \index{securite}\index{XSS}\index{CSRF}\index{CSP}
+%%<<
+%%>> 216-js-perf-deploiement.tex %%>>
 % ============================================================================
 \chapter{Performance et mise en ligne}
-\label{ch:deploy}
+\label{ch-deploy}
 % ============================================================================
 
 \begin{objectif}
@@ -6826,7 +6864,7 @@ journalctl -u nour-api -f
 \end{terminal}
 
 \section{Le d\'eploiement continu~: pousser = en ligne}
-\label{sec:ci-cd}
+\label{sec-ci-cd}
 
 \begin{codeyml}
 # .github/workflows/deploy.yml
@@ -6891,7 +6929,7 @@ pendant.
 \end{itemize}
 
 \begin{projet}[D\'eploiement complet]
-Mets ton API Node du \cref{ch:node} en ligne~: domaine, HTTPS, conteneur, healthcheck,
+Mets ton API Node du \cref{ch-node} en ligne~: domaine, HTTPS, conteneur, healthcheck,
 journalisation, sauvegarde quotidienne de la base, pipeline de d\'eploiement, et rapport
 Lighthouse public. Tu auras alors fait le parcours complet~: coder, s\'ecuriser, tester, d\'eployer,
 surveiller. C'est exactement ce que l'on attend d'un profil junior~; tr\`es peu de candidats
@@ -6927,11 +6965,12 @@ peuvent le montrer.
 \end{ressources}
 
 \index{performance}\index{Core~Web~Vitals}\index{Docker}\index{deploiement}\index{Caddy}
-
+%%<<
 \part{PHP : le moteur du web dynamique}
+%%>> 301-php-bases.tex %%>>
 % ============================================================================
 \chapter{PHP : les bases, le langage serveur le plus direct qui soit}
-\label{ch:php-bases}
+\label{ch-php-bases}
 % ============================================================================
 
 \begin{objectif}
@@ -7423,9 +7462,11 @@ casse d\`es que le serveur est lanc\'e depuis un autre dossier.
 \end{ressources}
 
 \index{PHP!bases}\index{array}\index{strict\_types}
+%%<<
+%%>> 302-php-arrays-chaines.tex %%>>
 % ============================================================================
 \chapter{PHP : tableaux et cha\^ines en profondeur, dates et regex}
-\label{ch:php-struct}
+\label{ch-php-struct}
 % ============================================================================
 
 \begin{objectif}
@@ -7746,9 +7787,11 @@ final class Article
 \end{ressources}
 
 \index{PHP!tableaux}\index{PHP!chaines}\index{regex}\index{dates}
+%%<<
+%%>> 303-php-oop.tex %%>>
 % ============================================================================
 \chapter{PHP objet~: classes, interfaces, \'enum\'erations, attributs}
-\label{ch:php-oop}
+\label{ch-php-oop}
 % ============================================================================
 
 \begin{objectif}
@@ -8063,7 +8106,7 @@ et Laravel. Les avoir \'ecrits une fois \og ~\`a la main~ \fg{} rend ces framewo
 \section{Autochargement~: PSR-4 sans myst\`ere}
 
 Un fichier = une classe = un nom d'espace de lignes coh\'erent avec le chemin. Le reste est
-l'affaire de Composer (\cref{ch:php-composer}) ou de dix lignes de \verb|spl\_autoload\_register|.
+l'affaire de Composer (\cref{ch-php-composer}) ou de dix lignes de \verb|spl\_autoload\_register|.
 
 \begin{codephp}
 <?php
@@ -8208,9 +8251,11 @@ DDD) est de la broderie sur ces trois points, utile \`a conna\^itre mais raremen
 \end{ressources}
 
 \index{PHP!objets}\index{interfaces}\index{enum}\index{attributs}\index{DI}
+%%<<
+%%>> 304-php-forms-auth.tex %%>>
 % ============================================================================
 \chapter{HTTP en PHP~: requ\^etes, formulaires, sessions, authentification}
-\label{ch:php-http}
+\label{ch-php-http}
 % ============================================================================
 
 \begin{objectif}
@@ -8706,9 +8751,11 @@ $transport->setUsername((string) getenv('SMTP_USER'))->setPassword((string) gete
 \end{ressources}
 
 \index{PHP!formulaire}\index{PHP!session}\index{PHP!authentification}\index{CSRF}\index{upload}
+%%<<
+%%>> 305-php-mysql.tex %%>>
 % ============================================================================
 \chapter{PHP et MySQL~: PDO, requ\^etes pr\'epar\'ees, transactions, migrations}
-\label{ch:php-db}
+\label{ch-php-db}
 % ============================================================================
 
 \begin{objectif}
@@ -8882,7 +8929,7 @@ $rows = $pdo->prepare("SELECT * FROM articles ORDER BY publie_le DESC LIMIT {$li
 contenant \verb|\%| ou \verb|\_| doit \^etre \'echapp\'ee (\verb|addcslashes(\$q, '\%\_\\')|), sinon
 \og ~100\,\%~ \fg{} devient un joker. Et surtout~: un \verb|LIMIT|/\verb|ORDER BY| \emph{ne peut pas}
 venir d'un param\`etre de requ\^ete pr\'epar\'ee~; ce sont les deux seuls endroits o\`u tu construis
-la SQL~: donc liste blanche absolue (cf. \cref{ch:js-secu}).
+la SQL~: donc liste blanche absolue (cf. \cref{ch-js-secu}).
 \end{piege}
 
 \section{Transactions~: la consistance, pas le luxe}
@@ -9199,9 +9246,11 @@ application web~: 1 requ\^ete pour la liste, puis 1 par \'el\'ement~; la correct
 \end{ressources}
 
 \index{PHP!PDO}\index{MySQL}\index{index}\index{migration}\index{transaction}
+%%<<
+%%>> 306-php-securite.tex %%>>
 % ============================================================================
 \chapter{S\'ecurit\'e PHP~: les failles r\'eelles et leurs rem\`edes exacts}
-\label{ch:php-secu}
+\label{ch-php-secu}
 % ============================================================================
 
 \begin{objectif}
@@ -9531,9 +9580,11 @@ location ~ ^/(storage|vendor|config|database)/ { deny all; }
 \end{ressources}
 
 \index{PHP!securite}\index{injection SQL}\index{LFI}\index{SSRF}\index{php.ini}
+%%<<
+%%>> 307-php-composer-outils.tex %%>>
 % ============================================================================
 \chapter{Composer, standards PSR, qualit\'e et outils de development}
-\label{ch:php-composer}
+\label{ch-php-composer}
 % ============================================================================
 
 \begin{objectif}
@@ -9969,15 +10020,17 @@ vendor/bin/phpunit --order-by=defects --reverse-list    # les echecs d'abord
   \item PHP-FIG --- \url{https://www.php-fig.org/psr/}
   \item PHPStan --- \url{https://phpstan.org/} --- Psalm --- \url{https://psalm.dev/} --- Rector --- \url{https://getrector.com/}
   \item PHPUnit --- \url{https://docs.phpunit.de/} --- Pest --- \url{https://pestphp.com/}
-  \item Xdebug --- \url{https://xdebug.org/docs/step\\\\\_debug} --- PHP-FPM tuning --- \url{https://php.watch/configuration/php-fpm}
+  \item Xdebug --- \url{https://xdebug.org/docs/step_debug} --- PHP-FPM tuning --- \url{https://php.watch/configuration/php-fpm}
   \item \link{PHP~The~Right~Way}{https://phptherightway.com/} --- relis la partie \og ~Dependencies~ \fg{} et \og ~Tooling~ \fg{}.
 \end{itemize}
 \end{ressources}
 
 \index{Composer}\index{PSR}\index{PHPStan}\index{Xdebug}\index{PHPUnit}
+%%<<
+%%>> 308-php-api.tex %%>>
 % ============================================================================
 \chapter{Construire une API REST en PHP (et l'authentifier avec un JWT)}
-\label{ch:php-api}
+\label{ch-php-api}
 % ============================================================================
 
 \begin{objectif}
@@ -10562,9 +10615,11 @@ distingue des dizaines de \og ~to-do app~ \fg{}.
 \end{ressources}
 
 \index{API REST}\index{JWT}\index{OpenAPI}\index{CORS}
+%%<<
+%%>> 309-php-frameworks.tex %%>>
 % ============================================================================
 \chapter{Frameworks PHP~: Laravel, Symfony, et les autres}
-\label{ch:php-frameworks}
+\label{ch-php-frameworks}
 % ============================================================================
 
 \begin{objectif}
@@ -10594,7 +10649,7 @@ puis utiliser l'outil.
   \link{Symfony}{https://symfony.com/} \& les composants r\'eutilisables + un cadre~: rigueur, DI explicite, long support LTS, tr\`es pr\'esent en France/Europe et dans le secteur public. \& 7.x (6.4 LTS) \& \url{https://symfony.com/doc/current/index.html} \\
   \link{Slim}{https://www.slimframework.com/} \& un routeur + PSR-7/15, rien d'autre~: id\'eal pour une API l\'eg\`ere. \& 4.x \& \url{https://www.slimframework.com/docs/} \\
   \link{Laminas / Mezzio}{https://mezzio.dev/} \& PSR pur, modulaire, tr\`es typ\'e entreprise. \& --- \& \url{https://docs.laminas.dev/} \\
-  \link{CodeIgniter~4}{https://codeigniter.com/} \& l\'eger, simple, h\'eritage du mutualis\'e. \& 4.x \& \url{https://codeigniter.com/user\\\\\_guide/} \\
+  \link{CodeIgniter~4}{https://codeigniter.com/} \& l\'eger, simple, h\'eritage du mutualis\'e. \& 4.x \& \url{https://codeigniter.com/user_guide/} \\
   \link{Yii~2}{https://www.yiiframework.com/} \& Gii (g\'en\'eration de CRUD), tr\`es rapide, populaire en Asie. \& 2.0 \& \url{https://www.yiiframework.com/doc/} \\
   \link{Phalcon}{https://phalcon.io/} \& extension C~: performances brutes \'elev\'ees. \& 5.x \& \url{https://docs.phalcon.io/} \\
   \link{CakePHP}{https://book.cakephp.org/} \& \og ~convention over configuration~ \fg{}, le doyen. \& 5.x \& \\
@@ -10894,7 +10949,7 @@ int\'eressante depuis longtemps, et elle marche avec Laravel (Octane), Symfony e
 \begin{ressources}
 \begin{itemize}
   \item Laravel --- docs, Laracasts, News --- \url{https://laravel.com/docs/12.x}, \url{https://laracasts.com/}, \url{https://laravel-news.com/}
-  \item Symfony --- les guides (excellents, en fran\c{c}ais partiel) --- \url{https://symfony.com/doc/current/page\\\\\_blocks.html} \\
+  \item Symfony --- les guides (excellents, en fran\c{c}ais partiel) --- \url{https://symfony.com/doc/current/page_blocks.html} \\
         et la formation gratuite Open Classrooms --- \url{https://openclassrooms.com/fr/search?query=symfony}
   \item \link{Symfony~Casts}{https://symfonycasts.com/} (les meilleures vid\'eos de l'\'ecosyst\`eme, beaucoup sont gratuites)
   \item \link{Laravel~Daily~Learn}{https://laraveldaily.com/learn}, \link{Relay}{https://laravelrelay.app/}
@@ -10903,11 +10958,12 @@ int\'eressante depuis longtemps, et elle marche avec Laravel (Octane), Symfony e
 \end{ressources}
 
 \index{Laravel}\index{Symfony}\index{Blade}\index{Twig}\index{migration legacy}
-
+%%<<
 \part{Java : robuste, partout, pour de vrai}
+%%>> 401-java-bases.tex %%>>
 % ============================================================================
 \chapter{Java~: le langage, la JVM, les bases}
-\label{ch:java-bases}
+\label{ch-java-bases}
 % ============================================================================
 
 \begin{objectif}
@@ -11236,9 +11292,11 @@ static long fib(int n, long a, long b) { return n == 0 ? a : fib(n - 1, b, a + b
 \end{ressources}
 
 \index{Java!bases}\index{JDK}\index{JVM}\index{primitives}\index{Optional}
+%%<<
+%%>> 402-java-oop.tex %%>>
 % ============================================================================
 \chapter{Java orient\'e objet~: classes, encapsulation, h\'eritage, interfaces}
-\label{ch:java-oop}
+\label{ch-java-oop}
 % ============================================================================
 
 \begin{objectif}
@@ -11640,9 +11698,11 @@ ne pas exposer la collection~: renvoyer un \verb|Stream|, une taille, ou un acce
 \end{ressources}
 
 \index{Java!classes}\index{record}\index{sealed}\index{equals}\index{immutabilite}
+%%<<
+%%>> 403-java-collections-exceptions.tex %%>>
 % ============================================================================
 \chapter{G\'en\'eriques, collections et exceptions}
-\label{ch:java-collections}
+\label{ch-java-collections}
 % ============================================================================
 
 \begin{objectif}
@@ -11925,9 +11985,11 @@ enqu\^ete qui commence par \og ~de toute fa\c{c}on on ne sait pas~ \fg{}.
 \end{ressources}
 
 \index{collections}\index{generiques}\index{exceptions}\index{HashMap}
+%%<<
+%%>> 404-java-io.tex %%>>
 % ============================================================================
 \chapter{Fichiers, flux, dates et internationalisation}
-\label{ch:java-io}
+\label{ch-java-io}
 % ============================================================================
 
 \begin{objectif}
@@ -12239,9 +12301,11 @@ try (var r = Files.newBufferedReader(path)) {
 \end{ressources}
 
 \index{fichiers}\index{NIO}\index{java.time}\index{i18n}\index{Jackson}
+%%<<
+%%>> 405-java-fonctionnel.tex %%>>
 % ============================================================================
 \chapter{Programmation fonctionnelle~: lambdas, Streams, collecteurs}
-\label{ch:java-fonctionnel}
+\label{ch-java-fonctionnel}
 % ============================================================================
 
 \begin{objectif}
@@ -12524,9 +12588,11 @@ Map<String, List<Article>> res = articles.stream()
 \end{ressources}
 
 \index{lambda}\index{Streams}\index{Collectors}\index{parallel stream}
+%%<<
+%%>> 406-java-concurrency.tex %%>>
 % ============================================================================
 \chapter{Concurrence~: threads, synchronisation, virtual threads}
-\label{ch:java-concurrency}
+\label{ch-java-concurrency}
 % ============================================================================
 
 \begin{objectif}
@@ -12818,9 +12884,11 @@ async-profiler -d 30 -f cpu.html <pid>
 \end{ressources}
 
 \index{threads}\index{synchronized}\index{CompletableFuture}\index{virtual threads}
+%%<<
+%%>> 407-java-build.tex %%>>
 % ============================================================================
 \chapter{Outillage~: Maven, Gradle, JDK multi-versions, CI}
-\label{ch:java-build}
+\label{ch-java-build}
 % ============================================================================
 
 \begin{objectif}
@@ -13295,7 +13363,7 @@ dans l'arbre~: \verb|NoClassDefFoundError| al\'eatoire~; (5) le cache CI sans \v
 \begin{ressources}
 \begin{itemize}
   \item Maven --- \url{https://maven.apache.org/guides/} --- Reference Model (le POM, par c\oe{}ur en 2 h)
-  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin\\\\\_dsl.html}
+  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin_dsl.html}
   \item \link{Maven Central Search}{https://central.sonatype.com/search} (trouver l'\verb|artifactId| exact)
   \item \link{mvnrepository}{https://mvnrepository.com/} (utile, mais la source de v\'erit\'e reste Central)
   \item GraalVM Native Image --- \url{https://www.graalvm.org/latest/reference-manual/native-image/}
@@ -13304,9 +13372,11 @@ dans l'arbre~: \verb|NoClassDefFoundError| al\'eatoire~; (5) le cache CI sans \v
 \end{ressources}
 
 \index{Maven}\index{Gradle}\index{wrapper}\index{uber-jar}\index{GraalVM}\index{CI Java}
+%%<<
+%%>> 408-java-tests.tex %%>>
 % ============================================================================
 \chapter{Tests et qualit\'e en Java}
-\label{ch:java-tests}
+\label{ch-java-tests}
 % ============================================================================
 
 \begin{objectif}
@@ -13629,9 +13699,11 @@ public class ParsingBench {
 \end{ressources}
 
 \index{JUnit}\index{AssertJ}\index{Mockito}\index{Testcontainers}\index{ArchUnit}\index{JMH}
+%%<<
+%%>> 409-java-db.tex %%>>
 % ============================================================================
 \chapter{Java et les bases de donn\'ees~: JDBC, pools, JPA/Hibernate, migrations}
-\label{ch:java-db}
+\label{ch-java-db}
 % ============================================================================
 
 \begin{objectif}
@@ -14040,9 +14112,11 @@ lieu de \verb|Set| dans un \verb|@OneToMany|~: les lots d'insertion se transform
 \end{ressources}
 
 \index{JDBC}\index{HikariCP}\index{Hibernate}\index{JPA}\index{Flyway}\index{N+1}
+%%<<
+%%>> 410-java-web-serv.tex %%>>
 % ============================================================================
 \chapter{Le web en Java~: serveurs, API REST, s\'ecurit\'e, observabilit\'e}
-\label{ch:java-web}
+\label{ch-java-web}
 % ============================================================================
 
 \begin{objectif}
@@ -14305,9 +14379,11 @@ sur les appels d'autres services~: un thread bloqu\'e pour toujours, puis tout l
 \end{ressources}
 
 \index{serveur HTTP}\index{API REST}\index{JWT}\index{Micrometer}\index{OpenTelemetry}
+%%<<
+%%>> 411-java-spring.tex %%>>
 % ============================================================================
 \chapter{Spring Boot~: l'atelier complet}
-\label{ch:java-spring}
+\label{ch-java-spring}
 % ============================================================================
 
 \begin{objectif}
@@ -14761,11 +14837,12 @@ c'est un pari sur l'\'ecosyst\`eme.
 \end{ressources}
 
 \index{Spring Boot}\index{auto-configuration}\index{Spring Data}\index{Spring Security}\index{actuator}
-
+%%<<
 \part{Aller plus loin}
+%%>> 501-projets.tex %%>>
 % ============================================================================
 \chapter{Cinq projets complets, du cahier des charges \`a la mise en ligne}
-\label{ch:projets}
+\label{ch-projets}
 % ============================================================================
 
 Cinq projets \`a faire \emph{en entier}~: sp\'ecification, d\'ecoupage, code, tests, s\'ecurit\'e,
@@ -14978,9 +15055,11 @@ vaut infiniment plus qu'une version parfaite dans un dossier \verb|projet-3-fina
 \end{note}
 
 \index{projet}\index{capstone}\index{architecture}
+%%<<
+%%>> 502-cheminement-comparatif.tex %%>>
 % ============================================================================
 \chapter{Comparatif JS / PHP / Java, et comment construire ta carri\`ere avec}
-\label{ch:cheminement}
+\label{ch-cheminement}
 % ============================================================================
 
 Tu as trois langages dans les mains. Ce chapitre r\'epond aux trois questions qui reviennent~:
@@ -15119,7 +15198,7 @@ toucher aux bases~: \`a la perf et \`a la prod.
         de \verb|PDO| ou de \verb|V8|~: le commit qui corrige un bug que tu as eu~: tout cela se lit
         en une soir\'ee et te rend meilleur qu'une formation de deux jours.
   \item \textbf{Garde un carnet.} Les 10 commandes que tu retapes~: les 5 erreurs qui reviennent~:
-        les 3 d\'ecisions d'archi et pourquoi~: c'est l'annexe~\ref{ch:antisecche} de ce livre, \'ecrit par toi.
+        les 3 d\'ecisions d'archi et pourquoi~: c'est l'annexe~\ref{ch-antisecche} de ce livre, \'ecrit par toi.
 \end{enumerate}
 
 \begin{astuce}
@@ -15130,11 +15209,12 @@ bords~: exploite la jointure.
 \end{astuce}
 
 \index{comparatif}\index{carri\`ere}\index{stack}
-
+%%<<
 \backmatter
+%%>> 601-antisecche.tex %%>>
 % ============================================================================
 \chapter*{Annexes~: antis\`eches, messages d'erreur et listes de contr\^ole}
-\label{ch:antisecche}
+\label{ch-antisecche}
 \addcontentsline{toc}{chapter}{Annexes~: antis\`eches, messages d'erreur et listes de contr\^ole}
 % ============================================================================
 
@@ -15390,6 +15470,6 @@ de celui qui a simplement appris \`a lire les diagnostics.
 \end{note}
 
 \index{antis\`eche}\index{messages d'erreur}\index{checklist}\index{Git}
-
+%%<<
 \IfFileExists{\jobname.ind}{\printindex}{\typeout{Index non genere (latexmk le creera au prochain passage)}}
 \end{document}

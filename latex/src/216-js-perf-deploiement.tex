@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Performance et mise en ligne}
-\label{ch:deploy}
+\label{ch-deploy}
 % ============================================================================
 
 \begin{objectif}
@@ -246,7 +246,7 @@ journalctl -u nour-api -f
 \end{terminal}
 
 \section{Le d\'eploiement continu~: pousser = en ligne}
-\label{sec:ci-cd}
+\label{sec-ci-cd}
 
 \begin{codeyml}
 # .github/workflows/deploy.yml
@@ -311,7 +311,7 @@ pendant.
 \end{itemize}
 
 \begin{projet}[D\'eploiement complet]
-Mets ton API Node du \cref{ch:node} en ligne~: domaine, HTTPS, conteneur, healthcheck,
+Mets ton API Node du \cref{ch-node} en ligne~: domaine, HTTPS, conteneur, healthcheck,
 journalisation, sauvegarde quotidienne de la base, pipeline de d\'eploiement, et rapport
 Lighthouse public. Tu auras alors fait le parcours complet~: coder, s\'ecuriser, tester, d\'eployer,
 surveiller. C'est exactement ce que l'on attend d'un profil junior~; tr\`es peu de candidats

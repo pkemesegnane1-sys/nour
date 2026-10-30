@@ -27,7 +27,9 @@
 \usepackage{microtype}
 
 % ------------------------------ Polices -----------------------------------
-\usepackage[default]{libertine}
+\usepackage{libertine}
+\usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage[scaled=0.92]{inconsolata}
 
 % ------------------------------ Liens / navigation ------------------------
@@ -47,12 +49,16 @@
 
 % ------------------------------ Tableurs / listes -------------------------
 \usepackage{graphicx}
-\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{longtable}
-\usepackage{tabularx}
-\usepackage{ltablex}
 \usepackage{array}
+% X = colonne a largeur fixe (tabularx/ltablex sont abandonnes :
+% leur re-mesure du corps cassait \verb a l'interieur des cellules)
+\newcolumntype{X}{>{\raggedright\arraybackslash}p{0.30\textwidth}}
+% tabularx n'est plus charge : on le remappe proprement sur longtable
+\newenvironment{tabularx}[2][\textwidth]{\rowcolors{2}{white}{tralight}\small
+  \setlength{\tabcolsep}{5pt}\begin{longtable}{#2}}
+  {\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
 \usepackage{enumitem}
 \setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.5em}
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
@@ -98,11 +104,15 @@
   showstringspaces=false,
   tabsize=2,
   numbers=none,
-  frame=none,
-  xleftmargin=0pt,
-  xrightmargin=0pt,
-  aboveskip=2pt,
-  belowskip=2pt,
+  frame=single,
+  rulecolor=\color{codeframe},
+  framerule=0.4pt,
+  framesep=4pt,
+  backgroundcolor=\color{codebg},
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=6pt,
   commentstyle=\color{codecom},
   keywordstyle=\color{codekw}\bfseries,
   stringstyle=\color{codestr},
@@ -123,30 +133,25 @@
 % ------------------------------ Boites (tcolorbox) -------------------------
 \usepackage[most]{tcolorbox}
 
-\tcbset{
-  codestyle/.style={
-    enhanced, breakable, colback=codebg, colframe=codeframe,
-    boxrule=0.4pt, arc=1.5mm, left=2mm,right=2mm,top=1.6mm,bottom=1.6mm,
-    boxsep=0pt, listing only
-  }
-}
+% (l'ancienne cle "codestyle" avec "listing only" est supprimee : c'est le
+% mecanisme de fichier temporaire output.listing qui faisait planter la
+% compilation, et il n'est plus necessaire)
 
-\newtcblisting{codejs}{listing options={style=jscode},codestyle}
-\newtcblisting{codephp}{listing options={style=phpcode},codestyle}
-\newtcblisting{codejava}{listing options={style=javacode},codestyle}
-\newtcblisting{codesql}{listing options={style=sqlcode},codestyle}
-\newtcblisting{codeconf}{listing options={style=confcode},codestyle}
-\newtcblisting{codejson}{listing options={style=jsoncode},codestyle}
-\newtcblisting{codeyml}{listing options={style=ymlcode},codestyle}
-\newtcblisting{codeplain}{listing options={style=base},codestyle}
-
-\newtcblisting{terminal}{
-  enhanced, breakable, colback=ctermbg, colframe=ctermbg,
-  arc=1.5mm, boxrule=0pt, left=2.5mm,right=2mm,top=1.8mm,bottom=1.8mm,
-  boxsep=0pt, listing only,
-  listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},
-    keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
-}
+% Chaque bloc de code = un environnement listings autonome (il casse les
+% lignes tout seul, se coupe proprement en fin de page, et ne cree aucun
+% fichier temporaire).
+\lstnewenvironment{codejs}{\lstset{style=jscode}}{}
+\lstnewenvironment{codephp}{\lstset{style=phpcode}}{}
+\lstnewenvironment{codejava}{\lstset{style=javacode}}{}
+\lstnewenvironment{codesql}{\lstset{style=sqlcode}}{}
+\lstnewenvironment{codeconf}{\lstset{style=confcode}}{}
+\lstnewenvironment{codejson}{\lstset{style=jsoncode}}{}
+\lstnewenvironment{codeyml}{\lstset{style=ymlcode}}{}
+\lstnewenvironment{codeplain}{\lstset{style=base}}{}
+\lstnewenvironment{terminal}{\lstset{style=shellcode,frame=single,
+  rulecolor=\color{ctermbg},backgroundcolor=\color{ctermbg},
+  basicstyle=\ttfamily\small\color{ctermfg},
+  keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}}}{}
 
 \newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
   arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
@@ -187,7 +192,8 @@
 % ------------------------------ Macros pratiques ---------------------------
 \newcommand{\fichier}[1]{\texttt{\color{pathgreen}#1}}
 \newcommand{\rep}[1]{\texttt{\color{pathgreen}#1/}}
-\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
+\providecommand{\cmd}[1]{}%
+\renewcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
 \newcommand{\link}[2]{\href{#2}{#1}}
 \newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[src]}}}}
 \newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
@@ -196,11 +202,11 @@
 \newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large #1}\par\smallskip}
 \DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{#1}}}
 
-% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees
+% tableaux zebras : tabz = longtable (largeurs fixes) + lignes alternees
 \newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}%
-  \small\setlength{\tabcolsep}{5pt}%
-  \begin{tabularx}{\textwidth}{@{}#1@{}}\toprule}
-  {\bottomrule\end{tabularx}}
+  \small\setlength{\tabcolsep}{5pt}\setlength{\LTpre}{3pt}\setlength{\LTpost}{3pt}%
+  \begin{longtable}{@{}#1@{}}\toprule}
+  {\bottomrule\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
 \newcommand{\thd}[1]{\textbf{\color{white}#1}}
 \newcommand{\headrow}{\rowcolor{theadbg}}
 \makeatletter
@@ -210,264 +216,160 @@
 
 % ------------------------------ Doc ---------------------------------------
 \begin{document}
-\frontmatter
-
-% ------------------------------ Page de titre ------------------------------
-\begin{titlepage}
-  \thispagestyle{empty}
-  \centering
-  \vspace*{0.6cm}
-  {\color{themecolor}\rule[-2pt]{0.86\textwidth}{1.5pt}}\\[6pt]
-  {\color{javared}\rule[-2pt]{0.86\textwidth}{1.5pt}}\\[6pt]
-  {\color{phppurple}\rule[-2pt]{0.86\textwidth}{1.5pt}}\\[26pt]
-  {\Huge\bfseries Manuel complet}\\[6pt]
-  {\large pour apprendre, pratiquer et ma\^itriser}\\[18pt]
-  {\fontsize{30}{34}\selectfont\bfseries
-    \textcolor{javared}{JavaScript}\quad\textcolor{phppurple}{PHP}\quad\textcolor{themecolor}{Java}}\\[24pt]
-  {\color{themecolor}\rule{0.86\textwidth}{0.8pt}}\\[22pt]
-  \large
-  De la premi\`ere ligne de code aux projets complets\\[4pt]
-  \normalsize 43 chapitres \textbullet\ 3 langages \textbullet\ tous les outils, liens et commandes\\[2pt]
-  Linux \textbullet\ macOS \textbullet\ Windows \textbullet\ \'EDiteur au choix \textbullet\ Pratique guid\'ee\\[26pt]
-  \small
-  \begin{tabular}{@{}ll@{}}
-    \textbf{Niveau} \& grand d\'ebutant $\rightarrow$ avanc\'e\\
-    \textbf{Pr\'erequis} \& savoir allumer un ordinateur et taper un chemin de fichier\\
-    \textbf{Dur\'ee conseill\'ee} \& 12 \`a 24 semaines, 1\`a 2 h par jour\\
-    \textbf{Format} \& cours + code complet + exercices + corrig\'es + liens officiels\\
-  \end{tabular}
-  \vfill
-  {\footnotesize Version du \today}
-\end{titlepage}
-
+\mainmatter
 % ============================================================================
-\chapter{Comment utiliser ce manuel}
-\label{ch:comment}
+\chapter{M\'ethode d'apprentissage et plan de 12 semaines}
+\label{ch-methode}
 % ============================================================================
 
-Ce livre a un objectif unique : te faire passer de \og je n'ai jamais \^ecrit une ligne de
-code \fg{} \`a \og je con\c{c}ois une application compl\`ete dans trois langages, je sais d\'ebugger,
-tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e avec un \^editor ouvert
-\`a c\^ot\'e, pas lu comme un roman.
+Savoir quoi apprendre ne suffit pas~: il faut un rythme, une fa\c{c}on de stocker l'information
+et un m\'ecanisme anti-abandon. Ce chapitre est court mais c'est celui qui d\'etermine si tu finis
+le livre.
 
-\section{Ce que tu vas obtenir}
-
-\begin{objectif}
-\begin{itemize}
-  \item \textbf{Trois langages ma\^itris\'es ensemble}~: \langjs{} (le langage du navigateur et de
-        Node.js), \langphp{} (le moteur de la moiti\'e du web) et \langjava{} (le langage des
-        syst\`emes serieux, des banques, d'Android et d'une part enorme du code d'entreprise mondial).
-  \item \textbf{Un environnement de travail r\'eel} install\'e sur \emph{ta} machine, avec les bons
-        outils, les bons raccourcis et les bonnes habitudes d\`es le premier jour.
-  \item \textbf{Des centaines d'extraits de code complets et ex\'ecutables}, pens\'es pour \^etre
-        recopi\'es \`a la main (c'est comme \c{c}a qu'on apprend), puis modifi\'es.
-  \item \textbf{Des exercices avec corrig\'es} \`a la fin de chaque chapitre, et trois projets
-        fil rouges \`a la fin du livre.
-  \item \textbf{Tous les liens} vers les documentations officielles, les t\'el\'echargements, les
-        extensions, les livres gratuits et les cha\^ines qui comptent.
-\end{itemize}
-\end{objectif}
-
-\section{La convention typographique}
-
-\begin{tabz}
-  \headrow \thd{\'El\'ement} \& \thd{Signification} \\
-  \midrule
-  \verb|code\_en\_police\_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
-  \cmd{npm install} \& Commande \`a taper dans un terminal.\\
-  \fichier{src/app.js} \& Chemin de fichier, relatif \`a la racine de ton projet.\\
-  \keys{Ctrl + S} \& Raccourci clavier.\\
-  \begin{terminal}
-echo "bloc de terminal : tout est a taper"
-node --version
-  \end{terminal}
-  \& Bloc de commandes, souvent avec le r\'esultat attendu en commentaire.\\
-  \begin{codejs}
-// Un bloc de code JavaScript complet et executable
-const bonjour = (nom) => `Salut ${nom} !`;
-console.log(bonjour("Nour"));
-  \end{codejs}
-  \& Code \`a recopier. Tout ce qui est affich\'e est r\'eel et fonctionnel.\\
-  \src{https://developer.mozilla.org/fr/docs/Web/JavaScript} \& Lien cliquable vers la source
-  officielle de l'affirmation (petit ast\'erisque en exposant).\\
-\end{tabz}
-
-\subsection{Les encadr\'es}
-
-\begin{itemize}
-  \item \textbf{Objectif de la chapitre}~: la liste des comp\'etences acquises \`a la fin du chapitre.
-        Si tu les poss\`edes d\'ej\`a, saute-le.
-  \item \textbf{Note}~: pr\'ecision th\'eorique ou contexte historique.
-  \item \textbf{Astuce de pro}~: habitude des d\'eveloppeurs exp\'eriment\'es, gain de temps imm\'ediat.
-  \item \textbf{Pi\`ege \'a \'eviter}~: l'erreur que 9 d\'eveloppeurs sur 10 font la premi\`ere fois.
-        Ces encadr\'es valent de l'or~: ils t'\'epargnent des heures.
-  \item \textbf{Exercices guid\'es}~: \'a faire \emph{obligatoirement} \`a la main, sans copier-coller.
-  \item \textbf{Ressources et outils cit\'es}~: les liens du chapitre, r\'esum\'es.
-  \item \textbf{Projet \`a r\'ealiser}~: travail long, plusieurs jours, \`a faire en fin de partie.
-\end{itemize}
-
-\section{Comment \'etudier avec ce livre}
-
-\etape{\'etape 1 --- Tape le code, ne le copie jamais}
-Le copier-coller cr\'eet l'illusion de la compr\'ehension. Taper force \`a lire chaque caract\`ere,
-chaque point-virgule, chaque accolade. C'est p\'enible les trois premiers jours, puis
-ton cerveau int\`egre la syntaxe toute seule. Ajoute une r\`egle~:
-\emph{chaque bloc de code du livre est \`a recopier, \`a ex\'ecuter, puis \`a casser volontairement}
-(pour voir le message d'erreur).
-
-\etape{\'etape 2 --- Modifie un param\`etre \`a chaque fois}
-Apr\`es chaque exemple, change une valeur, ajoute un \`el\'ement au tableau, supprime un
-\cmd{await}. Pr\'edis le r\'esultat \emph{avant} d'ex\'ecuter. Cette boucle
-\`a la boucle \og prediction $\rightarrow$ ex\'ecution $\rightarrow$ v\'erification\fg{}, la m\'ethode la plus rapide
-pour progresser en programmation, toutes langues confondues.
-
-\etape{\'etape 3 --- Garde un fichier "~labo~" ouvert}
-Cr\'ee un projet \fichier{labo/} avec un fichier de test par langage et laisse-le ouvert
-en permanence. Tu y testes toutes les id\'ees folles.
-
-\begin{terminal}
-mkdir -p ~/labo/js ~/labo/php ~/labo/java
-cd ~/labo/js && node -e 'console.log("ca marche")'
-cd ~/labo/php && php -r 'echo "ca marche", PHP_EOL;'
-cd ~/labo/java && printf 'public class Labo { public static void main(String[] a){ System.out.println("ca marche"); } }' > Labo.java && javac Labo.java && java Labo
-\end{terminal}
-
-\etape{\'etape 4 --- Les exercices d'abord, la suite du livre ensuite}
-Un chapitre est fini quand les exercices le sont, pas quand la page est tourn\'ee.
-
-\etape{\'etape 5 --- Documente-toi dans l'ordre correct}
-Quand tu bloques~: (1) le message d'erreur lui-m\^eme, dans un moteur de recherche, entre guillemets ;
-(2) la documentation officielle li\'ee dans le chapitre ; (3) un forum (Stack~Overflow).
-Ne saute pas l'\'etape~1~: lire un message d'erreur est une comp\'etence \`a part enti\`ere,
-et c'est celle qui te rendra autonome.
-
-\section{Ordre de lecture conseill\'e}
+\section{Les cinq principes qui font la diff\'erence}
 
 \begin{enumerate}
-  \item \Cref{ch:environnement} et \cref{ch:git} --- installation des outils, terminal, Git.
-        \textbf{Non n\'egociable}, m\^eme si tu "~sais d\'eja faire~".
-  \item \textbf{Partie I --- JavaScript}. C'est le langage qui donne un r\'esultat visible
-        imm\'ediatement (une page web), donc la motivation ne retombe pas. Il couvre aussi la
-        logique pure (fonctions, tableaux, asynchrone) qui servira partout ailleurs.
-  \item \textbf{Partie II --- PHP}. Tu vas d\'ecouvrir le c\^ot\'e serveur "~pour de vrai~"~: requ\^etes,
-        formulaires, base de donn\'ees, sessions, s\'ecurit\'e. Beaucoup de concepts du JS reviennent,
-        ce qui les ancre.
-  \item \textbf{Partie III --- Java}. Le langage le plus exigeant, mais le plus formateur~: typage
-        strict, classes, compilation, collections, concurrency, outils d'entreprise.
-  \item \textbf{Partie IV} --- les trois projets, le plan de 12 semaines, l'aide-m\'emoire,
-        et la chasse aux erreurs classiques.
+  \item \textbf{Pratique d\'elib\'er\'ee, pas r\'ep\'etition.} Travailler juste au-dessus de ton niveau,
+        avec retour imm\'ediat (le message d'erreur, le test qui passe). Refaire un exercice
+        d\'ej\`a r\'eussi est du r\'econfort, pas de l'apprentissage.
+  \item \textbf{R\'ecup\'eration active.} Ferme le livre et \'ecris de m\'emoire la syntaxe d'un
+        \verb|try/catch|, la diff\'erence entre \verb|==| et \verb|===|. Se tromper ancre
+        dix fois mieux que relire.
+  \item \textbf{Espacement.} Dix minutes de r\'evision chaque jour valent mieux que deux heures
+        le dimanche. Un tour de flashcards le matin, l'erreur de la veille au soir.
+  \item \textbf{Technique Feynman.} Explique \`a voix haute, avec des mots simples, comme si tu
+        parlais \`a un enfant de douze ans. Tout ce que tu n'arrives pas \`a expliquer est une
+        lacune --- retourne lire.
+  \item \textbf{Production avant consommation.} Ratio cible~: 30 \% lire/regarder,
+        70 \% \'ecrire du code. Si ta journ\'ee a \'et\'e 90 \% vid\'eo, tu ne progresses pas, tu te distraies.
 \end{enumerate}
 
-\begin{astuce}
-Tu veux commencer par le web tout de suite~? Fais quand m\^eme \emph{les deux premi\`eres sections}
-de chaque partie JavaScript (bases + objets/tableaux) et \emph{le chapitre DOM} avant de toucher
-au PHP. Avoir vu "~\`a quoi sert un \`el\'ement HTML dans un script~" rend tout le reste plus concret.
-\end{astuce}
+\section{La routine quotidienne (60 \`a 120 minutes)}
 
-\section{Ce livre ne contient pas (volontairement)}
+\begin{tabz}{llX}
+  \headrow \thd{Dur\'ee} \& \thd{Bloc} \& \thd{Contenu} \\
+  \midrule
+  10 min \& R\'eveil \& 10 flashcards + relire le code \'ecrit hier, sans l'\'editeur. \\
+  25 min \& Lecture active \& Un morceau de chapitre, le carnet ouvert, on pr\'edit les r\'esultats. \\
+  50 min \& Code \& Recopier les exemples, les casser, refaire l'exercice du chapitre. \\
+  15 min \& Journaliser \& \'Ecrire 5 lignes~: ce que j'ai compris, o\`u j'ai bloqu\'e, la solution. \\
+  10 min \& Curiosit\'e \& Lire la doc officielle de ce que je viens d'utiliser (pas celle d'hier). \\
+\end{tabz}
+
+Si tu n'as que 25 minutes~: fais le bloc \og ~Code~ \fg{}. Jamais le bloc \og ~Lecture~ \fg{} seule.
+
+\section{Le carnet d'erreurs --- ton actif le plus pr\'ecieux}
+
+Cr\'ee \fichier{carnet.md} dans chaque projet et note~: \emph{texte exact de l'erreur},
+\emph{contexte}, \emph{cause r\'eelle}, \emph{correction}, \emph{date}. En six mois tu auras un
+manuel de d\'epannage personnel qui vaut plus que n'importe quel tuto. Les annexes
+(\cref{ch-antisecche}) en sont une version g\'en\'erique~: tiens la tienne \`a jour.
+
+\begin{codeconf}
+## 2026-01-14 - PHP - 500 blank page
+Erreur : aucune, page blanche.
+Cause : une exception ignoree car display_errors = Off en production.
+Fix : log_errors=On, error_log=php://stderr, et activer app_dev en local.
+Lecon : ne jamais chercher a l'aveugle ; ouvrir les logs d'abord.
+\end{codeconf}
+
+\section{Plan de 12 semaines (version intensive)}
+
+Adapte la vitesse~: doubler la dur\'ee de chaque ligne est parfaitementOK. Le plan n'est pas
+une course, c'est un ordre.
+
+\begin{tabz}{llX}
+  \headrow \thd{Semaine} \& \thd{Objet} \& \thd{Livrable concret \`a la fin de la semaine} \\
+  \midrule
+  1 \& Outils, bases JS (\cref{ch-js-bases}) \& 30 petits scripts dans \verb|labo/js|, dont FizzBuzz, tri, palindrome. \\
+  2 \& Objets, tableaux, cha\^ines, regex (\cref{ch-js-struct}) \& Un analyseur de texte (nombre de mots, mots les plus fr\'equents). \\
+  3 \& S\'emantique avanc\'ee (\cref{ch-js-avance}) \& Un mini-syst\`eme d'\'ev\'enements \'ecrit \`a la main (20 lignes). \\
+  4 \& Asynchrone (\cref{ch-js-async}) \& Un script qui t\'el\'echarge 20 pages web en parall\`ele avec limitation de concurrence. \\
+  5 \& DOM et \'ev\'enements (\cref{ch-js-dom,ch-js-events}) \& Une page \og ~liste de courses~ \fg{} sans framework, avec filtre et tri. \\
+  6 \& Fetch, formulaires, stockage (\cref{ch-js-dom,ch-js-storage}) \& La m\^eme liste, persist\'ee en LocalStorage + API externe. \\
+  7 \& Node.js, modules, npm, CLI (\cref{ch-node,ch-js-outils}) \& Un outil de ligne de commande qui renomme en lot les fichiers d'un dossier. \\
+  8 \& TypeScript + tests + s\'ecurit\'e (\cref{ch-js-ts,ch-js-tests,ch-js-secu}) \& Le projet de la semaine~6 typ\'e, test\'e \`a 80 \%, sans XSS. \\
+  9 \& PHP bases, OOP, formulaires (\cref{ch-php-bases,ch-php-oop,ch-php-http}) \& Un mini-CRUD sur fichier JSON, puis sur MySQL. \\
+  10 \& PDO, sessions, auth, s\'ecurit\'e PHP (\cref{ch-php-db,ch-php-http,ch-php-secu}) \& Un blog complet avec inscriptions, r\^oles, upload d'images s\'ecuris\'e. \\
+  11 \& Java bases, OOP, collections, exceptions (\cref{ch-java-bases,ch-java-oop,ch-java-collections,ch-java-collections}) \& Un gestionnaire de biblioth\`eque console avec tests JUnit. \\
+  12 \& Streams, JDBC, Spring Boot, d\'eploiement (\cref{ch-java-fonctionnel,ch-java-db,ch-java-spring,ch-deploy}) \& Une API REST Spring Boot connect\'ee \`a PostgreSQL, d\'eploy\'ee sur un VPS. \\
+\end{tabz}
+
+\section{Utiliser l'IA sans s'handicaper}
+
+Un assistant de code est un excellent tuteur et un tr\`es mauvais substitut. R\`egle simple~:
+\emph{l'IA r\'epond \`a tes questions, elle ne fait pas tes exercices.}
 
 \begin{itemize}
-  \item Les recettes "~clique ici dans cette interface propri\'etaire~"~: elles meurent en six mois.
-  \item Une th\'eorie des langages formelle. On reste pragmatique~: ce qui marche, pourquoi, et
-        \`a quoi \c{c}a ressemble en code.
-  \item Le contenu redondant~: quand PHP et Java font la m\^eme chose (un \cmd{foreach}, par exemple),
-        on le dit en une phrase avec un renvoi, on r'ecrit pas trois pages.
+  \item \textbf{Demander}~: \og ~explique-moi ligne par ligne ce message d'erreur~ \fg{}, \og ~quels sont les
+        cas limites de cette fonction~ \fg{}, \og ~propose 3 variantes de style, avec les avantages~ \fg{}.
+  \item \textbf{Refuser}~: coller l'\'enonc\'e d'un exercice et prendre la r\'eponse. Tu \'economises
+        trois minutes et tu perds la comp\'etence.
+  \item \textbf{Toujours}~: relire ligne par ligne le code g\'en\'er\'e et le faire tourner. Ne
+        mets jamais dans un projet du code que tu ne sais pas expliquer.
+  \item Outils~: \link{Copilot}{https://github.com/features/copilot},
+        \link{Cursor}{https://www.cursor.com/}, \link{Claude}{https://claude.ai/},
+        \link{ChatGPT}{https://chat.openai.com/}, \link{aider (CLI)}{https://aider.chat/}.
 \end{itemize}
 
-\section{Compiler ce livre}
+\section{Quand tu bloques --- la proc\'edure en cinq temps}
 
-Le document est en \LaTeX{} et se compile sans configuration particuli\`ere si tu as une
-distribution \LaTeX{} \'a jour (TeX~Live~2023+ ou MiKTeX).
-
-\begin{terminal}
-# Linux (Debian/Ubuntu) : installation de LaTeX
-sudo apt update && sudo apt install -y texlive-latex-base texlive-latex-recommended \
-  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra \
-  texlive-lang-french latexmk
-
-# macOS avec Homebrew
-brew install --cask mactex-no-glypf && sudo /usr/local/texlive/2025/bin/universal-darwin/tlmgr update --self
-
-# Windows : telecharge MiKTeX (https://miktex.org/download) ou TeX Live (https://tug.org/texlive/)
-
-# Compilation (dans le dossier latex/)
-latexmk -pdf -interaction=nonstopmode main.tex
-# ou, sans latexmk :
-pdflatex main.tex && pdflatex main.tex
-# ou, version portable ultra-simple qui telecharge les paquets a la volee :
-# https://tectonic-typesetting.github.io/
-tectonic main.tex
-\end{terminal}
+\begin{enumerate}
+  \item \textbf{Lire l'erreur en entier}, y compris la ligne \og ~caused by~ \fg{}, et chercher
+        le texte exact entre guillemets.
+  \item \textbf{R\'eduire.} Fais un exemple minimal qui reproduit le probl\`eme (deux fichiers,
+        dix lignes). Neuf fois sur dix, la r\'eduction r\'ev\`ele la cause.
+  \item \textbf{Isoler une hypoth\`ese}, la tester, l'\'ecrire. \og ~Je pense que X. Je teste Y.~ \fg{}
+  \item \textbf{Chercher dans la doc officielle} (les liens de fin de chapitre) plut\^ot que
+        dans un blog de 2014.
+  \item \textbf{Demander}, avec l'exemple minimal, la version de ton outil et le message complet
+        --- sur \link{Stack~Overflow}{https://stackoverflow.com/questions/tagged/javascript},
+        \link{Open~Classrooms}{https://openclassrooms.com/forum},
+        \link{Dev~Discord/Slack}{https://github.com/websites/DevChatter} ou le Discord officiel
+        d'un projet. Une question bien pos\'ee re\c{c}oit une r\'eponse en dix minutes.
+\end{enumerate}
 
 \begin{note}
-Le livre utilise les paquets standards suivants~: \texttt{babel(french)}, \texttt{geometry},
-\texttt{libertine}, \texttt{inconsolata}, \texttt{hyperref}, \texttt{cleveref},
-\texttt{tcolorbox}, \texttt{listings}, \texttt{booktabs}, \texttt{tabularx},
-\texttt{ltablex}, \texttt{enumitem}, \texttt{titletoc}, \texttt{menukeys}, \texttt{microtype},
-\texttt{multicol}. Une installation \texttt{texlive-full} les contient tous.
+\og ~Je tourne en rond depuis 45 minutes~ \fg{} est le signal pour lever les yeux de l'\'ecran~: marche,
+douche, sommeil. Ce n'est pas une perte de temps, c'est la phase d'incubation du d\'ebogage.
 \end{note}
 
-\subsection{Structure des fichiers}
+\section{Sept familles d'erreurs que tu rencontreras}
 
-\begin{codeplain}
-latex/
-  main.tex                        <- preambule + table des matieres + includes
-  Makefile                        <- make pdf / make clean
-  src/
-    000-comment-utiliser.tex      <- ce chapitre
-    101-environnement.tex         <- outils, editeurs, installations
-    102-git-terminal.tex
-    103-methode.tex
-    201-bases.tex  ...  215-perf-deploy.tex     <- partie JavaScript
-    301-bases.tex  ...  312-frameworks.tex       <- partie PHP
-    401-bases.tex  ...  412-web-spring.tex        <- partie Java
-    501-projets.tex ... 503-comparatif.tex        <- projets et plan d'etude
-    601-antisecche.tex, 602-ressources.tex       <- annexes
-\end{codeplain}
+\begin{enumerate}
+  \item \textbf{Chemins}~: fichier trouv\'e sur ta machine, introuvable en production.
+  \item \textbf{Encodage}~: accents cass\'es (UTF-8 partout, \verb|utf8mb4| en MySQL).
+  \item \textbf{Ordre d'ex\'ecution}~: async non attendu, variable utilis\'ee avant initialisation.
+  \item \textbf{Environnement}~: version d'outil, variable manquante, cache du navigateur.
+  \item \textbf{Confusion de type}~: \verb|"1"+1|, \verb|0 == ""|, \verb|null| contre \verb|undefined|.
+  \item \textbf{\'Etat partag\'e}~: mutation d'un objet pass\'e par r\'ef\'erence, effet de bord cach\'e.
+  \item \textbf{Pr\'ematurit\'e}~: optimiser, abstraire, g\'en\'eraliser avant que le besoin existe.
+\end{enumerate}
 
-\section*{Avant de commencer --- le test des 3 minutes}
+Tu peux les scanner une par une~: elles couvrent environ 80 \% des blocages de d\'ebutant.
 
-Ex\'ecute ces trois lignes dans un terminal. Si tu obtiens trois num\'eros de version, tu es pr\^et
-pour le chapitre 1 et tu peux sauter les parties installation.
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris ton contrat d'apprentissage~: jours, horaires, livrables, sanction en cas de
+        manquement. Signe-le, date-le, colle-le au mur.
+  \item Pr\'epare les trois fichiers \fichier{carnet.md} (un par langage) et le d\'ep\^ot
+        \verb|apprentissage|.
+  \item Fais une fiche de 5 cartes m\'emoire sur ce que tu as appris cette semaine
+        (\link{Anki}{https://apps.ankiweb.net/} est l'outil standard, gratuit partout sauf iOS).
+  \item Explique \`a voix haute, en deux minutes, la diff\'erence entre un langage interpr\'et\'e
+        et un langage compil\'e. Enregistre-toi si tu oses~; r\'e\'ecoute.
+\end{enumerate}
+\end{exercice}
 
-\begin{terminal}
-node --version    # attendu : v20.x ou v22.x
-php --version     # attendu : PHP 8.3.x ou 8.4.x
-java -version     # attendu : openjdk 21.x
-\end{terminal}
+\begin{ressources}
+\begin{itemize}
+  \item \emph{Eloquent JavaScript} (livre gratuit de r\'ef\'erence) --- \url{https://eloquentjavascript.net/}
+  \item \emph{The Road to Learn React / PHP / Java} --- \url{https://roadmap.sh/}
+  \item MDN en fran\c{c}ais --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript}
+  \item Exercices~: \url{https://exercism.org/}, \url{https://adventofcode.com/}, \url{https://www.codewars.com/}
+  \item M\'emorisation espac\'ee~: \url{https://apps.ankiweb.net/}
+\end{itemize}
+\end{ressources}
 
-Sinon, pas de panique~: \cref{ch:environnement} installe tout, ligne par ligne, pour
-Linux, macOS et Windows.
-
-\begin{center}
-\Large\bfseries\color{themecolor}
-Pr\^et ? Le chapitre suivant commence par installer ta bo\^ite \`a outils.
-\end{center}
-
-\index{conventions}\index{methode de travail}
-
-\tableofcontents
-
-\begin{center}
-  \begin{minipage}{0.9\textwidth}
-    \small\itshape
-    Les URL cit\'ees pointent vers la documentation officielle des \'editeurs de langages et des projets
-    open source : elles restent valides m\^eme si les versions \'evoluent. Les exemples de code ont \'et\'e
-    \'ecrits pour \langjs{}~ES2023+, \langphp{}~8.3+ et \langjava{}~21+ (LTS).
-  \end{minipage}
-\end{center}
-
-\mainmatter
-\chapter{Test de compilation}
-\label{ch:test}
-\begin{objectif}\item Si tu lis cette ligne, le pr\'eambule est bon.\end{objectif}
-\begin{codejs}
-const x = [1, 2, 3].map(v => v * 2);   // commentaire avec accents: e, a, c
-\end{codejs}
-\begin{tabz}{lX}\headrow \thd{Cl\'e} & \thd{Valeur} \\\midrule
-`a` & \verb|1| \\
-\end{tabz}
-\begin{note}Un bloc \og~test~\fg{} avec un lien \url{https://fr.overleaf.com} et une fleche $\rightarrow$.\end{note}
-\section{Section}
-R\'ef\'erence \cref{ch:test}, entr\'ee d'indice\index{test}.
+\index{methode}\index{plan d'etudes}
 \end{document}

@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Communicuer avec le serveur : fetch, SSE, WebSockets, workers}
-\label{ch:js-reseau}
+\label{ch-js-reseau}
 % ============================================================================
 
 \begin{objectif}
@@ -268,7 +268,7 @@ C\^ot\'e serveur Node, la biblioth\`eque de r\'ef\'erence est
 \end{note}
 
 \section{Web Workers : le CPU en parall\`ele}
-\label{sec:workers}
+\label{sec-workers}
 
 Un worker est un fil JavaScript s\'epar\'e~: pas d'acc\`es au DOM, mais un CPU entier. On \'echange
 des messages (structur\'es, clonables) et des \emph{transferables} ( ArrayBuffer, sans copie).
@@ -312,7 +312,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 \begin{exercice}
 \begin{enumerate}
   \item Consomme une API publique r\'eelle --- \url{https://api.github.com/repos/vitejs/vite} ou
-        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79\&longitude=-16.67\&current=temperature\\\\\_2m}
+        \url{https://api.open-meteo.com/v1/forecast?latitude=14.79&longitude=-16.67&current=temperature_2m}
         avec le mini-client~: affiche la temp\'erature de Thi\`es, g\`ere erreur r\'eseau et hors ligne.
   \item Ajoute un cache~: garde la derni\`ere r\'eponse dans \verb|sessionStorage| avec son \^age,
         affiche-la imm\'ediatement, puis rafra\^ichis en arri\`ere-plan (strat\'egie
@@ -331,7 +331,7 @@ w.onmessage = (e) => { document.querySelector("#out").textContent = `${e.data.pa
 
 \begin{ressources}
 \begin{itemize}
-  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch\\\\\_API/Using\\\\\_Fetch}
+  \item MDN --- fetch --- \url{https://developer.mozilla.org/fr/docs/Web/API/Fetch_API/Using_Fetch}
   \item MDN --- CORS --- \url{https://developer.mozilla.org/fr/docs/Web/HTTP/Guides/CORS}
   \item \link{Async API tutorial (Node, SSE, WS)}{https://github.com/nodejs/node} --- docs \og ~http~ \fg{}
   \item \link{web.dev : patterns de reseau}{https://web.dev/patterns/}

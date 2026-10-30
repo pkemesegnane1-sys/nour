@@ -1,9 +1,9 @@
 % ============================================================================
 \chapter{Comment utiliser ce manuel}
-\label{ch:comment}
+\label{ch-comment}
 % ============================================================================
 
-Ce livre a un objectif unique : te faire passer de \og je n'ai jamais \^ecrit une ligne de
+Ce livre a un objectif unique : te faire passer de \og je n'ai jamais \'ecrit une ligne de
 code \fg{} \`a \og je con\c{c}ois une application compl\`ete dans trois langages, je sais d\'ebugger,
 tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e avec un \^editor ouvert
 \`a c\^ot\'e, pas lu comme un roman.
@@ -14,7 +14,7 @@ tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e 
 \begin{itemize}
   \item \textbf{Trois langages ma\^itris\'es ensemble}~: \langjs{} (le langage du navigateur et de
         Node.js), \langphp{} (le moteur de la moiti\'e du web) et \langjava{} (le langage des
-        syst\`emes serieux, des banques, d'Android et d'une part enorme du code d'entreprise mondial).
+        syst\`emes s\'erieux, des banques, d'Android, et une part \'enorme du code d'entreprise mondial).
   \item \textbf{Un environnement de travail r\'eel} install\'e sur \emph{ta} machine, avec les bons
         outils, les bons raccourcis et les bonnes habitudes d\`es le premier jour.
   \item \textbf{Des centaines d'extraits de code complets et ex\'ecutables}, pens\'es pour \^etre
@@ -28,27 +28,23 @@ tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e 
 
 \section{La convention typographique}
 
-\begin{tabz}
+\begin{tabz}{p{0.34\textwidth}X}
   \headrow \thd{\'El\'ement} \& \thd{Signification} \\
   \midrule
-  \verb|code\_en\_police\_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
+  \verb|code_en_police_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
   \cmd{npm install} \& Commande \`a taper dans un terminal.\\
   \fichier{src/app.js} \& Chemin de fichier, relatif \`a la racine de ton projet.\\
   \keys{Ctrl + S} \& Raccourci clavier.\\
-  \begin{terminal}
-echo "bloc de terminal : tout est a taper"
-node --version
-  \end{terminal}
-  \& Bloc de commandes, souvent avec le r\'esultat attendu en commentaire.\\
-  \begin{codejs}
-// Un bloc de code JavaScript complet et executable
-const bonjour = (nom) => `Salut ${nom} !`;
-console.log(bonjour("Nour"));
-  \end{codejs}
-  \& Code \`a recopier. Tout ce qui est affich\'e est r\'eel et fonctionnel.\\
+  \verb|console.log(1)| \& Dans un bloc \texttt{codejs}, \texttt{terminal}\dots : tout le code
+  affich\'e est r\'eel et fonctionnel, \`a recopier tel quel.\\
   \src{https://developer.mozilla.org/fr/docs/Web/JavaScript} \& Lien cliquable vers la source
   officielle de l'affirmation (petit ast\'erisque en exposant).\\
 \end{tabz}
+
+Deux types de blocs reviennent partout : \verb|terminal| (les commandes \`a taper, avec le
+r\'esultat attendu en commentaire) et les blocs de code \verb|codejs|, \verb|codephp|,
+\verb|codejava|, \verb|codesql|, \verb|codeconf|, \verb|codejson|, \verb|codeyml|,
+\verb|codeplain| (du code complet, \`a recopier puis \`a ex\'ecuter).
 
 \subsection{Les encadr\'es}
 
@@ -57,9 +53,9 @@ console.log(bonjour("Nour"));
         Si tu les poss\`edes d\'ej\`a, saute-le.
   \item \textbf{Note}~: pr\'ecision th\'eorique ou contexte historique.
   \item \textbf{Astuce de pro}~: habitude des d\'eveloppeurs exp\'eriment\'es, gain de temps imm\'ediat.
-  \item \textbf{Pi\`ege \'a \'eviter}~: l'erreur que 9 d\'eveloppeurs sur 10 font la premi\`ere fois.
+  \item \textbf{Pi\`ege \`a \'eviter}~: l'erreur que 9 d\'eveloppeurs sur 10 font la premi\`ere fois.
         Ces encadr\'es valent de l'or~: ils t'\'epargnent des heures.
-  \item \textbf{Exercices guid\'es}~: \'a faire \emph{obligatoirement} \`a la main, sans copier-coller.
+  \item \textbf{Exercices guid\'es}~: \`a faire \emph{obligatoirement} \`a la main, sans copier-coller.
   \item \textbf{Ressources et outils cit\'es}~: les liens du chapitre, r\'esum\'es.
   \item \textbf{Projet \`a r\'ealiser}~: travail long, plusieurs jours, \`a faire en fin de partie.
 \end{itemize}
@@ -67,7 +63,7 @@ console.log(bonjour("Nour"));
 \section{Comment \'etudier avec ce livre}
 
 \etape{\'etape 1 --- Tape le code, ne le copie jamais}
-Le copier-coller cr\'eet l'illusion de la compr\'ehension. Taper force \`a lire chaque caract\`ere,
+Le copier-coller cr\'ee l'illusion de la compr\'ehension. Taper force \`a lire chaque caract\`ere,
 chaque point-virgule, chaque accolade. C'est p\'enible les trois premiers jours, puis
 ton cerveau int\`egre la syntaxe toute seule. Ajoute une r\`egle~:
 \emph{chaque bloc de code du livre est \`a recopier, \`a ex\'ecuter, puis \`a casser volontairement}
@@ -102,7 +98,7 @@ et c'est celle qui te rendra autonome.
 \section{Ordre de lecture conseill\'e}
 
 \begin{enumerate}
-  \item \Cref{ch:environnement} et \cref{ch:git} --- installation des outils, terminal, Git.
+  \item \Cref{ch-environnement} et \cref{ch-git} --- installation des outils, terminal, Git.
         \textbf{Non n\'egociable}, m\^eme si tu "~sais d\'eja faire~".
   \item \textbf{Partie I --- JavaScript}. C'est le langage qui donne un r\'esultat visible
         imm\'ediatement (une page web), donc la motivation ne retombe pas. Il couvre aussi la
@@ -132,56 +128,47 @@ au PHP. Avoir vu "~\`a quoi sert un \`el\'ement HTML dans un script~" rend tout 
         on le dit en une phrase avec un renvoi, on r'ecrit pas trois pages.
 \end{itemize}
 
-\section{Compiler ce livre}
+\section{Comment lire ce document}
 
-Le document est en \LaTeX{} et se compile sans configuration particuli\`ere si tu as une
-distribution \LaTeX{} \'a jour (TeX~Live~2023+ ou MiKTeX).
+Le manuel est fourni en deux formats construits sur le m\^eme texte~: une page
+\fichier{HTML} pour l'\'ecran, et un \fichier{PDF} pour l'impression ou la relecture
+hors ligne. Le contenu est identique, seul le confort change.
 
-\begin{terminal}
-# Linux (Debian/Ubuntu) : installation de LaTeX
-sudo apt update && sudo apt install -y texlive-latex-base texlive-latex-recommended \
-  texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra \
-  texlive-lang-french latexmk
+\begin{itemize}
+  \item \textbf{La page HTML} --- double-clique sur \fichier{manuel-js-php-java.html}.
+        \keys{Ctrl}+\keys{F} (\keys{Cmd}+\keys{F} sur Mac) cherche dans les quarante-six
+        chapitres d'un coup, y compris dans le code. Le bouton \og ~Sommaire~ \fg{} \`a gauche
+        ouvre le plan d\'etaill\'e, o\`u chaque titre est un lien. Le th\`eme suit celui du
+        syst\`eme, et le bouton en haut \`a droite bascule clair/sombre. Les blocs de code se
+        copient d'un clic sur l'\'etiquette plac\'ee en haut du bloc.
+  \item \textbf{Le PDF} --- soit tu le t\'el\'echarges tel quel (m\^eme texte, pagin\'e, format A4),
+        soit tu le fabriques depuis la page HTML avec \keys{Ctrl}+\keys{P} puis \og ~Destination:
+        Enregistrer au format PDF~\fg{}: la feuille de style d'impression casse une page par
+        chapitre, laisse le code entier et n'imprime ni le sommaire lat\'eral ni les boutons.
+  \item \textbf{Les corrig\'es} des quarante exercices sont repli\'es dans la page HTML (clique
+        sur \og ~Corrig\'e~\fg) et d\'epli\'es en entier dans le PDF.
+\end{itemize}
 
-# macOS avec Homebrew
-brew install --cask mactex-no-glypf && sudo /usr/local/texlive/2025/bin/universal-darwin/tlmgr update --self
+\begin{astuce}
+Range le fichier HTML dans ton dossier de cours et ouvre-le en \emph{local}: il fonctionne sans
+internet, sans installation, sans d\'ependance. Les liens vers la documentation officielle, eux,
+demandent une connexion --- c'est voulu: la doc, on la relit, on ne la recopie pas.
+\end{astuce}
 
-# Windows : telecharge MiKTeX (https://miktex.org/download) ou TeX Live (https://tug.org/texlive/)
+\subsection{O\`u chercher quoi}
 
-# Compilation (dans le dossier latex/)
-latexmk -pdf -interaction=nonstopmode main.tex
-# ou, sans latexmk :
-pdflatex main.tex && pdflatex main.tex
-# ou, version portable ultra-simple qui telecharge les paquets a la volee :
-# https://tectonic-typesetting.github.io/
-tectonic main.tex
-\end{terminal}
-
-\begin{note}
-Le livre utilise les paquets standards suivants~: \texttt{babel(french)}, \texttt{geometry},
-\texttt{libertine}, \texttt{inconsolata}, \texttt{hyperref}, \texttt{cleveref},
-\texttt{tcolorbox}, \texttt{listings}, \texttt{booktabs}, \texttt{tabularx},
-\texttt{ltablex}, \texttt{enumitem}, \texttt{titletoc}, \texttt{menukeys}, \texttt{microtype},
-\texttt{multicol}. Une installation \texttt{texlive-full} les contient tous.
-\end{note}
-
-\subsection{Structure des fichiers}
-
-\begin{codeplain}
-latex/
-  main.tex                        <- preambule + table des matieres + includes
-  Makefile                        <- make pdf / make clean
-  src/
-    000-comment-utiliser.tex      <- ce chapitre
-    101-environnement.tex         <- outils, editeurs, installations
-    102-git-terminal.tex
-    103-methode.tex
-    201-bases.tex  ...  215-perf-deploy.tex     <- partie JavaScript
-    301-bases.tex  ...  312-frameworks.tex       <- partie PHP
-    401-bases.tex  ...  412-web-spring.tex        <- partie Java
-    501-projets.tex ... 503-comparatif.tex        <- projets et plan d'etude
-    601-antisecche.tex, 602-ressources.tex       <- annexes
-\end{codeplain}
+\begin{tabz}{ll}
+  \headrow
+  \thd{Situation} & \thd{O\`u aller} \\
+  Je n'ai rien install\'e & chapitre 2, \emph{Environnement et outils} \\
+  Je ne connais pas Git & chapitre 3, \emph{Git et terminal} \\
+  Comment \'etudier avec ce livre & chapitre 4, \emph{M\'ethode de travail} \\
+  Je veux un planning clef en main & annexe \og ~Parcours 100 jours~\fg \\
+  Je veux savoir si je suis pr\^et & annexe \og ~Pr\'eparer les entretiens~\fg \\
+  Je cherche un livre, une doc, une communaut\'e & annexe \og ~Ressources officielles~\fg \\
+  Une erreur me bloque & partie \og ~Antis\`eche~\fg{} (les 60 erreurs classiques) \\
+  Je veux un seul langage de bout en bout & partie I (JavaScript), II (PHP), III (Java) \\
+\end{tabz}
 
 \section*{Avant de commencer --- le test des 3 minutes}
 
@@ -194,7 +181,7 @@ php --version     # attendu : PHP 8.3.x ou 8.4.x
 java -version     # attendu : openjdk 21.x
 \end{terminal}
 
-Sinon, pas de panique~: \cref{ch:environnement} installe tout, ligne par ligne, pour
+Sinon, pas de panique~: \cref{ch-environnement} installe tout, ligne par ligne, pour
 Linux, macOS et Windows.
 
 \begin{center}

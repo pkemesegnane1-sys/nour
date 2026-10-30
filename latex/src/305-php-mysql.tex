@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{PHP et MySQL~: PDO, requ\^etes pr\'epar\'ees, transactions, migrations}
-\label{ch:php-db}
+\label{ch-php-db}
 % ============================================================================
 
 \begin{objectif}
@@ -174,7 +174,7 @@ $rows = $pdo->prepare("SELECT * FROM articles ORDER BY publie_le DESC LIMIT {$li
 contenant \verb|\%| ou \verb|\_| doit \^etre \'echapp\'ee (\verb|addcslashes(\$q, '\%\_\\')|), sinon
 \og ~100\,\%~ \fg{} devient un joker. Et surtout~: un \verb|LIMIT|/\verb|ORDER BY| \emph{ne peut pas}
 venir d'un param\`etre de requ\^ete pr\'epar\'ee~; ce sont les deux seuls endroits o\`u tu construis
-la SQL~: donc liste blanche absolue (cf. \cref{ch:js-secu}).
+la SQL~: donc liste blanche absolue (cf. \cref{ch-js-secu}).
 \end{piege}
 
 \section{Transactions~: la consistance, pas le luxe}

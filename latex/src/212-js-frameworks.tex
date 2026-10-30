@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Interface moderne : Vite, composants, React/Vue/Svelte, Astro}
-\label{ch:js-frameworks}
+\label{ch-js-frameworks}
 % ============================================================================
 
 \begin{objectif}
@@ -130,7 +130,7 @@ export function ListeCourses() {
   \item Un \verb|useEffect| doit d\'eclarer ses d\'ependances \textbf{compl\`etes}
         (active \verb|eslint-plugin-react-hooks|, et le preset \og ~recommended-latest~ \fg{}).
   \item Une mise \`a jour d'\'etat doit produire une \textbf{nouvelle r\'ef\'erence}
-        (\verb|set(x => ({ ...x })), pas \verb|set(state.prop = 1)|).
+        (\verb!set(x => ({ ...x }))!, pas \verb!set(state.prop = 1)!).
   \item Si un effet sert \`a \og ~d\'eriver~ \fg{} une valeur, ce n'est pas un effet~: c'est un calcul
         pendant le rendu (\verb|useMemo| ou simple const).
 \end{enumerate}

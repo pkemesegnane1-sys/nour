@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Node.js : serveur, CLI, scripts d'automatisation}
-\label{ch:node}
+\label{ch-node}
 % ============================================================================
 
 \begin{objectif}
@@ -223,7 +223,7 @@ export function gestionErreur(err, req, res, _next) {
 \end{codejs}
 
 \subsection{Configuration par environnement~: la bonne habitude d\`es le premier jour}
-\label{sec:node-config}
+\label{sec-node-config}
 
 \begin{codejs}
 // src/config.js --- une seule porte d'entree, validee au demarrage
@@ -261,7 +261,7 @@ ou simplement le fichier d'environnement de systemd / de ton h\'ebergeur).
 \begin{itemize}
   \item \textbf{Cookies et sessions}~: \link{cookie-parser}{https://github.com/pillarjs/cookie-parser},
         \link{express-session}{https://github.com/expressjs/session} (ou des sessions sign\'ees sans
-        \'etat, cf. \cref{ch:js-secu}).
+        \'etat, cf. \cref{ch-js-secu}).
   \item \textbf{Upload}~: \link{multer}{https://github.com/expressjs/multer}, avec taille maximale,
         liste blanche de types et stockage hors de la racine web.
   \item \textbf{Limitation de d\'ebit}~: \link{express-rate-limit}{https://github.com/nickdesclos/express-rate-limit}.

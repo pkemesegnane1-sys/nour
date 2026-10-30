@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{PHP objet~: classes, interfaces, \'enum\'erations, attributs}
-\label{ch:php-oop}
+\label{ch-php-oop}
 % ============================================================================
 
 \begin{objectif}
@@ -315,7 +315,7 @@ et Laravel. Les avoir \'ecrits une fois \og ~\`a la main~ \fg{} rend ces framewo
 \section{Autochargement~: PSR-4 sans myst\`ere}
 
 Un fichier = une classe = un nom d'espace de lignes coh\'erent avec le chemin. Le reste est
-l'affaire de Composer (\cref{ch:php-composer}) ou de dix lignes de \verb|spl\_autoload\_register|.
+l'affaire de Composer (\cref{ch-php-composer}) ou de dix lignes de \verb|spl\_autoload\_register|.
 
 \begin{codephp}
 <?php
@@ -441,7 +441,7 @@ DDD) est de la broderie sur ces trois points, utile \`a conna\^itre mais raremen
   \item Impl\'emente une \verb|Collection| immuable g\'en\'erique-ish~: \verb|map|, \verb|filter|,
         \verb|reduce|, \verb|groupBy|, \verb|first|, \verb|isEmpty|, \verb|IteratorAggregate|,
         \verb|Countable|, \verb|JsonSerializable|.
-  \item \'Ecris un petit routeur avec attributs~: \verb|\#[Route('GET','/articles/{id}')]~,
+  \item \'Ecris un petit routeur avec attributs~: \verb|#[Route('GET','/articles/{id}')]|,
         un scanner par r\'eflexion, compilation des motifs en regex, et r\'esolution des param\`etres.
   \item Ajoute un conteneur DI \`a ton projet (le mod\`ele ci-dessus suffit), et fais-en sorte que
         \verb|new| n'apparaisse plus nulle part dans \verb|src/| sauf dans le bootstrap.

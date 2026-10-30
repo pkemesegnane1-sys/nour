@@ -1,65 +1,79 @@
-# Manuel JavaScript / PHP / Java (LaTeX)
+# Manuel JavaScript / PHP / Java — source LaTeX
 
-Source LaTeX du livre. Le PDF n'est pas versionné : il se construit en local.
+Le dépôt ne contient que des sources `.tex` : le PDF se construit à la compilation.
+Le document principal est **`main.tex`** (lui seul contient `\documentclass`) ; il `\input`
+les 43 chapitres de `src/`.
 
-## Ouvrir le document
+## 1. Overleaf (le plus rapide)
 
-Le dépôt ne contient que des sources `.tex` : il faut compiler pour obtenir un PDF.
-Trois voies, de la plus rapide à la plus autonome (détails ci-dessous).
+1. `manuel-JS-PHP-Java-overleaf.zip` (à la racine de ce dossier) → **Nouveau projet →
+   Envoyer depuis votre ordinateur**.
+2. Menu ⚙️ : Compiler = **pdfLaTeX**, *Main document* = **main.tex**, compilation auto = **off**.
+3. **Recompile** — latexmk enchaîne les passages (sommaire, renvois, index).
+4. En cas d'erreur : *Logs and output files → Raw logs*, puis `Ctrl+F` sur `!`.
 
-1. **Sans rien installer** : zipper le dossier `latex/`, l'envoyer sur
-   [Overleaf](https://fr.overleaf.com/) (*New Project → Upload Project*), remplacer le document
-   principal par `main.tex`, cliquer *Recompile*.
-2. **Dans le cloud, avec un vrai éditeur** : [GitHub Codespaces](https://github.com/codespaces)
-   sur la branche du dépôt → le conteneur a un bouton *Install LaTeX* → `latexmk -pdf -shell-escape latex/main.tex`.
-3. **Sur ta machine** : Tectonic ou TeX Live/MiKTeX (commandes plus bas).
+Aucune option à cocher, aucun `--shell-escape` : l'index passe par `makeidx` +
+latexmk, et `\printindex` est gardé par `\IfFileExists{\jobname.ind}` (donc pas d'erreur
+si l'index n'a pas encore été généré).
 
-## Compilation rapide
+## 2. En local
 
 ```bash
 cd latex
-# Option 1 — Tectonic (un seul binaire, télécharge les paquets à la volée)
-# Linux : binaire statique depuis les releases GitHub (aucune dependance)
-curl -sSL https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/\
-  tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz | tar xz && sudo install tectonic /usr/local/bin/
-# macOS : brew install tectonic        Windows : scoop bucket add extras && scoop install tectonic
-# Partout : cargo install tectonic (si Rust est installe)
-tectonic main.tex                                  # -> main.pdf (l'index est géré par tectonic)
-
-# Option 2 — TeX Live ou MiKTeX complets (le -shell-escape est indispensable pour l'index)
-latexmk -pdf -shell-escape main.tex
-#   ou à la main :
+latexmk -pdf main.tex                                  # recommandé : gère les passages + makeindex
+# ou à la main :
 pdflatex main.tex && makeindex main && pdflatex main.tex && pdflatex main.tex
-
-# Option 3 — LaTeX Workshop dans VS Code : Ctrl+Alt+B (ou "Build LaTeX project"),
-#   avec latexmk ; penser à acter "latex.build.withShellEscape": true dans settings.json.
+# ou sans TeX Live installé (télécharge les paquets à la volée) :
+tectonic main.tex
 ```
 
-Paquets nécessaires : `texlive-latex-recommended`, `texlive-latex-extra`
-(tcolorbox, listings, cleveref, booktabs, ltablex, menukeys, imakeidx, pifont),
-`texlive-fonts-recommended`, `texlive-lang-french`.
+Paquets utilisés (tous dans TeX Live complet / MiKTeX) :
 
-## Contenu
+`fontenc` `inputenc` `babel(french)` `geometry` `microtype` `libertine` `inconsolata`
+`amsmath` `amssymb` `xcolor[table]` `hyperref` `cleveref` `graphicx` `booktabs` `longtable`
+`array` `enumitem` `multicol` `menukeys` `titletoc` `makeidx` `listings` `tcolorbox[most]`.
 
-- `main.tex` — préamble (styles `listings`, boîtes tcolorbox, `tabz`, index), page de titre, plan.
-- `src/000…103` — mode d'emploi, environnement (JS/PHP/Java), Git/terminal, méthode de travail.
-- `src/201…216` — JavaScript (16 chapitres).
-- `src/301…309` — PHP (9 chapitres).
-- `src/401…411` — Java (11 chapitres).
-- `src/501…502` — cinq projets complets, comparatif des trois langages et trajectoire.
-- `src/601-antisecche.tex` — annexes : antisèches, messages d'erreur, check-lists.
+Debian/Ubuntu : `sudo apt install texlive-latex-extra texlive-fonts-extra texlive-lang-french latexmk`
+TeX Live : `tlmgr install libertine inconsolata titletoc menukeys`
 
-## Conventions d'écriture
+## 3. Contenu
 
-- Les blocs de code sont des environnements `listing only` : ASCII ou accents latins uniquement,
-  jamais `# & % _ { }` non protégés, pas de glyphe `→ ✓ « »` (utiliser `\boxv \boxh \boxe \euro`).
-- La prose demande `\%`, `\&`, `\_`, `\#` et ```…''`/`\og … \fg{}` pour les guillemets.
-- Tableaux : `tabz` (4 colonnes max confort) ou `tablez` (identique, colonnes optionnelles).
+| Fichier | Rôle |
+|---|---|
+| `main.tex` | préambule + page de titre + plan (`\input` des 43 chapitres) |
+| `src/000…103` | mode d'emploi, environnement outillés, Git/terminal, méthode de travail |
+| `src/201…216` | JavaScript / Node (16 chapitres) |
+| `src/301…309` | PHP / MySQL (9 chapitres) |
+| `src/401…411` | Java / Spring (11 chapitres) |
+| `src/501…502` | cinq projets complets, comparatif des langages, trajectoire |
+| `src/601` | annexes : antisèches, messages d'erreur, check-lists |
+| `livre-complet.tex` | tout le livre inliné dans un seul fichier (même contenu) |
+| `test-overleaf.tex` | préambule + 1 chapitre : test d'isolement du préambule |
 
-## Pré-traitement
+## 4. Conventions d'écriture (à respecter si tu ajoutes du contenu)
 
-`scripts/sanitize-latex.py` corrige automatiquement ces pièges (idempotent) :
+- **Blocs de code** : `codejs`, `codephp`, `codejava`, `codesql`, `codeconf`, `codejson`,
+  `codeyml`, `codeplain`, `terminal`. Ce sont de vrais environnements `listings` (verbatim) :
+  à l'intérieur, `$ # _ % & { }` s'écrivent **tels quels**, sans échappement, et il ne faut pas
+  y mettre de macro. Contenu **ASCII** uniquement (pas d'accents ni de `→ ✓ « »`) et **jamais
+  dans une cellule de tableau** (un verbatim dans une cellule est interdit en LaTeX).
+- **Prose** : échapper `\%`, `\&`, `\#`, `\_` ; guillemets français `\og … \fg{}`.
+- **Tableaux** : `\begin{tabz}{lXX} … \end{tabz}` ou `\begin{tablez}[p{0.2\textwidth}X] … \end{tablez}`
+  (une `longtable` à largeurs fixes, lignes alternées, en-tête `\headrow \thd{…}`).
+  `X` = 0,30 `\textwidth`. `\verb` est autorisé dans les cellules.
+- **Encadrés** : `objectif`, `note`, `astuce`, `piege`, `exercice`, `ressources`, `projet`.
+- **Macros** : `\cmd{…}` commande, `\fichier{…}` chemin, `\rep{…}` dossier, `\src{…}` lien source,
+  `\keys{…}` raccourci clavier, `\clic{…}` libellé d'interface, `\etape{…}` étape.
+- **Étiquettes** : **sans deux-points** (`\label{ch-git}`, `\cref{ch-git}`). Le `:` est actif en
+  français (babel) et casse `\csname`, donc `\cref` → « Missing \endcsname inserted ».
+
+## 5. Pré-traitement
+
+`scripts/sanitize-latex.py` corrige ces pièges automatiquement (idempotent) :
 
 ```bash
 python3 scripts/sanitize-latex.py latex/src --main
 ```
+
+Il ne touche jamais au préambule (tout ce qui précède `\begin{document}`), ni aux spans
+`$…$`, `\verb|…|`, `\cmd{…}` et aux blocs de code.

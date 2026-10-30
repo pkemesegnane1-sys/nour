@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{G\'en\'eriques, collections et exceptions}
-\label{ch:java-collections}
+\label{ch-java-collections}
 % ============================================================================
 
 \begin{objectif}
@@ -29,7 +29,7 @@
   dictionnaire avec insertion en fin \& \verb|LinkedHashMap| \& O(1) \& \verb|removeEldestEntry| = cache LRU en 5 lignes. \\
   dictionnaire tri\'e / plages \& \verb|TreeMap| \& O($\log n$) \& \verb|subMap|, \verb|floorKey|, \verb|ceilingKey|. \\
   dictionnaire immuable \& \verb|Map.of(...)| / \verb|Map.copyOf(..)| \& O(1) \& limite de 10 paires pour \verb|of| ; \verb|ofEntries| au-del\`a. \\
-  concurrent \& \verb|ConcurrentHashMap| \& O(1) sans verrou global \& \verb|computeIfAbsent|, \verb|merge|, \verb|reduce*. \\
+  concurrent \& \verb|ConcurrentHashMap| \& O(1) sans verrou global \& \verb|computeIfAbsent|, \verb|merge|, \verb|reduce*|. \\
   files bloquantes (threads) \& \verb|ArrayBlockingQueue| / \verb|LinkedBlockingQueue| \& \& born\'ee = dos-pression. Base de tout producteur/consommateur. \\
   tas de priorit\'e \& \verb|PriorityQueue| \& offre O($\log n$) \& k-plus-grands, ordonnanceur, Dijkstra. \\
   cl\'es par identit\'e (pas equals) \& \verb|IdentityHashMap| \& \& \verb|WeakHashMap| pour le cache sans fuite. \\

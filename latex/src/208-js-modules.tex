@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Modules, npm et outillage}
-\label{ch:js-modules}
+\label{ch-js-modules}
 % ============================================================================
 
 \begin{objectif}
@@ -230,7 +230,7 @@ dans \verb|scripts| vaut mieux qu'une usine \`a gaz.
         \cmd{npm run dev -- --port 4000} passe les arguments apr\`es \verb|--|.
   \item Node~20.6+ lit un fichier d'environnement tout seul~: \cmd{node --env-file=.env app.js},
         et \link{dotenv}{https://github.com/motdotla/dotenv} fait la m\^eme chose depuis plus longtemps.
-        \label{sec:dotenv}
+        \label{sec-dotenv}
 \end{itemize}
 
 \section{Choisir une d\'ependance (la check-list anti-regret)}
@@ -261,7 +261,7 @@ dans \verb|scripts| vaut mieux qu'une usine \`a gaz.
   \link{nanoid}{https://github.com/ai/nanoid} ou \verb|crypto.randomUUID()| \& identifiants. \\
   \link{picocolors}{https://github.com/alexeyraspopov/picocolors} \& couleurs en CLI, 2~Ko. \\
   \link{commander}{https://github.com/tj/commander.js} / \link{yargs}{https://yargs.js.org/} / \link{citty}{https://github.com/unjs/citty} \& cr\'eer un CLI. \\
-  \link{p-limit}{https://github.com/sindresorhus/p-limit} / \link{throat}{https://github.com/ForbesLindesay/throat} \& concurrence born\'ee (ou ta version maison, cf. \cref{ch:js-async}). \\
+  \link{p-limit}{https://github.com/sindresorhus/p-limit} / \link{throat}{https://github.com/ForbesLindesay/throat} \& concurrence born\'ee (ou ta version maison, cf. \cref{ch-js-async}). \\
   \link{fast-glob}{https://github.com/mrmlnc/fast-glob} \& recherche de fichiers par motif. \\
   \link{chalk}{https://github.com/chalk/chalk} \& sortie CLI styl\'ee. \\
   \link{vitest}{https://vitest.dev/} \& runner de test rapide, compatible Jest, int\'egr\'e \`a Vite. \\

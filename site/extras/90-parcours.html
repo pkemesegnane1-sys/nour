@@ -1,0 +1,173 @@
+<section class="chap" id="parcours-100-jours">
+<h2><span class="n">·</span>Le parcours des 100 jours</h2>
+
+<p>Les chapitres précédents expliquent <em>quoi</em> apprendre. Celui-ci organise <em>quand</em>.
+Cent jours, une séance par jour, jamais plus de 90&nbsp;minutes&nbsp;: c'est largement assez pour
+sortir du stade « je lis des tutoriels » pour entrer dans celui « je livre un truc qui tourne ».</p>
+
+<div class="grille">
+  <div class="carte"><h4>Règle 1 — la main sur le clavier</h4>
+    <p>Aucun jour sans que tu aies tapé du code toi-même. Lire du code ne laisse aucune trace
+    motrice&nbsp;; recopier en laisse une petite, écrire de mémoire en laisse une grande.</p></div>
+  <div class="carte"><h4>Règle 2 — une seule chose à la fois</h4>
+    <p>Un langage par semaine (JS les semaines 1 à 5, PHP 6 à 9, Java 10 à 14). Les
+    allers-retours constants entre trois langages au début ne forment aucune mémoire.</p></div>
+  <div class="carte"><h4>Règle 3 — commit ou ce n'est pas fini</h4>
+    <p>Chaque séance se termine par <code>git commit</code> et un message qui dit <em>pourquoi</em>.
+    Le historique de ton dépôt est ton vrai CV&nbsp;: il prouve la régularité mieux qu'un badge.</p></div>
+  <div class="carte"><h4>Règle 4 — 15 minutes de blocage maximum</h4>
+    <p>Passé ce délai, on écrit le problème par écrit (issue, carnet, brouillon), on note ce qu'on
+    a essayé, et on passe à la suite. Revenir dessus le lendemain le règle huit fois sur dix.</p></div>
+</div>
+
+<h3 id="le-calendrier">Le calendrier, semaine par semaine</h3>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Semaine</th><th>Objectif</th><th>Ce que tu fais chaque jour</th><th>Validé si…</th></tr></thead>
+<tbody>
+<tr><td>1<br><small>outils</small></td><td>Environnement de travail qui ne bouge plus</td>
+<td>Installations (nvm, PHP, JDK, Git, VS Code), vérification des versions, premier dépôt, README,
+<code>.gitignore</code>, terminal, raccourcis de l'éditeur, débogage pas à pas sur 5 lignes.</td>
+<td>Tu sors du terminal en sachant ce que chaque commande a fait, et ton projet se relance sur une
+autre machine avec 4 commandes.</td></tr>
+
+<tr><td>2<br><small>JS langage</small></td><td>Le langage, pas le framework</td>
+<td>Chapitres bases et données&nbsp;: types, portée, fonctions, fermetures, tableaux, objets.
+Exercices 1 à 10 du manuel, un par jour, refaits de mémoire le week-end.</td>
+<td>Tu écris sans aide <code>chunk</code>, <code>groupBy</code>, <code>debounce</code>,
+<code>deepEqual</code>, et tu expliques <code>this</code> en trois phrases.</td></tr>
+
+<tr><td>3<br><small>JS asynchrone</small></td><td>Comprendre la boucle d'événements</td>
+<td>Promesses, <code>async/await</code>, <code>fetch</code>, annulation, files d'attente, gestion
+d'erreurs. Petite CLI Node qui lit un CSV et écrit un JSON.</td>
+<td>Tu sais dire pourquoi <code>await</code> dans une boucle <code>for</code> est lent, et tu
+l'as mesuré avec <code>console.time</code>.</td></tr>
+
+<tr><td>4<br><small>DOM &amp; navigateur</small></td><td>Piloter une page sans framework</td>
+<td>Requête, création, délégation, formulaires, validation, <code>localStorage</code>, une liste de
+tâches complète (ajout, filtre, persistée, accessible au clavier).</td>
+<td>Ta liste de tâches fonctionne sans JavaScript désactivé… non, sans <em>framework</em> désactivé,
+pèse moins de 200 lignes et n'a pas un seul <code>innerHTML</code> sur des données.</td></tr>
+
+<tr><td>5<br><small>Node &amp; HTTP</small></td><td>Un serveur qui répond correctement</td>
+<td><code>http</code> nu, routeur, middlewares, codes HTTP, variables d'environnement, tests avec
+<code>node --test</code>. Projet 1 démarré&nbsp;: raccourcisseur d'URL.</td>
+<td>Ton serveur renvoie 400, 404, 405, 409, 429 aux bons moments, et les tests le prouvent.</td></tr>
+
+<tr><td>6-7<br><small>PHP</small></td><td>Le même socle, en PHP strict</td>
+<td>Types, <code>declare(strict_types=1)</code>, tableaux, fonctions, POO, autoloading PSR-4,
+Composer. Tu réécris le raccourcisseur d'URL en PHP, à plat, sans framework.</td>
+<td>Tu expliques la différence entre <code>==</code> et <code>===</code>, <code>include</code> et
+l'autoloader, et ton projet passe <code>php -l</code>, PHPStan et les tests.</td></tr>
+
+<tr><td>8-9<br><small>PHP web</small></td><td>Bases de données et sécurité</td>
+<td>PDO, requêtes préparées, transactions, migrations, sessions, CSRF, hash des mots de passe,
+upload, mini-MVC maison (projet 2). PHPUnit sur chaque règle métier.</td>
+<td>Aucune variable utilisateur n'arrive dans un SQL ou un HTML sans passer par une ligne que tu
+peux montrer du doigt.</td></tr>
+
+<tr><td>10-11<br><small>Java langage</small></td><td>Typage fort, collections, JVM</td>
+<td>Types, classes, records, énumérations, héritage vs composition, exceptions, collections,
+generics. Chapitres bases et collections. Petits algo&nbsp;: file LRU, tri stable, index inversé.</td>
+<td>Tu justifies <code>List</code> vs <code>Set</code> vs <code>Map</code> par la complexité, et
+tu écris un <code>equals</code>/<code>hashCode</code> correct sans IDE.</td></tr>
+
+<tr><td>12<br><small>Java moderne</small></td><td>Fonctionnel, IO, concurrence</td>
+<td>Lambdas, streams, <code>Optional</code>, NIO, threads puis virtual threads,
+<code>CompletableFuture</code>. Un crawler de liens en 40 lignes, borné en temps et en mémoire.</td>
+<td>Ton crawler s'arrête proprement à l'échéance, ne sature pas la machine, et son graphe de threads
+tient dans ta tête.</td></tr>
+
+<tr><td>13<br><small>Java pro</small></td><td>Build, tests, base, web</td>
+<td>Maven ou Gradle, JUnit 5, JDBC + HikariCP + Flyway, Spring Boot ou Javalin, validation,
+OpenAPI, Dockerfile, CI GitHub Actions. Projet 3 démarré.</td>
+<td><code>mvn verify</code> construit, teste, et produit un jar exécutable. La CI est verte sur
+une branche propre.</td></tr>
+
+<tr><td>14<br><small>Consolidation</small></td><td>Relire, corriger, expliquer</td>
+<td>Relecture des trois projets, suppression de la dette la plus visible, README avec captures,
+tests de bout en bout, mise en ligne d'un des trois, rédaction de deux notes de 500 mots
+(« ce que j'ai compris de l'async », « ce que j'ai compris des transactions »).</td>
+<td>Tu expliques chaque ligne de tes projets à voix haute, et tu sais dire ce que tu referais
+autrement.</td></tr>
+</tbody></table></div>
+
+<h3 id="la-seance-type">La séance type (75 minutes)</h3>
+
+<div class="box obj"><p class="titre-boxe">Déroulé, minute par minute</p>
+<ol>
+<li><strong>10 min — rappel actif.</strong> Ferme tout. Écris de mémoire ce que tu as appris hier,
+en code si possible. Puis compare. Ce qui manque est exactement ce qu'il faut revoir.</li>
+<li><strong>15 min — lecture ciblée.</strong> Un seul chapitre du manuel, ou une page de la doc
+officielle. Un carnet à côté&nbsp;: trois lignes max, avec la syntaxe que tu ne connaissais pas.</li>
+<li><strong>35 min — code.</strong> Le bloc de l'objectif, tapé à la main, puis <em>modifié</em>:
+casse-le exprès, lis le message d'erreur, répare-le. Ce sont les 35 minutes qui comptent.</li>
+<li><strong>10 min — test.</strong> Une fonction testée, un cas d'erreur ajouté. Un projet sans test
+est un projet que tu n'oseras pas modifier.</li>
+<li><strong>5 min — commit et note.</strong> Message de commit au présent (« ajoute la pagination »),
+puis une ligne dans un fichier <code>JOURNAL.md</code>&nbsp;: ce qui a bloqué, ce que tu veux
+reprendre demain.</li>
+</ol>
+</div>
+
+<div class="box astuce"><p class="titre-boxe">Astuce</p>
+<p>Le <code>JOURNAL.md</code> n'est pas un optional&nbsp;: relire dix jours de notes le dimanche
+fait gagner plus qu'une session de rattrapage. Et c'est le document qui, six mois plus tard, te
+permet d'écrire un article ou de raconter un entretien en détail.</p></div>
+
+<h3 id="pieges-du-parcours">Les six façons d'échouer (et les esquiver)</h3>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Dérive</th><th>Signe avant-coureur</th><th>Correctif</th></tr></thead>
+<tbody>
+<tr><td>Le collectionneur de tutos</td><td>Tu as 14 onglets ouverts, 0 dépôt.</td>
+<td>Interdiction de commencer une ressource tant que le projet en cours n'a pas un commit.</td></tr>
+<tr><td>Le copier-coller qui marche</td><td>Le code tourne, tu ne sais pas expliquer une ligne.</td>
+<td>Test de Feynman&nbsp;: explique la fonction à voix haute, sans jargon. Ce que tu n'arrives pas
+à dire, tu ne le sais pas.</td></tr>
+<tr><td>Le perfectionniste du setup</td><td>Trois soirs à choisir un thème, un framework, un nom de repo.</td>
+<td>Le setup est figé à la semaine 1. Un éditeur, un terminal, un langage par semaine&nbsp;: c'est tout.</td></tr>
+<tr><td>Le sauteur de pile</td><td>Deux semaines sur chaque techno, zéro projet terminé.</td>
+<td>Un projet n'est fini que quand il est en ligne, avec un README et un test.</td></tr>
+<tr><td>Le marathon du dimanche</td><td>6 heures d'un coup, puis 5 jours sans rien.</td>
+<td>La constance bat l'intensité&nbsp;: 45 minutes par jour, six jours sur sept, en gardant une
+journée de repos réelle.</td></tr>
+<tr><td>Le silencieux</td><td>Tu ne montres rien, tu ne demandes rien.</td>
+<td>Une question par semaine, écrite proprement (recherche faite, minimal repro). C'est la
+compétence la mieux payée en équipe.</td></tr>
+</tbody></table></div>
+
+<h3 id="apres-les-100-jours">Après les 100 jours&nbsp;: les 6 mois qui suivent</h3>
+
+<div class="box note"><p class="titre-boxe">Le vrai seuil</p>
+<p>À la fin des 100 jours, tu sais lire et écrire du code utile dans trois langages. Tu n'es pas
+« pro ». Le seuil professionnel est derrière&nbsp;: maintenir du code qui n'est pas le tien, pendant
+des mois, sans le casser. Tout le reste de l'année sert à ça.</p></div>
+
+<ul class="check">
+<li><strong>Mois 4 — un projet à utilisateurs.</strong> Le raccourcisseur d'URL ou le blog, en ligne,
+avec de vraies gens dessus (10 suffisent). Journalisation, sauvegardes, alerte quand ça tombe.
+Tu apprends l'exploitation, qu'aucun tuto ne couvre.</li>
+<li><strong>Mois 5 — du code qui n'est pas le tien.</strong> Prends un dépôt open source de 200 à
+2 000 lignes dans ton langage du moment&nbsp;: lis-le, écris une note d'architecture, ouvre une
+issue utile, puis une pull request (un test manquant, une doc fausse, un bug de bord). La revue
+de code d'un inconnu vaut dix tutos.</li>
+<li><strong>Mois 6 — la profondeur.</strong> Un seul sujet, traité à fond&nbsp;: les index et le plan
+d'exécution, les collecteurs de la JVM, le rendu et la peinture du navigateur, ou les pools de
+connexions. Tu en écris un article de 1 500 mots avec mesures à l'appui.</li>
+<li><strong>En continu — les bases qui ne pourrissent pas.</strong> Un chapitre d'algorithmique par
+semaine (tableaux de hachage, files, graphes, tris), un exercice d'entretien, 30 minutes
+d'anglais technique lu. Ce sont les trois seuls investissements qui se recyclent d'un langage à
+l'autage.</li>
+<li><strong>Le portfolio.</strong> Trois dépôts propres valent mieux que trente&nbsp;: README avec
+captures et commandes, CI verte, issues et PR qui montrent comment tu travailles, LICENSE, un
+déploiement en ligne. Un recruteur passe quatre minutes&nbsp;; donne-lui trois choses à voir.</li>
+</ul>
+
+<div class="box exercice"><p class="titre-boxe">Exercice — ton contrat</p>
+<p>Écris maintenant, en cinq lignes, le contrat que tu te signes pour les 100 jours&nbsp;:
+l'heure de la séance, l'endroit, ce que tu abandonnes pour la tenir, le projet que tu livreras au
+jour 100, et la personne à qui tu le montreras. Enregistre-le dans <code>CONTRAT.md</code> à la
+racine du dépôt. C'est bête, et c'est ce qui fait la différence entre les 100 jours et les 100
+intentions.</p></div>
+</section>

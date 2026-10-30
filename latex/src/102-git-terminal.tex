@@ -1,6 +1,6 @@
 % ============================================================================
 \chapter{Terminal, Git, et bonnes habitudes de fichiers}
-\label{ch:git}
+\label{ch-git}
 % ============================================================================
 
 \begin{objectif}
@@ -96,7 +96,7 @@ Fichiers de configuration du shell (\`a \'editer une fois, puis \cmd{source})~:
 \begin{tabz}{llX}
   \headrow \thd{Shell} \& \thd{Fichier} \& \thd{Quand} \\
   \midrule
-  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\\\\\\\_profile} \& interactif / connexion \\
+  bash \& \fichier{\textasciitilde/.bashrc}, \fichier{\textasciitilde/.bash\_profile} \& interactif / connexion \\
   zsh (macOS par d\'efaut) \& \fichier{\textasciitilde/.zshrc} \& les deux \\
   fish \& \fichier{\textasciitilde/.config/fish/config.fish} \& syntaxe diff\'erente, tr\`es convivial \\
   PowerShell \& \cmd{Notepad $PROFILE} \& Windows \\
@@ -104,7 +104,7 @@ Fichiers de configuration du shell (\`a \'editer une fois, puis \cmd{source})~:
 
 Les variables d'environnement d'\textbf{un projet} ne vont pas dans le shell mais dans un
 fichier \fichier{.env}, jamais versionn\'e, accompagn\'e d'un \fichier{.env.example} versionn\'e, lui.
-C'est le contrat standard en Node comme en PHP~; voir \cref{sec:dotenv,ch:php-bases}.
+C'est le contrat standard en Node comme en PHP~; voir \cref{sec-dotenv,ch-php-bases}.
 
 \subsection{Les shells qui changent la vie}
 
@@ -232,7 +232,7 @@ gh issue list --state open
   \item \link{Discussions}{https://docs.github.com/en/discussions} et
         \link{Pages}{https://pages.github.com/} pour h\'eberger un site statique gratuit.
   \item \link{Actions}{https://github.com/features/actions} pour l'int\'egration continue
-        (exemple complet en \cref{sec:ci-cd}).
+        (exemple complet en \cref{sec-ci-cd}).
   \item \link{Copilot}{https://github.com/features/copilot} gratuit pour les \'etudiants et
         les maintainers de projets open source populaires.
 \end{itemize}
@@ -297,7 +297,7 @@ pas seulement le r\'esultat.
 \begin{itemize}
   \item Pro Git (livre complet, gratuit, en fran\c{c}ais) --- \url{https://git-scm.com/book/fr/v2}
   \item GitHub Skills (cours officiels gratuits) --- \url{https://skills.github.com/}
-  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr\\\\\\_FR}
+  \item Learn Git Branching (jeu visuel pour comprendre le graphe) --- \url{https://learngitbranching.js.org/?locale=fr_FR}
   \item The Missing Semester (MIT) --- \url{https://missing.csail.mit.edu/2020/course-material/}
   \item Shellcheck (analyse tes scripts bash) --- \url{https://www.shellcheck.net/}
 \end{itemize}

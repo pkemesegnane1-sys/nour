@@ -27,7 +27,9 @@
 \usepackage{microtype}
 
 % ------------------------------ Polices -----------------------------------
-\usepackage[default]{libertine}
+\usepackage{libertine}
+\usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage[scaled=0.92]{inconsolata}
 
 % ------------------------------ Liens / navigation ------------------------
@@ -47,12 +49,16 @@
 
 % ------------------------------ Tableurs / listes -------------------------
 \usepackage{graphicx}
-\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{longtable}
-\usepackage{tabularx}
-\usepackage{ltablex}
 \usepackage{array}
+% X = colonne a largeur fixe (tabularx/ltablex sont abandonnes :
+% leur re-mesure du corps cassait \verb a l'interieur des cellules)
+\newcolumntype{X}{>{\raggedright\arraybackslash}p{0.30\textwidth}}
+% tabularx n'est plus charge : on le remappe proprement sur longtable
+\newenvironment{tabularx}[2][\textwidth]{\rowcolors{2}{white}{tralight}\small
+  \setlength{\tabcolsep}{5pt}\begin{longtable}{#2}}
+  {\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
 \usepackage{enumitem}
 \setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.5em}
 \setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
@@ -98,11 +104,15 @@
   showstringspaces=false,
   tabsize=2,
   numbers=none,
-  frame=none,
-  xleftmargin=0pt,
-  xrightmargin=0pt,
-  aboveskip=2pt,
-  belowskip=2pt,
+  frame=single,
+  rulecolor=\color{codeframe},
+  framerule=0.4pt,
+  framesep=4pt,
+  backgroundcolor=\color{codebg},
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=6pt,
   commentstyle=\color{codecom},
   keywordstyle=\color{codekw}\bfseries,
   stringstyle=\color{codestr},
@@ -123,30 +133,25 @@
 % ------------------------------ Boites (tcolorbox) -------------------------
 \usepackage[most]{tcolorbox}
 
-\tcbset{
-  codestyle/.style={
-    enhanced, breakable, colback=codebg, colframe=codeframe,
-    boxrule=0.4pt, arc=1.5mm, left=2mm,right=2mm,top=1.6mm,bottom=1.6mm,
-    boxsep=0pt, listing only
-  }
-}
+% (l'ancienne cle "codestyle" avec "listing only" est supprimee : c'est le
+% mecanisme de fichier temporaire output.listing qui faisait planter la
+% compilation, et il n'est plus necessaire)
 
-\newtcblisting{codejs}{listing options={style=jscode},codestyle}
-\newtcblisting{codephp}{listing options={style=phpcode},codestyle}
-\newtcblisting{codejava}{listing options={style=javacode},codestyle}
-\newtcblisting{codesql}{listing options={style=sqlcode},codestyle}
-\newtcblisting{codeconf}{listing options={style=confcode},codestyle}
-\newtcblisting{codejson}{listing options={style=jsoncode},codestyle}
-\newtcblisting{codeyml}{listing options={style=ymlcode},codestyle}
-\newtcblisting{codeplain}{listing options={style=base},codestyle}
-
-\newtcblisting{terminal}{
-  enhanced, breakable, colback=ctermbg, colframe=ctermbg,
-  arc=1.5mm, boxrule=0pt, left=2.5mm,right=2mm,top=1.8mm,bottom=1.8mm,
-  boxsep=0pt, listing only,
-  listing options={style=shellcode,basicstyle=\ttfamily\small\color{ctermfg},
-    keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}\itshape}
-}
+% Chaque bloc de code = un environnement listings autonome (il casse les
+% lignes tout seul, se coupe proprement en fin de page, et ne cree aucun
+% fichier temporaire).
+\lstnewenvironment{codejs}{\lstset{style=jscode}}{}
+\lstnewenvironment{codephp}{\lstset{style=phpcode}}{}
+\lstnewenvironment{codejava}{\lstset{style=javacode}}{}
+\lstnewenvironment{codesql}{\lstset{style=sqlcode}}{}
+\lstnewenvironment{codeconf}{\lstset{style=confcode}}{}
+\lstnewenvironment{codejson}{\lstset{style=jsoncode}}{}
+\lstnewenvironment{codeyml}{\lstset{style=ymlcode}}{}
+\lstnewenvironment{codeplain}{\lstset{style=base}}{}
+\lstnewenvironment{terminal}{\lstset{style=shellcode,frame=single,
+  rulecolor=\color{ctermbg},backgroundcolor=\color{ctermbg},
+  basicstyle=\ttfamily\small\color{ctermfg},
+  keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}}}{}
 
 \newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
   arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
@@ -187,7 +192,8 @@
 % ------------------------------ Macros pratiques ---------------------------
 \newcommand{\fichier}[1]{\texttt{\color{pathgreen}#1}}
 \newcommand{\rep}[1]{\texttt{\color{pathgreen}#1/}}
-\newcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
+\providecommand{\cmd}[1]{}%
+\renewcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
 \newcommand{\link}[2]{\href{#2}{#1}}
 \newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[src]}}}}
 \newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
@@ -196,11 +202,11 @@
 \newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large #1}\par\smallskip}
 \DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{#1}}}
 
-% tableaux zebres : tabz = tabularx pleine largeur + lignes alternees
+% tableaux zebras : tabz = longtable (largeurs fixes) + lignes alternees
 \newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}%
-  \small\setlength{\tabcolsep}{5pt}%
-  \begin{tabularx}{\textwidth}{@{}#1@{}}\toprule}
-  {\bottomrule\end{tabularx}}
+  \small\setlength{\tabcolsep}{5pt}\setlength{\LTpre}{3pt}\setlength{\LTpost}{3pt}%
+  \begin{longtable}{@{}#1@{}}\toprule}
+  {\bottomrule\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
 \newcommand{\thd}[1]{\textbf{\color{white}#1}}
 \newcommand{\headrow}{\rowcolor{theadbg}}
 \makeatletter
