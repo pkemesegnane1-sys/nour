@@ -19,6 +19,7 @@ Usage :  python3 scripts/tex_to_html.py
 import io
 import os
 import re
+import zipfile
 import html as htmllib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1052,7 +1053,7 @@ def nettoyer_titre(t):
 def ecrire_site(pages):
     if not os.path.isdir(OUT):
         os.makedirs(OUT)
-    io.open(os.path.join(OUT, 'style.css'), 'w', encoding='utf-8').write(CSS)
+    io.open(os.path.join(OUT, 'style.css'), 'w', encoding='utf-8').write(CSS + CSS_EXTRA)
 
     # ---- barre latérale commune ------------------------------------------- #
     def nav(actif):
@@ -1077,6 +1078,7 @@ def ecrire_site(pages):
         parts.append(u'</ol>')
         parts.append(u'<div class="partie">Version autonome</div><ol>')
         parts.append(u'<li data-t="fichier unique"><a href="livre-complet.html">📄 Tout le livre en 1 fichier</a></li>')
+        parts.append(u'<li data-t="télécharger"><a href="telecharger.html">⬇ Télécharger le livre</a></li>')
         parts.append(u'</ol></nav>')
         return u''.join(parts)
 
@@ -1125,6 +1127,8 @@ def ecrire_site(pages):
                   sum(1 for p in pages if p[0].startswith('an')),
                   max(1, total_mots // 480),
                   '{:,}'.format(total_mots).replace(',', '\u202f')))
+    acc.append(u'<div style="text-align:center"><a class="telecharger" '
+               u'href="telecharger.html">⬇ Télécharger le livre (hors ligne)</a></div>')
     acc.append(u'<div class="note-hors-ligne"><strong>100\u202f% hors ligne.</strong> '
                u'Aucune connexion n\u2019est n\u00e9cessaire\u202f: ce site ne charge ni police, '
                u'ni script, ni image depuis Internet. Copiez le dossier <code>livre-web</code> '
@@ -1193,15 +1197,114 @@ def ecrire_site(pages):
                 u'<button class="ouvrirn" id="ouvrirn">\u2630 Sommaire</button>\n'
                 u'<div class="conteneur">\n%s\n<main>\n%s\n</main>\n</div>\n'
                 u'<script>%s</script>\n</body>\n</html>\n'
-                % (CSS, u''.join(toc), u''.join(corps), JS))
+                % (CSS + CSS_EXTRA, u''.join(toc), u''.join(corps), JS))
     io.open(os.path.join(OUT, 'livre-complet.html'), 'w', encoding='utf-8').write(autonome)
 
+    # ---- page de téléchargement ----
+    io.open(os.path.join(OUT, 'telecharger.html'), 'w', encoding='utf-8').write(
+        page_html('Télécharger le livre', nav('telecharger'),
+                  page_telecharger(pages), 'telecharger'))
+
     return pages
+
+
+def page_telecharger(pages):
+    """Page de téléchargement : liens relatifs, valables hors ligne comme en aperçu."""
+    n_ch = sum(1 for p in pages if p[0].startswith('ch'))
+    n_an = sum(1 for p in pages if p[0].startswith('an'))
+    corps = u"""
+<div class="couverture">
+  <div class="titre" style="font-size:32px">Télécharger le livre</div>
+  <div class="stitre">Trois fichiers, selon l'usage que vous en avez</div>
+  <div class="filet"></div>
+</div>
+
+<div class="bloc" style="background:#fff;border:1px solid #e4e4e0;border-radius:9px;padding:18px 22px;margin:16px 0">
+  <div class="partie-t">⭐ Recommandé — un seul fichier</div>
+  <p style="margin:.3em 0 .8em"><strong>livre-complet.html</strong> · 1,1 Mo<br>
+  Tout le livre (%(nch)d chapitres + %(nan)d annexes) dans <em>un seul fichier</em>,
+  sommaire latéral compris. Copiez-le sur votre téléphone ou une clé USB&nbsp;:
+  un double-clic suffit, aucune installation, aucune connexion.</p>
+  <p><a class="btn" href="livre-complet.html" download>⬇ Télécharger livre-complet.html</a>
+     &nbsp;<a class="btn2" href="livre-complet.html">Ouvrir dans le navigateur</a></p>
+</div>
+
+<div class="bloc" style="background:#fff;border:1px solid #e4e4e0;border-radius:9px;padding:18px 22px;margin:16px 0">
+  <div class="partie-t">Le site complet en pages séparées</div>
+  <p style="margin:.3em 0 .8em"><strong>livre-web.zip</strong> · ~600 Ko<br>
+  29 pages HTML + la feuille de style. Dézippez, puis ouvrez <code>index.html</code>.
+  Plus léger à ouvrir page par page sur un petit téléphone.</p>
+  <p><a class="btn" href="livre-web.zip" download>⬇ Télécharger livre-web.zip</a></p>
+</div>
+
+<div class="bloc" style="background:#fff;border:1px solid #e4e4e0;border-radius:9px;padding:18px 22px;margin:16px 0">
+  <div class="partie-t">Le code source LaTeX (pour un PDF imprimé)</div>
+  <p style="margin:.3em 0 .8em"><strong>livre-source-latex.zip</strong> · ~290 Ko<br>
+  Les 25 fichiers <code>.tex</code> du livre. À déposer sur
+  <a href="https://www.overleaf.com">Overleaf</a> (gratuit) → <em>New Project → Upload Project</em>
+  → compiler <code>main.tex</code> en pdfLaTeX pour obtenir un vrai PDF de ~400 pages.</p>
+  <p><a class="btn" href="livre-source-latex.zip" download>⬇ Télécharger livre-source-latex.zip</a></p>
+</div>
+
+<div class="note-hors-ligne">Ces trois fichiers sont <strong>autonomes</strong>&nbsp;: une fois
+téléchargés, ils n'ont plus besoin d'Internet ni de ce serveur. Ils sont aussi
+versionnés sur la branche <code>arena/2e57debc-nour</code> du dépôt
+<code>pkemesegnane1-sys/nour</code>.</div>
+
+<p style="margin-top:26px"><a href="index.html">← Retour au livre</a></p>
+""" % {'nch': n_ch, 'nan': n_an}
+    return corps
+
+
+CSS_EXTRA = u"""
+.btn{display:inline-block;background:var(--bleu-nuit);color:#fff!important;padding:10px 16px;
+  border-radius:7px;font-family:"Segoe UI",Roboto,Arial,sans-serif;font-size:14.5px;font-weight:600}
+.btn:hover{background:#164f8c;text-decoration:none!important}
+.btn2{display:inline-block;background:#fff;color:var(--bleu-nuit)!important;padding:10px 16px;
+  border:1px solid #cfd8e2;border-radius:7px;font-family:"Segoe UI",Roboto,Arial,sans-serif;font-size:14.5px}
+.btn2:hover{background:var(--bleu-clair);text-decoration:none!important}
+.telecharger{display:inline-block;margin:14px 0 4px;background:var(--orange);color:#fff;
+  padding:11px 20px;border-radius:8px;font-family:"Segoe UI",Roboto,Arial,sans-serif;
+  font-size:15px;font-weight:700}
+.telecharger:hover{background:#d9860f;text-decoration:none}
+"""
+
+
+def faire_archives(pages):
+    """Construit livre-web.zip et livre-source-latex.zip, dans livre-web/ et à la racine."""
+    racine = ROOT
+    # --- 1. le site (sans les archives elles-mêmes) ---
+    zip_site = os.path.join(racine, 'livre-web.zip')
+    with zipfile.ZipFile(zip_site, 'w', zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(os.listdir(OUT)):
+            if f.endswith('.zip'):
+                continue
+            z.write(os.path.join(OUT, f), 'livre-web/' + f)
+    # --- 2. la source LaTeX ---
+    zip_tex = os.path.join(racine, 'livre-source-latex.zip')
+    avec = zipfile.ZipFile(zip_tex, 'w', zipfile.ZIP_DEFLATED)
+    for f in ('main.tex', 'preamble.tex', 'frontmatter.tex', 'Makefile',
+              'README.md', '.gitignore'):
+        if os.path.exists(os.path.join(racine, f)):
+            avec.write(os.path.join(racine, f), 'livre-anglais/' + f)
+    for sous in ('parties', 'annexes', 'scripts'):
+        d = os.path.join(racine, sous)
+        if not os.path.isdir(d):
+            continue
+        for f in sorted(os.listdir(d)):
+            if f.endswith(('.tex', '.py')):
+                avec.write(os.path.join(d, f), 'livre-anglais/%s/%s' % (sous, f))
+    avec.close()
+    # --- 3. copies servies par le site (liens relatifs de la page de téléchargement) ---
+    for src in (zip_site, zip_tex):
+        io.open(os.path.join(OUT, os.path.basename(src)), 'wb').write(io.open(src, 'rb').read())
+    return zip_site, zip_tex
 
 
 def main():
     pages = construire()
     pages = ecrire_site(pages)
+    zs, zt = faire_archives(pages)
     taille = 0
     for f in os.listdir(OUT):
         taille += os.path.getsize(os.path.join(OUT, f))
@@ -1213,6 +1316,9 @@ def main():
     print('  taille totale     : %.1f Mo' % (taille / 1048576.0))
     print('  fichier unique    : livre-complet.html (%.1f Mo)'
           % (os.path.getsize(os.path.join(OUT, 'livre-complet.html')) / 1048576.0))
+    print('  archives          : %s (%.0f Ko), %s (%.0f Ko)'
+          % (os.path.basename(zs), os.path.getsize(zs) / 1024.0,
+             os.path.basename(zt), os.path.getsize(zt) / 1024.0))
 
 
 if __name__ == '__main__':
