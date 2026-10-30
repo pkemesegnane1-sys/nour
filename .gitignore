@@ -20,4 +20,5 @@ latex/
 latex-livre.zip
 site/manuel-js-php-java.html
 site/*.print.html
-*.pdf
+/cours-*.pdf
+/manuel-*.pdf
