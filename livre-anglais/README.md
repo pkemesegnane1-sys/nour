@@ -15,7 +15,9 @@ livre-anglais/
 ├── frontmatter.tex     ← page de titre, mode d'emploi, feuille de route
 ├── Makefile
 ├── scripts/
-│   └── validate_tex.py ← validateur statique (aucun moteur TeX requis)
+│   ├── validate_tex.py   ← validateur statique (aucun moteur TeX requis)
+│   └── tex_to_html.py    ← génère le site HTML/CSS hors ligne
+├── livre-web/            ← ⭐ version HTML hors ligne (générée, non versionnée)
 ├── parties/            ← 15 fichiers = 19 chapitres (Parties I à VII)
 │   ├── 01-plan-12-mois.tex                 ch. 1-2   méthode + plan des 12 mois
 │   ├── 02-methodes-et-outils.tex           ch. 3-4   huit techniques + outils
@@ -41,6 +43,42 @@ livre-anglais/
     ├── F-journal-progression.tex           journal imprimable (contrat, grilles, bilans)
     └── G-glossaire-mot-final.tex           glossaire, table de repérage, mot final
 ```
+
+## 🌐 Version HTML hors ligne (déjà générée, aucune compilation)
+
+Le dossier **`livre-web/`** contient tout le livre converti en site HTML/CSS
+**100 % local** : aucune police, aucun script, aucune image ne vient d'Internet.
+
+```
+livre-web/
+├── index.html            couverture + sommaire complet (cliquer ici)
+├── ch01.html … ch19.html les 19 chapitres
+├── anA.html … anG.html   les 7 annexes
+├── fm1.html, fm2.html    pages liminaires
+├── style.css             la feuille de style unique
+└── livre-complet.html    ⭐ TOUT le livre dans UN SEUL fichier (1,1 Mo)
+```
+
+**Trois façons de l'ouvrir :**
+
+| Situation | Que faire |
+|---|---|
+| Sur cet ordinateur, maintenant | Ouvrir `livre-web/index.html` dans un navigateur |
+| Sur téléphone / clé USB, sans Internet | Copier **`livre-complet.html`** (un seul fichier), l'ouvrir : tout y est, sommaire compris |
+| Avec le sommaire latéral et la navigation | Copier tout le dossier **`livre-web/`** et ouvrir `index.html` |
+
+Le fichier unique et le site fonctionnent **hors connexion, hors navigateur serveur,
+sans installation** : un double-clic suffit. Ils s'impriment aussi correctement
+(les boîtes et les tableaux évitent les coupures de page).
+
+Régénérer la version HTML après une modification du LaTeX :
+
+```bash
+python3 scripts/tex_to_html.py
+```
+
+Le dossier `livre-web/` et les archives `.zip` sont des artefacts générés :
+ils ne sont pas versionnés (voir `.gitignore`).
 
 ## 🔨 Compiler le PDF
 
