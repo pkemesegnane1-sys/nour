@@ -1,0 +1,375 @@
+% ===========================================================================
+%  MANUEL COMPLET : JavaScript - PHP - Java
+%  Document d'auto-apprentissage, avec pratique, outils et liens.
+%
+%  Compilation (une seule commande suffit) :
+%     pdflatex main.tex
+%     pdflatex main.tex        <- 2e passage : table des matieres + ref croisees
+%  ou, mieux :
+%     latexmk -pdf -interaction=nonstopmode main.tex
+%  ou, sans TeX Live installe :
+%     tectonic main.tex
+%
+%  Si un paquet manque (erreur "File `xxx.sty' not found"), installe-le :
+%     sudo apt install texlive-latex-extra texlive-fonts-extra texlive-lang-french
+%     tlmgr install libertine inconsolata cleveref titletoc menu
+% ===========================================================================
+
+\documentclass[12pt,a4paper,twoside,openright]{book}
+
+% ------------------------------ Encodage / langue --------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+
+% ------------------------------ Mise en page ------------------------------
+\usepackage[left=2.1cm,right=2.1cm,top=2.3cm,bottom=2.4cm,headheight=15pt]{geometry}
+\usepackage{microtype}
+
+% ------------------------------ Polices -----------------------------------
+\usepackage{libertine}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[scaled=0.92]{inconsolata}
+
+% ------------------------------ Liens / navigation ------------------------
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+\definecolor{linkblue}{HTML}{0B4F8A}
+\definecolor{pathgreen}{HTML}{1F6B3A}
+\hypersetup{
+  colorlinks=true, linkcolor=linkblue, filecolor=linkblue, urlcolor=linkblue,
+  citecolor=linkblue, bookmarksnumbered=true, bookmarksopen=true, unicode=true,
+  pdftitle={Manuel complet : JavaScript, PHP et Java},
+  pdfauthor={Manuel d'auto-apprentissage},
+  pdfsubject={Programmation : JavaScript, PHP, Java},
+  pdfkeywords={JavaScript, Node.js, PHP, MySQL, Java, Spring Boot, tutoriel}
+}
+\usepackage[capitalise,nameinlink]{cleveref}
+
+% ------------------------------ Tableurs / listes -------------------------
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+% X = colonne a largeur fixe (tabularx/ltablex sont abandonnes :
+% leur re-mesure du corps cassait \verb a l'interieur des cellules)
+\newcolumntype{X}{>{\raggedright\arraybackslash}p{0.30\textwidth}}
+% tabularx n'est plus charge : on le remappe proprement sur longtable
+\newenvironment{tabularx}[2][\textwidth]{\rowcolors{2}{white}{tralight}\small
+  \setlength{\tabcolsep}{5pt}\begin{longtable}{#2}}
+  {\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
+\usepackage{enumitem}
+\setlist[itemize]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.5em}
+\setlist[enumerate]{topsep=3pt,itemsep=2pt,parsep=0pt,leftmargin=1.6em}
+\setlist[description]{topsep=3pt,itemsep=3pt,parsep=0pt,font=\bfseries}
+\usepackage{multicol}
+\usepackage{menukeys}
+\usepackage{titletoc}
+\usepackage{makeidx}
+\makeindex
+\titlecontents{section}[3.2em]{\addvspace{2pt}\small}
+  {\contentslabel{2.0em}}{}{\titlerule*[0.75pc]{.}\contentspage}
+
+% ------------------------------ Couleurs du theme -------------------------
+\definecolor{codebg}{HTML}{F6F8FA}
+\definecolor{codeframe}{HTML}{D0D7DE}
+\definecolor{ctermbg}{HTML}{1B2430}
+\definecolor{ctermfg}{HTML}{E6EDF3}
+\definecolor{codekw}{HTML}{0550AE}
+\definecolor{codecom}{HTML}{5E7C40}
+\definecolor{codestr}{HTML}{A31515}
+\definecolor{themecolor}{HTML}{0B4F8A}
+\definecolor{jsyellow}{HTML}{F0DB4F}
+\definecolor{phppurple}{HTML}{777BB4}
+\definecolor{javared}{HTML}{E76F00}
+\definecolor{boxtitle}{HTML}{0B4F8A}
+\definecolor{objbg}{HTML}{EAF3FB}\definecolor{objfr}{HTML}{8FC1E8}
+\definecolor{notebg}{HTML}{EFF6EE}\definecolor{notefr}{HTML}{A7C9A0}
+\definecolor{tipbg}{HTML}{FFF6DE}\definecolor{tipfr}{HTML}{E3C06A}
+\definecolor{warnbg}{HTML}{FDECEC}\definecolor{warnfr}{HTML}{E6A0A0}
+\definecolor{exobg}{HTML}{F1EEFB}\definecolor{exofr}{HTML}{B7A6E0}
+\definecolor{linksbg}{HTML}{EEF3F7}\definecolor{linksfr}{HTML}{9BB8CE}
+\definecolor{theadbg}{HTML}{0B4F8A}
+\definecolor{tralight}{HTML}{F1F5F9}
+
+% ------------------------------ Code (listings) ---------------------------
+\usepackage{listings}
+\lstdefinestyle{base}{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  breakatwhitespace=true,
+  showstringspaces=false,
+  tabsize=2,
+  numbers=none,
+  frame=single,
+  rulecolor=\color{codeframe},
+  framerule=0.4pt,
+  framesep=4pt,
+  backgroundcolor=\color{codebg},
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  aboveskip=8pt,
+  belowskip=6pt,
+  commentstyle=\color{codecom},
+  keywordstyle=\color{codekw}\bfseries,
+  stringstyle=\color{codestr},
+  identifierstyle=\color{black},
+  captionpos=b
+}
+\lstdefinestyle{jscode}{style=base,language=JavaScript,morekeywords={async,await,of,as,static,let,const,yield,typeof,instanceof,void,delete,in,export,import,from,catch,finally,throw,undefined,NaN,Infinity,extends,super,get,set,Symbol,BigInt,arguments,debugger}}
+\lstdefinestyle{phpcode}{style=base,language=[5.6]PHP,morekeywords={function,class,interface,trait,enum,abstract,final,extends,implements,namespace,use,const,public,protected,private,static,readonly,match,fn,global,insteadof,as,print,unset,isset,echo,require,require_once,include,include_once,declare,self,parent,__DIR__,__FILE__,__LINE__}}
+\lstdefinestyle{javacode}{style=base,language=Java,morekeywords={var,record,sealed,permits,yield,instanceof,enum,interface,class,abstract,final,static,public,protected,private,synchronized,volatile,transient,native,implements,extends,package,import,throws,throw,try,catch,finally,super,this,assert,switch,boolean,char,byte,short,int,long,float,double,void}}
+\lstdefinestyle{confcode}{style=base,morecomment=[l]{//},morecomment=[l]{;}}
+\lstdefinestyle{sqlcode}{style=base,language=SQL,morekeywords={SELECT,INSERT,UPDATE,DELETE,CREATE,ALTER,DROP,TABLE,INDEX,VIEW,TRIGGER,PRIMARY,KEY,FOREIGN,REFERENCES,UNIQUE,NOT,NULL,DEFAULT,AUTO_INCREMENT,ENGINE,VARCHAR,INT,BIGINT,TEXT,BLOB,DATE,DATETIME,TIMESTAMP,DECIMAL,BOOLEAN,JOIN,INNER,LEFT,RIGHT,OUTER,ON,AS,WHERE,GROUP,ORDER,BY,HAVING,LIMIT,OFFSET,DISTINCT,AND,OR,IN,LIKE,BETWEEN,IS,COUNT,SUM,AVG,MIN,MAX,IF,EXISTS,UNION,ALL,VALUES,SET,TRANSACTION,COMMIT,ROLLBACK,GRANT,DESC,ASC,CASCADE,CONSTRAINT,CHECK,SHOW,USE,DATABASE}}
+\lstdefinestyle{shellcode}{style=base,language=bash}
+\lstdefinestyle{jsoncode}{style=base,morecomment=[l]{//}}
+\lstdefinestyle{ymlcode}{style=base}
+
+\lstset{style=base}
+
+% ------------------------------ Boites (tcolorbox) -------------------------
+\usepackage[most]{tcolorbox}
+
+% (l'ancienne cle "codestyle" avec "listing only" est supprimee : c'est le
+% mecanisme de fichier temporaire output.listing qui faisait planter la
+% compilation, et il n'est plus necessaire)
+
+% Chaque bloc de code = un environnement listings autonome (il casse les
+% lignes tout seul, se coupe proprement en fin de page, et ne cree aucun
+% fichier temporaire).
+\lstnewenvironment{codejs}{\lstset{style=jscode}}{}
+\lstnewenvironment{codephp}{\lstset{style=phpcode}}{}
+\lstnewenvironment{codejava}{\lstset{style=javacode}}{}
+\lstnewenvironment{codesql}{\lstset{style=sqlcode}}{}
+\lstnewenvironment{codeconf}{\lstset{style=confcode}}{}
+\lstnewenvironment{codejson}{\lstset{style=jsoncode}}{}
+\lstnewenvironment{codeyml}{\lstset{style=ymlcode}}{}
+\lstnewenvironment{codeplain}{\lstset{style=base}}{}
+\lstnewenvironment{terminal}{\lstset{style=shellcode,frame=single,
+  rulecolor=\color{ctermbg},backgroundcolor=\color{ctermbg},
+  basicstyle=\ttfamily\small\color{ctermfg},
+  keywordstyle=\color{ctermfg}\bfseries,commentstyle=\color{ctermfg}}}{}
+
+\newtcbox{\srcbox}{on line, colback=tralight, colframe=tralight, boxrule=0pt,
+  arc=0.8mm, left=1.2mm,right=1.2mm,top=0.5mm,bottom=0.7mm, size=tight,
+  fontupper=\scriptsize}
+
+\newtcolorbox{objectif}[1][]{enhanced, breakable, colback=objbg, colframe=objfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
+  title={Objectifs du chapitre},#1}
+
+\newtcolorbox{note}{enhanced, breakable, colback=notebg, colframe=notefr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  before upper={\small\textbf{Note.}\enspace}}
+
+\newtcolorbox{astuce}{enhanced, breakable, colback=tipbg, colframe=tipfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  before upper={\small\textbf{Astuce de pro.}\enspace}}
+
+\newtcolorbox{piege}{enhanced, breakable, colback=warnbg, colframe=warnfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  before upper={\small\textbf{Pi\`ege \`a \`eviter.}\enspace}}
+
+\newtcolorbox{exercice}[1][]{enhanced, breakable, colback=exobg, colframe=exofr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
+  title={Exercices guid\'es},#1}
+
+\newtcolorbox{ressources}[1][]{enhanced, breakable, colback=linksbg, colframe=linksfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=boxtitle,
+  title={Ressources et outils cit\'es},before upper=\small,#1}
+
+\newtcolorbox{projet}[1][]{enhanced, breakable, colback=tipbg, colframe=tipfr,
+  boxrule=0.5pt, arc=1.5mm, left=3mm,right=3mm,top=2mm,bottom=2mm,
+  fonttitle=\bfseries, coltitle=white, colbacktitle=javared,
+  title={Projet \`a r\'ealiser},#1}
+
+% ------------------------------ Macros pratiques ---------------------------
+\newcommand{\fichier}[1]{\texttt{\color{pathgreen}#1}}
+\newcommand{\rep}[1]{\texttt{\color{pathgreen}#1/}}
+\providecommand{\cmd}[1]{}%
+\renewcommand{\cmd}[1]{\srcbox{\texttt{\detokenize{#1}}}}
+\newcommand{\link}[2]{\href{#2}{#1}}
+\newcommand{\src}[1]{\href{#1}{\textcolor{linkblue}{\textsuperscript{[src]}}}}
+\newcommand{\langjs}{\textcolor{javared}{\textbf{JavaScript}}}
+\newcommand{\langphp}{\textcolor{phppurple}{\textbf{PHP}}}
+\newcommand{\langjava}{\textcolor{themecolor}{\textbf{Java}}}
+\newcommand{\etape}[1]{\par\medskip\noindent\textbf{\large #1}\par\smallskip}
+\DeclareRobustCommand{\clic}[1]{\textcolor{linkblue}{\textsf{#1}}}
+
+% tableaux zebras : tabz = longtable (largeurs fixes) + lignes alternees
+\newenvironment{tabz}[1]{\rowcolors{2}{white}{tralight}%
+  \small\setlength{\tabcolsep}{5pt}\setlength{\LTpre}{3pt}\setlength{\LTpost}{3pt}%
+  \begin{longtable}{@{}#1@{}}\toprule}
+  {\bottomrule\end{longtable}\normalfont\setlength{\tabcolsep}{6pt}}
+\newcommand{\thd}[1]{\textbf{\color{white}#1}}
+\newcommand{\headrow}{\rowcolor{theadbg}}
+\makeatletter
+\newenvironment{tablez}{\@ifnextchar[{\@tablezwith}{\@tablezwith[XXX]}}{\end{tabz}}
+\newcommand{\@tablezwith}[1]{\begin{tabz}{#1}}
+\makeatother
+
+% ------------------------------ Doc ---------------------------------------
+\begin{document}
+\mainmatter
+% ============================================================================
+\chapter{M\'ethode d'apprentissage et plan de 12 semaines}
+\label{ch-methode}
+% ============================================================================
+
+Savoir quoi apprendre ne suffit pas~: il faut un rythme, une fa\c{c}on de stocker l'information
+et un m\'ecanisme anti-abandon. Ce chapitre est court mais c'est celui qui d\'etermine si tu finis
+le livre.
+
+\section{Les cinq principes qui font la diff\'erence}
+
+\begin{enumerate}
+  \item \textbf{Pratique d\'elib\'er\'ee, pas r\'ep\'etition.} Travailler juste au-dessus de ton niveau,
+        avec retour imm\'ediat (le message d'erreur, le test qui passe). Refaire un exercice
+        d\'ej\`a r\'eussi est du r\'econfort, pas de l'apprentissage.
+  \item \textbf{R\'ecup\'eration active.} Ferme le livre et \'ecris de m\'emoire la syntaxe d'un
+        \verb|try/catch|, la diff\'erence entre \verb|==| et \verb|===|. Se tromper ancre
+        dix fois mieux que relire.
+  \item \textbf{Espacement.} Dix minutes de r\'evision chaque jour valent mieux que deux heures
+        le dimanche. Un tour de flashcards le matin, l'erreur de la veille au soir.
+  \item \textbf{Technique Feynman.} Explique \`a voix haute, avec des mots simples, comme si tu
+        parlais \`a un enfant de douze ans. Tout ce que tu n'arrives pas \`a expliquer est une
+        lacune --- retourne lire.
+  \item \textbf{Production avant consommation.} Ratio cible~: 30 \% lire/regarder,
+        70 \% \'ecrire du code. Si ta journ\'ee a \'et\'e 90 \% vid\'eo, tu ne progresses pas, tu te distraies.
+\end{enumerate}
+
+\section{La routine quotidienne (60 \`a 120 minutes)}
+
+\begin{tabz}{llX}
+  \headrow \thd{Dur\'ee} \& \thd{Bloc} \& \thd{Contenu} \\
+  \midrule
+  10 min \& R\'eveil \& 10 flashcards + relire le code \'ecrit hier, sans l'\'editeur. \\
+  25 min \& Lecture active \& Un morceau de chapitre, le carnet ouvert, on pr\'edit les r\'esultats. \\
+  50 min \& Code \& Recopier les exemples, les casser, refaire l'exercice du chapitre. \\
+  15 min \& Journaliser \& \'Ecrire 5 lignes~: ce que j'ai compris, o\`u j'ai bloqu\'e, la solution. \\
+  10 min \& Curiosit\'e \& Lire la doc officielle de ce que je viens d'utiliser (pas celle d'hier). \\
+\end{tabz}
+
+Si tu n'as que 25 minutes~: fais le bloc \og ~Code~ \fg{}. Jamais le bloc \og ~Lecture~ \fg{} seule.
+
+\section{Le carnet d'erreurs --- ton actif le plus pr\'ecieux}
+
+Cr\'ee \fichier{carnet.md} dans chaque projet et note~: \emph{texte exact de l'erreur},
+\emph{contexte}, \emph{cause r\'eelle}, \emph{correction}, \emph{date}. En six mois tu auras un
+manuel de d\'epannage personnel qui vaut plus que n'importe quel tuto. Les annexes
+(\cref{ch-antisecche}) en sont une version g\'en\'erique~: tiens la tienne \`a jour.
+
+\begin{codeconf}
+## 2026-01-14 - PHP - 500 blank page
+Erreur : aucune, page blanche.
+Cause : une exception ignoree car display_errors = Off en production.
+Fix : log_errors=On, error_log=php://stderr, et activer app_dev en local.
+Lecon : ne jamais chercher a l'aveugle ; ouvrir les logs d'abord.
+\end{codeconf}
+
+\section{Plan de 12 semaines (version intensive)}
+
+Adapte la vitesse~: doubler la dur\'ee de chaque ligne est parfaitementOK. Le plan n'est pas
+une course, c'est un ordre.
+
+\begin{tabz}{llX}
+  \headrow \thd{Semaine} \& \thd{Objet} \& \thd{Livrable concret \`a la fin de la semaine} \\
+  \midrule
+  1 \& Outils, bases JS (\cref{ch-js-bases}) \& 30 petits scripts dans \verb|labo/js|, dont FizzBuzz, tri, palindrome. \\
+  2 \& Objets, tableaux, cha\^ines, regex (\cref{ch-js-struct}) \& Un analyseur de texte (nombre de mots, mots les plus fr\'equents). \\
+  3 \& S\'emantique avanc\'ee (\cref{ch-js-avance}) \& Un mini-syst\`eme d'\'ev\'enements \'ecrit \`a la main (20 lignes). \\
+  4 \& Asynchrone (\cref{ch-js-async}) \& Un script qui t\'el\'echarge 20 pages web en parall\`ele avec limitation de concurrence. \\
+  5 \& DOM et \'ev\'enements (\cref{ch-js-dom,ch-js-events}) \& Une page \og ~liste de courses~ \fg{} sans framework, avec filtre et tri. \\
+  6 \& Fetch, formulaires, stockage (\cref{ch-js-dom,ch-js-storage}) \& La m\^eme liste, persist\'ee en LocalStorage + API externe. \\
+  7 \& Node.js, modules, npm, CLI (\cref{ch-node,ch-js-outils}) \& Un outil de ligne de commande qui renomme en lot les fichiers d'un dossier. \\
+  8 \& TypeScript + tests + s\'ecurit\'e (\cref{ch-js-ts,ch-js-tests,ch-js-secu}) \& Le projet de la semaine~6 typ\'e, test\'e \`a 80 \%, sans XSS. \\
+  9 \& PHP bases, OOP, formulaires (\cref{ch-php-bases,ch-php-oop,ch-php-http}) \& Un mini-CRUD sur fichier JSON, puis sur MySQL. \\
+  10 \& PDO, sessions, auth, s\'ecurit\'e PHP (\cref{ch-php-db,ch-php-http,ch-php-secu}) \& Un blog complet avec inscriptions, r\^oles, upload d'images s\'ecuris\'e. \\
+  11 \& Java bases, OOP, collections, exceptions (\cref{ch-java-bases,ch-java-oop,ch-java-collections,ch-java-collections}) \& Un gestionnaire de biblioth\`eque console avec tests JUnit. \\
+  12 \& Streams, JDBC, Spring Boot, d\'eploiement (\cref{ch-java-fonctionnel,ch-java-db,ch-java-spring,ch-deploy}) \& Une API REST Spring Boot connect\'ee \`a PostgreSQL, d\'eploy\'ee sur un VPS. \\
+\end{tabz}
+
+\section{Utiliser l'IA sans s'handicaper}
+
+Un assistant de code est un excellent tuteur et un tr\`es mauvais substitut. R\`egle simple~:
+\emph{l'IA r\'epond \`a tes questions, elle ne fait pas tes exercices.}
+
+\begin{itemize}
+  \item \textbf{Demander}~: \og ~explique-moi ligne par ligne ce message d'erreur~ \fg{}, \og ~quels sont les
+        cas limites de cette fonction~ \fg{}, \og ~propose 3 variantes de style, avec les avantages~ \fg{}.
+  \item \textbf{Refuser}~: coller l'\'enonc\'e d'un exercice et prendre la r\'eponse. Tu \'economises
+        trois minutes et tu perds la comp\'etence.
+  \item \textbf{Toujours}~: relire ligne par ligne le code g\'en\'er\'e et le faire tourner. Ne
+        mets jamais dans un projet du code que tu ne sais pas expliquer.
+  \item Outils~: \link{Copilot}{https://github.com/features/copilot},
+        \link{Cursor}{https://www.cursor.com/}, \link{Claude}{https://claude.ai/},
+        \link{ChatGPT}{https://chat.openai.com/}, \link{aider (CLI)}{https://aider.chat/}.
+\end{itemize}
+
+\section{Quand tu bloques --- la proc\'edure en cinq temps}
+
+\begin{enumerate}
+  \item \textbf{Lire l'erreur en entier}, y compris la ligne \og ~caused by~ \fg{}, et chercher
+        le texte exact entre guillemets.
+  \item \textbf{R\'eduire.} Fais un exemple minimal qui reproduit le probl\`eme (deux fichiers,
+        dix lignes). Neuf fois sur dix, la r\'eduction r\'ev\`ele la cause.
+  \item \textbf{Isoler une hypoth\`ese}, la tester, l'\'ecrire. \og ~Je pense que X. Je teste Y.~ \fg{}
+  \item \textbf{Chercher dans la doc officielle} (les liens de fin de chapitre) plut\^ot que
+        dans un blog de 2014.
+  \item \textbf{Demander}, avec l'exemple minimal, la version de ton outil et le message complet
+        --- sur \link{Stack~Overflow}{https://stackoverflow.com/questions/tagged/javascript},
+        \link{Open~Classrooms}{https://openclassrooms.com/forum},
+        \link{Dev~Discord/Slack}{https://github.com/websites/DevChatter} ou le Discord officiel
+        d'un projet. Une question bien pos\'ee re\c{c}oit une r\'eponse en dix minutes.
+\end{enumerate}
+
+\begin{note}
+\og ~Je tourne en rond depuis 45 minutes~ \fg{} est le signal pour lever les yeux de l'\'ecran~: marche,
+douche, sommeil. Ce n'est pas une perte de temps, c'est la phase d'incubation du d\'ebogage.
+\end{note}
+
+\section{Sept familles d'erreurs que tu rencontreras}
+
+\begin{enumerate}
+  \item \textbf{Chemins}~: fichier trouv\'e sur ta machine, introuvable en production.
+  \item \textbf{Encodage}~: accents cass\'es (UTF-8 partout, \verb|utf8mb4| en MySQL).
+  \item \textbf{Ordre d'ex\'ecution}~: async non attendu, variable utilis\'ee avant initialisation.
+  \item \textbf{Environnement}~: version d'outil, variable manquante, cache du navigateur.
+  \item \textbf{Confusion de type}~: \verb|"1"+1|, \verb|0 == ""|, \verb|null| contre \verb|undefined|.
+  \item \textbf{\'Etat partag\'e}~: mutation d'un objet pass\'e par r\'ef\'erence, effet de bord cach\'e.
+  \item \textbf{Pr\'ematurit\'e}~: optimiser, abstraire, g\'en\'eraliser avant que le besoin existe.
+\end{enumerate}
+
+Tu peux les scanner une par une~: elles couvrent environ 80 \% des blocages de d\'ebutant.
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris ton contrat d'apprentissage~: jours, horaires, livrables, sanction en cas de
+        manquement. Signe-le, date-le, colle-le au mur.
+  \item Pr\'epare les trois fichiers \fichier{carnet.md} (un par langage) et le d\'ep\^ot
+        \verb|apprentissage|.
+  \item Fais une fiche de 5 cartes m\'emoire sur ce que tu as appris cette semaine
+        (\link{Anki}{https://apps.ankiweb.net/} est l'outil standard, gratuit partout sauf iOS).
+  \item Explique \`a voix haute, en deux minutes, la diff\'erence entre un langage interpr\'et\'e
+        et un langage compil\'e. Enregistre-toi si tu oses~; r\'e\'ecoute.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item \emph{Eloquent JavaScript} (livre gratuit de r\'ef\'erence) --- \url{https://eloquentjavascript.net/}
+  \item \emph{The Road to Learn React / PHP / Java} --- \url{https://roadmap.sh/}
+  \item MDN en fran\c{c}ais --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript}
+  \item Exercices~: \url{https://exercism.org/}, \url{https://adventofcode.com/}, \url{https://www.codewars.com/}
+  \item M\'emorisation espac\'ee~: \url{https://apps.ankiweb.net/}
+\end{itemize}
+\end{ressources}
+
+\index{methode}\index{plan d'etudes}
+\end{document}

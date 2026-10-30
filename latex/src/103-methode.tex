@@ -1,0 +1,155 @@
+% ============================================================================
+\chapter{M\'ethode d'apprentissage et plan de 12 semaines}
+\label{ch-methode}
+% ============================================================================
+
+Savoir quoi apprendre ne suffit pas~: il faut un rythme, une fa\c{c}on de stocker l'information
+et un m\'ecanisme anti-abandon. Ce chapitre est court mais c'est celui qui d\'etermine si tu finis
+le livre.
+
+\section{Les cinq principes qui font la diff\'erence}
+
+\begin{enumerate}
+  \item \textbf{Pratique d\'elib\'er\'ee, pas r\'ep\'etition.} Travailler juste au-dessus de ton niveau,
+        avec retour imm\'ediat (le message d'erreur, le test qui passe). Refaire un exercice
+        d\'ej\`a r\'eussi est du r\'econfort, pas de l'apprentissage.
+  \item \textbf{R\'ecup\'eration active.} Ferme le livre et \'ecris de m\'emoire la syntaxe d'un
+        \verb|try/catch|, la diff\'erence entre \verb|==| et \verb|===|. Se tromper ancre
+        dix fois mieux que relire.
+  \item \textbf{Espacement.} Dix minutes de r\'evision chaque jour valent mieux que deux heures
+        le dimanche. Un tour de flashcards le matin, l'erreur de la veille au soir.
+  \item \textbf{Technique Feynman.} Explique \`a voix haute, avec des mots simples, comme si tu
+        parlais \`a un enfant de douze ans. Tout ce que tu n'arrives pas \`a expliquer est une
+        lacune --- retourne lire.
+  \item \textbf{Production avant consommation.} Ratio cible~: 30 \% lire/regarder,
+        70 \% \'ecrire du code. Si ta journ\'ee a \'et\'e 90 \% vid\'eo, tu ne progresses pas, tu te distraies.
+\end{enumerate}
+
+\section{La routine quotidienne (60 \`a 120 minutes)}
+
+\begin{tabz}{llX}
+  \headrow \thd{Dur\'ee} \& \thd{Bloc} \& \thd{Contenu} \\
+  \midrule
+  10 min \& R\'eveil \& 10 flashcards + relire le code \'ecrit hier, sans l'\'editeur. \\
+  25 min \& Lecture active \& Un morceau de chapitre, le carnet ouvert, on pr\'edit les r\'esultats. \\
+  50 min \& Code \& Recopier les exemples, les casser, refaire l'exercice du chapitre. \\
+  15 min \& Journaliser \& \'Ecrire 5 lignes~: ce que j'ai compris, o\`u j'ai bloqu\'e, la solution. \\
+  10 min \& Curiosit\'e \& Lire la doc officielle de ce que je viens d'utiliser (pas celle d'hier). \\
+\end{tabz}
+
+Si tu n'as que 25 minutes~: fais le bloc \og ~Code~ \fg{}. Jamais le bloc \og ~Lecture~ \fg{} seule.
+
+\section{Le carnet d'erreurs --- ton actif le plus pr\'ecieux}
+
+Cr\'ee \fichier{carnet.md} dans chaque projet et note~: \emph{texte exact de l'erreur},
+\emph{contexte}, \emph{cause r\'eelle}, \emph{correction}, \emph{date}. En six mois tu auras un
+manuel de d\'epannage personnel qui vaut plus que n'importe quel tuto. Les annexes
+(\cref{ch-antisecche}) en sont une version g\'en\'erique~: tiens la tienne \`a jour.
+
+\begin{codeconf}
+## 2026-01-14 - PHP - 500 blank page
+Erreur : aucune, page blanche.
+Cause : une exception ignoree car display_errors = Off en production.
+Fix : log_errors=On, error_log=php://stderr, et activer app_dev en local.
+Lecon : ne jamais chercher a l'aveugle ; ouvrir les logs d'abord.
+\end{codeconf}
+
+\section{Plan de 12 semaines (version intensive)}
+
+Adapte la vitesse~: doubler la dur\'ee de chaque ligne est parfaitementOK. Le plan n'est pas
+une course, c'est un ordre.
+
+\begin{tabz}{llX}
+  \headrow \thd{Semaine} \& \thd{Objet} \& \thd{Livrable concret \`a la fin de la semaine} \\
+  \midrule
+  1 \& Outils, bases JS (\cref{ch-js-bases}) \& 30 petits scripts dans \verb|labo/js|, dont FizzBuzz, tri, palindrome. \\
+  2 \& Objets, tableaux, cha\^ines, regex (\cref{ch-js-struct}) \& Un analyseur de texte (nombre de mots, mots les plus fr\'equents). \\
+  3 \& S\'emantique avanc\'ee (\cref{ch-js-avance}) \& Un mini-syst\`eme d'\'ev\'enements \'ecrit \`a la main (20 lignes). \\
+  4 \& Asynchrone (\cref{ch-js-async}) \& Un script qui t\'el\'echarge 20 pages web en parall\`ele avec limitation de concurrence. \\
+  5 \& DOM et \'ev\'enements (\cref{ch-js-dom,ch-js-events}) \& Une page \og ~liste de courses~ \fg{} sans framework, avec filtre et tri. \\
+  6 \& Fetch, formulaires, stockage (\cref{ch-js-dom,ch-js-storage}) \& La m\^eme liste, persist\'ee en LocalStorage + API externe. \\
+  7 \& Node.js, modules, npm, CLI (\cref{ch-node,ch-js-outils}) \& Un outil de ligne de commande qui renomme en lot les fichiers d'un dossier. \\
+  8 \& TypeScript + tests + s\'ecurit\'e (\cref{ch-js-ts,ch-js-tests,ch-js-secu}) \& Le projet de la semaine~6 typ\'e, test\'e \`a 80 \%, sans XSS. \\
+  9 \& PHP bases, OOP, formulaires (\cref{ch-php-bases,ch-php-oop,ch-php-http}) \& Un mini-CRUD sur fichier JSON, puis sur MySQL. \\
+  10 \& PDO, sessions, auth, s\'ecurit\'e PHP (\cref{ch-php-db,ch-php-http,ch-php-secu}) \& Un blog complet avec inscriptions, r\^oles, upload d'images s\'ecuris\'e. \\
+  11 \& Java bases, OOP, collections, exceptions (\cref{ch-java-bases,ch-java-oop,ch-java-collections,ch-java-collections}) \& Un gestionnaire de biblioth\`eque console avec tests JUnit. \\
+  12 \& Streams, JDBC, Spring Boot, d\'eploiement (\cref{ch-java-fonctionnel,ch-java-db,ch-java-spring,ch-deploy}) \& Une API REST Spring Boot connect\'ee \`a PostgreSQL, d\'eploy\'ee sur un VPS. \\
+\end{tabz}
+
+\section{Utiliser l'IA sans s'handicaper}
+
+Un assistant de code est un excellent tuteur et un tr\`es mauvais substitut. R\`egle simple~:
+\emph{l'IA r\'epond \`a tes questions, elle ne fait pas tes exercices.}
+
+\begin{itemize}
+  \item \textbf{Demander}~: \og ~explique-moi ligne par ligne ce message d'erreur~ \fg{}, \og ~quels sont les
+        cas limites de cette fonction~ \fg{}, \og ~propose 3 variantes de style, avec les avantages~ \fg{}.
+  \item \textbf{Refuser}~: coller l'\'enonc\'e d'un exercice et prendre la r\'eponse. Tu \'economises
+        trois minutes et tu perds la comp\'etence.
+  \item \textbf{Toujours}~: relire ligne par ligne le code g\'en\'er\'e et le faire tourner. Ne
+        mets jamais dans un projet du code que tu ne sais pas expliquer.
+  \item Outils~: \link{Copilot}{https://github.com/features/copilot},
+        \link{Cursor}{https://www.cursor.com/}, \link{Claude}{https://claude.ai/},
+        \link{ChatGPT}{https://chat.openai.com/}, \link{aider (CLI)}{https://aider.chat/}.
+\end{itemize}
+
+\section{Quand tu bloques --- la proc\'edure en cinq temps}
+
+\begin{enumerate}
+  \item \textbf{Lire l'erreur en entier}, y compris la ligne \og ~caused by~ \fg{}, et chercher
+        le texte exact entre guillemets.
+  \item \textbf{R\'eduire.} Fais un exemple minimal qui reproduit le probl\`eme (deux fichiers,
+        dix lignes). Neuf fois sur dix, la r\'eduction r\'ev\`ele la cause.
+  \item \textbf{Isoler une hypoth\`ese}, la tester, l'\'ecrire. \og ~Je pense que X. Je teste Y.~ \fg{}
+  \item \textbf{Chercher dans la doc officielle} (les liens de fin de chapitre) plut\^ot que
+        dans un blog de 2014.
+  \item \textbf{Demander}, avec l'exemple minimal, la version de ton outil et le message complet
+        --- sur \link{Stack~Overflow}{https://stackoverflow.com/questions/tagged/javascript},
+        \link{Open~Classrooms}{https://openclassrooms.com/forum},
+        \link{Dev~Discord/Slack}{https://github.com/websites/DevChatter} ou le Discord officiel
+        d'un projet. Une question bien pos\'ee re\c{c}oit une r\'eponse en dix minutes.
+\end{enumerate}
+
+\begin{note}
+\og ~Je tourne en rond depuis 45 minutes~ \fg{} est le signal pour lever les yeux de l'\'ecran~: marche,
+douche, sommeil. Ce n'est pas une perte de temps, c'est la phase d'incubation du d\'ebogage.
+\end{note}
+
+\section{Sept familles d'erreurs que tu rencontreras}
+
+\begin{enumerate}
+  \item \textbf{Chemins}~: fichier trouv\'e sur ta machine, introuvable en production.
+  \item \textbf{Encodage}~: accents cass\'es (UTF-8 partout, \verb|utf8mb4| en MySQL).
+  \item \textbf{Ordre d'ex\'ecution}~: async non attendu, variable utilis\'ee avant initialisation.
+  \item \textbf{Environnement}~: version d'outil, variable manquante, cache du navigateur.
+  \item \textbf{Confusion de type}~: \verb|"1"+1|, \verb|0 == ""|, \verb|null| contre \verb|undefined|.
+  \item \textbf{\'Etat partag\'e}~: mutation d'un objet pass\'e par r\'ef\'erence, effet de bord cach\'e.
+  \item \textbf{Pr\'ematurit\'e}~: optimiser, abstraire, g\'en\'eraliser avant que le besoin existe.
+\end{enumerate}
+
+Tu peux les scanner une par une~: elles couvrent environ 80 \% des blocages de d\'ebutant.
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris ton contrat d'apprentissage~: jours, horaires, livrables, sanction en cas de
+        manquement. Signe-le, date-le, colle-le au mur.
+  \item Pr\'epare les trois fichiers \fichier{carnet.md} (un par langage) et le d\'ep\^ot
+        \verb|apprentissage|.
+  \item Fais une fiche de 5 cartes m\'emoire sur ce que tu as appris cette semaine
+        (\link{Anki}{https://apps.ankiweb.net/} est l'outil standard, gratuit partout sauf iOS).
+  \item Explique \`a voix haute, en deux minutes, la diff\'erence entre un langage interpr\'et\'e
+        et un langage compil\'e. Enregistre-toi si tu oses~; r\'e\'ecoute.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item \emph{Eloquent JavaScript} (livre gratuit de r\'ef\'erence) --- \url{https://eloquentjavascript.net/}
+  \item \emph{The Road to Learn React / PHP / Java} --- \url{https://roadmap.sh/}
+  \item MDN en fran\c{c}ais --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript}
+  \item Exercices~: \url{https://exercism.org/}, \url{https://adventofcode.com/}, \url{https://www.codewars.com/}
+  \item M\'emorisation espac\'ee~: \url{https://apps.ankiweb.net/}
+\end{itemize}
+\end{ressources}
+
+\index{methode}\index{plan d'etudes}

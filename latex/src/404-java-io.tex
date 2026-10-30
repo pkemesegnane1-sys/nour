@@ -1,0 +1,314 @@
+% ============================================================================
+\chapter{Fichiers, flux, dates et internationalisation}
+\label{ch-java-io}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Lire et \'ecrire des fichiers proprement~: \verb|Files|, \verb|Path|, flux tamponn\'es,
+        copies, parcours r\'ecursifs.
+  \item Ne plus jamais se tromper d'encodage (UTF-8 explicite) ni de s\'eparateur de chemin.
+  \item Manipuler dates et fuseaux avec \verb|java.time| et formater nombres/monnaies par locale.
+  \item G\'erer s\'erialisation JSON, CSV, propri\'et\'es, ressources embarqu\'ees.
+  \item Conna\^itre les bons outils pour les gros fichiers (flux, \verb|MappedByteBuffer|, limites).
+\end{itemize}
+\end{objectif}
+
+\section{Chemin et fichiers : \texttt{java.nio.file}}
+
+\begin{codejava}
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.util.Comparator;
+import java.util.stream.Stream;
+
+// Construction : JAMAIS de concatenation avec "/" (Windows casse) ; les separators sont geres
+Path racine = Path.of(System.getProperty("user.dir"), "data");
+Path fichier = racine.resolve("notes.txt");            // /chemin/vers/data/notes.txt
+Path absolut = fichier.toAbsolutePath().normalize();     // resout ".." et symlinks
+Path parent = absolut.getParent();
+Path relatif = racine.relativize(absolut);                // "notes.txt"
+Path maison = Path.of(System.getProperty("user.home"));
+Files.exists(fichier); Files.isDirectory(fichier); Files.isRegularFile(fichier);
+Files.isReadable(fichier); Files.isWritable(fichier); Files.isHidden(fichier);
+fichier.getFileName(); fichier.getName(1); fichier.getNameCount();
+fichier.endsWith(".txt"); fichier.startsWith(racine);
+Files.size(fichier);
+FileTime t = Files.getLastModifiedTime(fichier);
+
+// Ecrire (les trois modes)
+Files.writeString(fichier, "Ligne 1\nLigne 2\n", StandardCharsets.UTF_8,
+        StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+Files.write(fichier, List.of("a", "b"), StandardCharsets.UTF_8);      // remplace
+Files.createDirectories(racine);                                        // mkdir -p
+Files.createFile(fichier);                                               // leverait FileAlreadyExists
+Files.copy(Paths.get("/tmp/a"), fichier, StandardCopyOption.REPLACE_EXISTING);
+Files.move(fichier, fichier.resolveSibling("notes.md"), StandardCopyOption.ATOMIC_MOVE);
+Files.delete(fichier);                                                   // FileNotFound -> exception
+Files.deleteIfExists(fichier);
+
+// Lire
+String contenu = Files.readString(fichier, StandardCharsets.UTF_8);   // tout (<= quelques Mo)
+List<String> lignes = Files.readAllLines(fichier, StandardCharsets.UTF_8);
+byte[] octets = Files.readAllBytes(fichier);
+try (Stream<String> flux = Files.lines(fichier, StandardCharsets.UTF_8)) {   // GROS fichier
+    long vides = flux.filter(s -> !s.isBlank()).count();
+} catch (IOException e) { throw new UncheckedIOException(e); }              // idiomatique : wrapper
+
+// Parcourir
+try (Stream<Path> marche = Files.walk(racine, 3, FileVisitOption.FOLLOW_LINKS)) {
+    marche.filter(Files::isRegularFile)
+          .filter(p -> p.toString().endsWith(".java"))
+          .sorted()
+          .forEach(p -> System.out.printf("%8d %s%n", p.toFile().length(), racine.relativize(p)));
+}
+try (var entree = Files.newDirectoryStream(racine, "*.{java,kt}")) { for (Path p : entree) { } }
+
+// Attributs POSIX et suivi de modifications
+PosixFilePermissions.fromString("rwxr-xr-x");
+Files.getOwner(fichier);
+var obs = FileSystems.getDefault().watch(racine, StandardWatchEventKinds.ENTRY_MODIFY);
+while (true) { WatchKey cle = obs.poll(2, java.util.concurrent.TimeUnit.SECONDS); /* ... cle.reset() */ }
+
+// Copie a la volee entre flux (le "pipe" de la bibliotheque)
+try (var in = Files.newInputStream(source); var out = Files.newOutputStream(dest)) {
+    in.transferTo(out);
+}
+// Fichier temporaire propre (toujours supprime a la fermeture du JVM) :
+Path tmp = Files.createTempFile("rapport", ".csv");
+tmp.toFile().deleteOnExit();     // ou : new FileOutputStream(f, true) ; ou try-with-resources
+\end{codejava}
+
+\subsection{Flux : octets, caract\`eres, tampons}
+
+\begin{codejava}
+// Les deux familles : *Stream (octets) et *Reader/*Writer (caracteres, avec charset).
+// Regle : ne JAMAIS lire des caracteres avec un InputStream sans charset explicite.
+try (var flux = Files.newBufferedReader(fichier, StandardCharsets.UTF_8)) {
+    String ligne;
+    while ((ligne = flux.readLine()) != null) { traiter(ligne); }
+}
+
+try (var in = new java.io.BufferedInputStream(Files.newInputStream(fichier), 64 * 1024);
+     var out = new java.io.BufferedOutputStream(Files.newOutputStream(dest), 64 * 1024)) {
+    in.transferTo(out);
+    out.flush();                                   // obligatoire avant de lire ailleurs (ou auto \`a close)
+}
+
+// Data : primitives en binaire (protocoles, fichiers de sauvegarde maison)
+try (var d = new java.io.DataOutputStream(new java.io.FileOutputStream("sauvegarde.bin"))) {
+    d.writeInt(42); d.writeUTF("Bonjour"); d.writeLong(System.currentTimeMillis()); d.writeBoolean(true);
+}
+try (var d = new java.io.DataInputStream(new java.io.FileInputStream("sauvegarde.bin"))) {
+    int n = d.readInt(); String s = d.readUTF(); long t = d.readLong(); boolean b = d.readBoolean();
+}
+
+// PrintWriter / Scanner : parfaits pour les scripts et l'apprentissage console
+var sc = new java.util.Scanner(System.in, StandardCharsets.UTF_8);
+System.out.print("Entier ? "); int valeur = sc.hasNextInt() ? sc.nextInt() : -1;
+System.out.printf("%,d en euros%n", 1234);         // 1 234 (espace ins\'ecable selon la locale)
+// Java 21+ : java.io.StreamScanner si tu \'ecrivais un parseur \`a la main
+\end{codejava}
+
+\section{Dates et heures---\texttt{java.time}}
+
+\begin{codejava}
+import java.time.*;
+import java.time.format.*;
+import java.time.temporal.*;
+
+// Instant : un point sur la ligne du temps (UTC, precis a la nanoseconde) -- pour stocker
+Instant maintenant = Instant.now();
+Instant epoch = Instant.EPOCH;
+Instant date = Instant.parse("2026-01-31T10:15:30Z");
+
+// LocalDateTime / LocalDate : sans fuseau -- pour un horaire de train, une date de naissance
+LocalDate jour = LocalDate.of(2026, java.time.Month.JANVIER, 31);
+LocalDate aujourdhui = LocalDate.now();
+LocalTime heure = LocalTime.of(9, 30);
+LocalDateTime horloge = LocalDateTime.of(jour, heure);
+ZonedDateTime aDakar = ZonedDateTime.of(LocalDateTime.now(), ZoneId.of("Africa/Dakar"));
+OffsetDateTime offset = OffsetDateTime.parse("2026-01-31T10:15:30+01:00");
+
+// Manipulations : tout est immuable, tout renvoie un nouvel objet
+LocalDate demain = jour.plusDays(1);
+LocalDate finMois = jour.with(TemporalAdjusters.lastDayOfMonth());
+LocalDate prochainLundi = jour.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+Period periode = Period.between(jour, jour.plusMonths(3).plusDays(5));   // annees/mois/jours
+Duration duree = Duration.between(heure, heure.plusMinutes(90));
+long secondes = duree.toSeconds();
+LocalDate memeJourLAnProchain = jour.plusYears(1).withDayOfMonth(Math.min(jour.getDayOfMonth(),
+        Year.of(jour.getYear() + 1).length()));      // le 29 fevrier existe... ou pas
+boolean anneeBissextile = Year.of(jour.getYear()).isLeap();
+ZoneId sys = ZoneId.systemDefault();
+
+// Conversions : les trois fronts reels
+LocalDate enDate = aDakar.toLocalDate();
+Instant depuisLocal = LocalDate.of(2026, 1, 31).atStartOfDay(ZoneId.of("UTC")).toInstant();
+Date ancien = java.util.Date.from(instant);                    // pont vers JDBC / API heritees
+Instant depuisSql = java.sql.Timestamp.valueOf(local).toInstant();
+
+// Formatage / analyse : DateTimeFormatter est couteux -> une constante statique
+static final DateTimeFormatter JOUR_FR = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Locale.FRENCH);
+static final DateTimeFormatter COMPACT = DateTimeFormatter.BASIC_ISO_DATE;        // 20260131
+jour.format(JOUR_FR);                              // "samedi 31 janvier 2026"
+jour.format(DateTimeFormatter.ISO_LOCAL_DATE);       // 2026-01-31
+jour.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL));
+LocalDate analyse = LocalDate.parse("31.01.2026", DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+var options = new DateTimeFormatterBuilder()
+        .appendPattern("dd/MM/yyyy")
+        .optionalStart().appendPattern(" HH:mm").optionalEnd()
+        .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
+        .toFormatter(Locale.FRENCH);
+// Toujours verifier le parse : DateTimeParseException avec index du caractere fautif.
+\end{codejava}
+
+\begin{piege}
+\verb|LocalDateTime| ne contient \textbf{pas} de fuseau~: une minute de diff\'erence de configuration
+du serveur et tes factures sont fausses. R\`egle~: on \emph{stocke} en \verb|Instant| (ou
+\verb|OffsetDateTime|) en UTC, on \emph{affiche} en fuseau local de l'utilisateur, et on ne fait
+jamais d'arithm\'etique de \og ~jours~ \fg{} sur un \verb|Instant|~: un jour civil peut faire 23 ou 25 heures
+(changement d'heure~! ).
+\end{piege}
+
+\section{Nombres, monnaie et i18n}
+
+\begin{codejava}
+import java.text.*;
+import java.util.*;
+
+Locale francais = Locale.forLanguageTag("fr-FR");
+NumberFormat nombre = NumberFormat.getIntegerInstance(francais);
+nombre.format(1234567);                                   // "1 234 567" (espace ins\'ecable)
+NumberFormat devise = NumberFormat.getCurrencyInstance(francais);
+devise.format(12.5);                                       // "12,50 EUR" / "12,50 EUR "
+NumberFormat pourcent = NumberFormat.getPercentInstance();
+pourcent.setMinimumFractionDigits(1); pourcent.format(0.1234);   // "12,3 %"
+DecimalFormat modele = new DecimalFormat("#,##0.00 EUR ", new DecimalFormatSymbols(francais));
+modele.format(1234.5);
+ParsePosition pp = new ParsePosition(0);
+Number lu = nombre.parse("1 234 567", pp);                    // attention aux espaces ins\'ecables
+Collator collation = Collator.getInstance(francais);
+collation.setStrength(Collator.PRIMARY);
+List.of("\'ecole", "\'elan", "effort").stream().sorted(collation).toList();
+BreakIterator mots = BreakIterator.getWordInstance(francais);  // decoupage linguistique reel
+ChoiceFormat pluriel = new ChoiceFormat("0#pas d'article|1#un article|1<#%d articles");
+MessageFormat msg = new MessageFormat(frMessage, francais);      // "Bonjour {0}, {1,number,integer} article(s)"
+msg.format(new Object[]{"Nour", 3});
+
+// Ressources par locale : src/main/resources/messages_fr.properties, messages_en.properties...
+ResourceBundle rb = ResourceBundle.getBundle("messages", francais);
+String bienvenue = rb.getString("titre");
+// La pratique moderne : les fichiers .properties encodes en UTF-8, ou un fichier unique JSON/YAML
+// charge a la main ; et java.text/icu4j (IBM) pour les besoins s\'erieux.
+var icu = com.ibm.icu.text.RuleBasedNumberFormat(Locale.FRENCH, com.ibm.icu.text.RuleBasedNumberFormat.SPELLOUT);
+icu.format(42);                                              // "quarante-deux" (bibliotheque externe)
+\end{codejava}
+
+\section{S\'erialiser : JSON, propri\'et\'es, CSV, objets}
+
+\begin{codejava}
+// 1. Proprietes : la config simple, sans dependance
+Properties props = new Properties();
+try (var in = Files.newInputStream(Path.of("config.properties"))) { props.load(in); }
+String url = props.getProperty("db.url", "jdbc:h2:mem:test");
+props.store(Files.newOutputStream(Path.of("out.properties")), "genere par l'application");
+
+// 2. JSON : Jackson (le standard de fait). Ajouter la dependance, puis :
+//    com.fasterxml.jackson.core:jackson-databind
+var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+        .findAndRegisterModules()                       // java.time, etc.
+        .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+        .setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL);
+var json = mapper.writeValueAsString(article);
+Article relu = mapper.readValue(json, Article.class);
+List<Article> liste = mapper.readValue(json, mapper.getTypeFactory()
+        .constructCollectionType(List.class, Article.class));   // ou : new TypeReference<List<Article>>() {}
+
+// DTO d'API : un record + annotations -- c'est propre et immuable
+public record RequeteArticle(
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(min = 3, max = 160) String titre,
+        @jakarta.validation.constraints.NotBlank String corps,
+        List<String> tags,
+        @jakarta.annotation.Nullable Instant publieLe) { }
+
+// 3. CSV : pas de bibliotheque necessaire pour du simple, mais-open commons-csv ou
+//    objects/uni-csv des qu'il y a des guillemets ou des retours a la ligne.
+String ligne = "id,nom\n1,\"O'Brien, junior\",42\n".replace("\r", "");
+
+// 4. Serialisation d'objets (Serializable) : A EVITER pour de la persistance ou du reseau.
+//    Fragile (versionnement de classe), lent, vecteur de failles (deserialization gadget chains).
+//    Utilise JSON, Protobuf, Avro, ou un format texte define par toi.
+//    (La serialization reste utile pour RMI/ehcache, et la bibliotheque la remplace ailleurs.)
+\end{codejava}
+
+\begin{astuce}
+Pour de la configuration typ\'ee sans d\'ependance~: \verb|Map<String,String>| lue depuis un
+\verb|.env| (15 lignes de parsing) + des enregistrements \verb|record Config(...) | valid\'es au
+d\'emarrage. C'est plus lisible que 40 appels \`a \verb|System.getenv()| \'eparpill\'es dans le code, et
+\c{c}a \'echoue imm\'ediatement si une variable manque -- au lieu de tomber en production un vendredi.
+\end{astuce}
+
+\subsection{Gros fichiers~: la bo\^ite \`a outils}
+
+\begin{codejava}
+// 1. Flux de lignes : memoire constante, integration parfaite avec Streams
+try (var lignes = Files.lines(Path.of("gros.log"))) {
+    lignes.map(l -> l.split(" ")[0]).distinct().parallel().forEach(System.out::println);
+}
+// 2. BufferedReader manuel quand il faut compter/avancer
+try (var r = Files.newBufferedReader(path)) {
+    char[] tampon = new char[8192];
+    int lus;
+    while ((lus = r.read(tampon)) != -1) { traiter(new String(tampon, 0, lus)); }
+}
+// 3. Ecriture en masse : un BufferedWriter + des sauts de tampon de 64 Ko
+// 4. memory-mapped (lecture quasi nulle copie) : FileChannel.map -- attention a la taille
+//    de la zone (limite de 2 Go par region) ; GarbageCollector ne libere pas la carte a coup sur :
+//    a debloquer explicitement ou a eviter si tu ne maitrises pas.
+// 5. Canaux + ByteChannel.transferFrom : le zero-copy reel
+//    try (var src = FileChannel.open(a); var dst = FileChannel.open(b, WRITE, CREATE, TRUNCATE_EXISTING)) {
+//        long taille = src.size(); long pos = 0; do { pos += src.transferTo(pos, taille - pos, dst); } while (pos < taille);
+//    }
+// 6. Compression integree : GZIP/ZIP via ZipOutputStream, Deflater/Inflater,
+//    ou Apache Commons Compress (tar.gz, 7z, zstd) si besoin.
+\end{codejava}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris un utilitaire \verb|Fichiers|~: \verb|lireEnLignes|, \verb|ecrireAtomiquement|
+        (\'ecrire dans un fichier temporaire puis \verb|Files.move(..., ATOMIC\_MOVE)|),
+        \verb|trouver(racine, glob)|, \verb|tailleTotale(dossier)|, \verb|copierArborescence|
+        (avec permissions conserv\'ees).
+  \item Construis un journaliseur maison~: rotation quotidienne et par taille (10~Mo),
+        niveaux, tampon de 32~Ko vid\'es p\'eriodiquement, format JSON sur une ligne,
+        et gestion correcte des fermetures~; compare le d\'ebit \`a \verb|System.out.println|.
+  \item Analyseur de logs~: agr\`ege par heure, par statut, par IP~; top 10 des URL les plus lentes
+        (percentiles p50/p95/p99~! )~; affiche un rapport align\'e avec \verb|printf|~: le tout
+        en flux (un fichier de 2~Go ne doit pas \^etre charg\'e en RAM).
+  \item Convertis un CSV en JSON et inversement, en g\'erant les champs entre guillemets, les
+        retours \`a la ligne internes, les nombres localis\'es, les dates \verb|dd/MM/yyyy|,
+        et en \'ecrivant les deux formats en UTF-8 avec BOM pour l'export Excel.
+  \item \'Ecris un calculateur d'anniversaires~: jours restants, \^age exact (ann\'ees/mois/jours),
+        gestion du 29~f\'evrier, fuseau du pays de l'utilisateur, et formatage localis\'e.
+        Teste avec les changements d'heure (Europe/Paris le dernier dimanche de mars).
+  \item G\'en\`ere un petit rapport PDF~: \link{iText}{https://itextpdf.com/} ou
+        \link{OpenPDF}{https://github.com/LibrePDF/OpenPDF}~: en-t\^ete localis\'e, tableau tri\'e,
+        totaux, pagination. Puis compare avec l'export HTML + impression navigateur (souvent
+        suffisant, et dix fois moins de code).
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Tutorial officiel I/O --- \url{https://dev.java/learn/io/}
+  \item \url{https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/Files.html}
+  \item \url{https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/time/package-summary.html}
+  \item Jackson --- \url{https://github.com/FasterXML/jackson-databind} --- Gson (alternative) --- \url{https://github.com/google/gson}
+  \item OpenCSV --- \url{http://opencsv.sourceforge.net/} --- Apache Commons CSV --- \url{https://commons.apache.org/proper/commons-csv/}
+\end{itemize}
+\end{ressources}
+
+\index{fichiers}\index{NIO}\index{java.time}\index{i18n}\index{Jackson}

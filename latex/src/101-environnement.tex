@@ -1,0 +1,446 @@
+% ============================================================================
+\chapter{Installer ton environnement de travail}
+\label{ch-environnement}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Disposer d'un poste de d\'eveloppement complet pour les trois langages, gratuit.
+  \item Comprendre ce qu'est un runtime, un compilateur, un serveur web, un conteneur.
+  \item Installer et v\'erifier chaque outil, avec les liens officiels de t\'el\'echargement.
+  \item Savoir r\'eparer une installation cass\'ee (le cas le plus fr\'equent d'abandon).
+\end{itemize}
+\end{objectif}
+
+\section{Le mat\'eriel n\'ecessaire}
+
+Un ordinateur de 2015 ou plus r\'ecent suffit largement.
+
+\begin{tabz}{lX}
+  \headrow \thd{Composant} \& \thd{Minimum vital} \\
+  \midrule
+  CPU \& 2 c\oe{}urs / 4 threads (i5 de 6\textsuperscript{e} g\'en\'eration, Ryzen~3, Apple~M1).\\
+  RAM \& 8~Go pour suivre le livre. 16~Go si tu ouvres Docker + un IDE Java en m\^eme temps.\\
+  Disque \& 40~Go libres (une distribution \LaTeX{} + JDK + SDK Android p\`esent lourd).\\
+  \'Ecran \& Full~HD. Deux \'ecrans changent la vie : documentation d'un c\^ot\'e, \'editeur de l'autre.\\
+  Internet \& Indispensable : paquets, d\'ependances, documentations.\\
+\end{tabz}
+
+Un ordinateur portable d'entr\'ee de gamme r\'ecent, Linux install\'e dessus, fait un poste de
+d\'eveloppement excellent pour ces trois langages. Aucun besoin de machine de guerre.
+
+\section{Vue d'ensemble : qu'allons-nous installer ?}
+
+\begin{tabz}{llX}
+  \headrow \thd{Outil} \& \thd{R\^ole} \& \thd{Officiel} \\
+  \midrule
+  \'Editeur / IDE \& L\`a o\`u tu \'ecris le code. \& \link{VS~Code}{https://code.visualstudio.com/} --- \link{VSCodium (sans telemetry)}{https://vscodium.com/} --- \link{Cursor}{https://www.cursor.com/} \\
+  Node.js \& Runtime JavaScript hors navigateur + npm. \& \link{nodejs.org}{https://nodejs.org/fr/download} \\
+  PHP \& Runtime + serveur int\'egr\'e + Composer. \& \link{php.net}{https://www.php.net/downloads.php} \\
+  JDK \& Compile et ex\'ecute Java (JVM). \& \link{Adoptium Temurin}{https://adoptium.net/fr/} \\
+  Git \& Historique de ton code. \& \link{git-scm.com}{https://git-scm.com/downloads} \\
+  Docker \& Fait tourner MySQL, PostgreSQL, Redis sans les installer \og  pour de  \fg{}. \& \link{docker.com}{https://www.docker.com/products/docker-desktop/} \\
+  MySQL / MariaDB \& Base de donn\'ees de tous les exemples PHP. \& \link{mysql.com}{https://dev.mysql.com/downloads/mysql/} \\
+  PostgreSQL \& Base de donn\'ees des exemples Java. \& \link{postgresql.org}{https://www.postgresql.org/download/} \\
+  Terminal \& Bash, Zsh, PowerShell, Windows~Terminal. \& \link{Windows~Terminal}{https://apps.microsoft.com/detail/9N0DX20HK701} \\
+  Navigateur \& Chrome/Edge (outils de dev) + Firefox. \& \link{Chrome}{https://www.google.com/chrome/} \\
+\end{tabz}
+
+\subsection{Trois mots \`a comprendre tout de suite}
+
+\begin{description}
+  \item[Interpr\'et\'e vs compil\'e.] \langjs{} et \langphp{} sont \emph{ex\'ecut\'es} par un moteur qui lit
+        le fichier source. \langjava{} est \emph{compil\'e} en bytecode (\fichier{.class}) ex\'ecut\'e
+        par la JVM. Cons\'equence pratique : en JS/PHP tu modifies et tu rafra\^ichis ; en Java,
+        tu recompiles (ton IDE ou Maven le fait pour toi).
+  \item[Client vs serveur.] Le JavaScript de page s'ex\'ecute dans le navigateur de l'utilisateur
+        (client). PHP, Node.js et Java s'ex\'ecutent sur une machine qui r\'epond \`a des requ\^etes
+        (serveur). Un m\^eme langage peut faire les deux : c'est le cas de JavaScript.
+  \item[Runtime vs SDK.] Le runtime sait \emph{ex\'ecuter}. Le SDK (JDK, PHP complet, Node) apporte
+        en plus les outils pour \emph{d\'evelopper} : compilateur, gestionnaire de paquets,
+        biblioth\`eque standard, utilitaires.
+\end{description}
+
+\section{Linux (Debian, Ubuntu, Fedora, Arch)}
+
+C'est la plateforme la plus confortable pour ce livre : tout est \`a un \cmd{apt install}.
+
+\etape{Node.js via nvm (la bonne m\'ethode)}
+Ne jamais installer Node avec \cmd{apt} : la version du d\'ep\^ot est vieille de plusieurs ann\'ees.
+On utilise \textbf{nvm} (Node Version Manager), qui permet d'installer, changer et r\'eparer
+de versions en une commande.\src{https://github.com/nvm-sh/nvm#installing-and-updating}
+
+\begin{terminal}
+# installer nvm (la commande officielle, verifie la version sur le depot)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+# relance le terminal, puis :
+nvm install --lts          # installe la derniere version LTS
+nvm use --lts
+nvm alias default lts/*    # par defaut a chaque nouveau terminal
+node -v && npm -v
+\end{terminal}
+
+Note : si tu g\`eres plusieurs langages (Node, PHP, Java, Python, Go), un gestionnaire de versions
+unique est plus agr\'eable~: \textbf{mise} (\link{mise.jdx.dev}{https://mise.jdx.dev/}) ou
+\textbf{asdf}. \link{mise}{https://github.com/jdx/mise} est \'ecrit en Rust, tr\`es rapide, compatible
+avec les fichiers \fichier{.tool-versions} d'asdf.
+
+\etape{PHP}
+\begin{terminal}
+# Debian/Ubuntu : le depot fournit un PHP recent + les extensions usuelles
+sudo apt update
+sudo apt install -y php-cli php-fpm php-mysql php-pgsql php-curl php-mbstring \
+  php-xml php-zip php-gd php-intl php-bcmath php-sqlite3
+php -v && php -m      # -m liste les extensions chargees
+
+# Fedora
+sudo dnf install php-cli php-fpm php-mysqlnd php-pgsql php-xml php-mbstring php-intl
+# Arch
+sudo pacman -S php php-pgsql php-sqlite
+\end{terminal}
+
+Sous Debian, la version du d\'ep\^ot est vieille. Pour un PHP r\'ecent~:
+\link{deb.sury.org (paquets ONDrej sur mesure)}{https://deb.sury.org/}
+\src{https://github.com/oerdnj/deb.sury.org}.
+
+\etape{Java}
+\begin{terminal}
+# Temurin = OpenJDK certifie par l'Adoptium (Eclipse Foundation), gratuit et sans compte
+sudo mkdir -m 0755 -p /etc/apt/keyrings
+curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+  | sudo tee /etc/apt/keyrings/adoptium.asc >/dev/null
+echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(lsb_release -cs) main" \
+  | sudo tee /etc/apt/sources.list.d/adoptium.list
+sudo apt update && sudo apt install -y temurin-21-jdk
+java -version && javac -version
+echo 'export JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64' >> ~/.bashrc
+\end{terminal}
+
+Sous Arch~: \cmd{sudo pacman -S jdk21-openjdk}. Sous Fedora~:
+\cmd{sudo dnf install java-21-temurin-devel || sudo dnf install java-21-openjdk-devel}.
+
+\etape{Le reste}
+\begin{terminal}
+sudo apt install -y git curl wget unzip zip build-essential jq tree htop
+# MySQL/MariaDB (ou laisse Docker le faire, section plus bas)
+sudo apt install -y mariadb-server mariadb-client
+# PostgreSQL
+sudo apt install -y postgresql postgresql-contrib
+# Docker (via le depot officiel, pas celui du distributeur)
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER   # deconnecte-toi puis reconnecte-toi
+newgrp docker
+docker run --rm hello-world
+\end{terminal}
+
+\section{macOS}
+
+Installe \link{Homebrew}{https://brew.sh/fr/} : c'est le gestionnaire de paquets non officiel
+mais universellement utilis\'e.
+
+\begin{terminal}
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Node
+brew install nvm && mkdir -p ~/.nvm
+echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zprofile
+echo '[ -s "$(brew --prefix nvm)/nvm.sh" ] && \. "$(brew --prefix nvm)/nvm.sh"' >> ~/.zprofile
+source ~/.zprofile && nvm install --lts
+
+# PHP : remplace le PHP systeme (vieux et bride) par une version brew complete
+brew install php composer
+brew link --overwrite php
+echo 'export PATH="$(brew --prefix php)/bin:$PATH"' >> ~/.zprofile
+
+# Java
+brew install --cask temurin@21     # ou : brew install openjdk@21
+/usr/libexec/java_home -V           # liste les JDK installes
+echo 'export JAVA_HOME=$(/usr/libexec/java_home -v 21)' >> ~/.zprofile
+
+# Les outils
+brew install git tree jq wget
+brew install --cask docker colortail iterm2
+brew install --cask mariadb lnav || brew install mariadb
+brew install --cask postgresql@16
+\end{terminal}
+
+\begin{note}
+Sur Apple~Silicon, Homebrew installe dans \fichier{/opt/homebrew}. Si un outil est introuvable,
+c'est presque toujours un probl\`eme de \verb|PATH|~: v\'erifie avec \cmd{echo $PATH} et
+\cmd{which php}.
+\end{note}
+
+\section{Windows}
+
+Deux strat\'egies, cumulables. Je recommande la~B pour le PHP/Java et la~A pour commencer
+rapidement.
+
+\etape{Strat\'egie A --- natif (le plus simple au d\'ebut)}
+\begin{enumerate}
+  \item \textbf{Node.js}~: installeur \link{nodejs.org/fr/download}{https://nodejs.org/fr/download}
+        (LTS, .msi). coche \og ~Add to PATH~ \fg{}.
+  \item \textbf{PHP}~: \link{windows.php.net/download}{https://windows.php.net/download/}
+        --- ZIP \og ~VS16 x64 Thread Safe~ \fg{}, d\'ezippe dans \fichier{C:\textbackslash php}, ajoute
+        \fichier{C:\textbackslash php} au \verb|PATH| (\emph{Param\`etres $\rightarrow$ Syst\`eme $\rightarrow$ \`A propos $\rightarrow$ Param\`etres
+        syst\`eme avanc\'es $\rightarrow$ Variables d'environnement}), puis copie \fichier{php.ini-development}
+        vers \fichier{php.ini} et d\'ecommentre les lignes
+        \verb|extension=curl|, \verb|extension=mbstring|, \verb|extension=pdo\_mysql|,
+        \verb|extension=mysqli|, \verb|extension=openssl|, \verb|extension=fileinfo|.
+  \item \textbf{Java}~: \link{Adoptium Temurin 21 (Windows x64 MSI)}{https://adoptium.net/temurin/releases/?os=windows} ---
+        coche \og ~Set JAVA\_HOME~ \fg{} et \og ~Add to PATH~ \fg{} pendant l'installation.
+  \item \textbf{Git for Windows}~: \link{git-scm.com/download/win}{https://git-scm.com/download/win}
+        (il fournit aussi Git~Bash, un vrai terminal Linux).
+  \item \textbf{Windows~Terminal}~: \link{Microsoft~Store}{https://apps.microsoft.com/detail/9N0DX20HK701}.
+  \item \textbf{Scoop} ou \textbf{winget} pour tout le reste~:
+\end{enumerate}
+
+\begin{terminal}
+winget install --id Git.Git -e
+winget install OpenJS.NodeJS.LTS
+winget install PHP.PHP.8.3
+winget install EclipseAdoptium.Temurin.21.JDK
+winget install Docker.DockerDesktop
+winget install Microsoft.VisualStudioCode
+scoop bucket add extras; scoop install jq tree wget
+\end{terminal}
+
+\etape{Strat\'egie B --- WSL2 (un vrai Linux dans Windows, la voie royale)}
+Tu gardes VS~Code sous Windows, mais tout le code et tous les outils vivent dans Ubuntu.
+C'est l'environnement le plus proche de celui d'un serveur de production.
+
+\begin{terminal}
+# PowerShell en administrateur
+wsl --install -d Ubuntu-24.04
+wsl --update
+wsl --set-default-version 2
+# puis redemarre, ouvre "Ubuntu", cree ton utilisateur, et applique la section Linux ci-dessus
+code .        # depuis le terminal WSL : ouvre VS Code sur le dossier distant
+\end{terminal}
+
+Installe l'extension \link{Remote - WSL}{https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-wsl}
+et \link{Dev~Containers}{https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers}.
+V\'erifie que ton projet est dans \verb|\\wsl$\Ubuntu\home\toi\projets| et \emph{jamais} dans
+\fichier{C:\textbackslash Users} : les performances d'I/O entre les deux mondes sont d\'esastreuses.
+
+\begin{piege}
+Sous Windows, les noms de fichiers sont insensibles \`a la casse, mais pas sur un serveur Linux.
+Un \verb|require("./utils/Helper")| qui marche sur ton PC peut planter en production.
+Convention~: noms de fichiers en \texttt{kebab-case} ou \texttt{snake\_case}, et imports
+exactement identiques \`a la casse du fichier.
+\end{piege}
+
+\section{\'Editeur ou IDE : le choix}
+
+\subsection{Option 1 --- un seul \'editeur pour les trois langages : VS~Code}
+
+\begin{terminal}
+# VS Code
+https://code.visualstudio.com/                # Windows / macOS / Linux (.deb, .rpm, tar.gz)
+# Variante sans telemetry : VSCodium
+https://vscodium.com/
+\end{terminal}
+
+Extensions \`a installer (\keys{Ctrl+Shift+X}, puis cherche le nom~; le compte d'installations est
+entre parenth\`eses \`a la date d'\'ecriture~--- elles sont toutes massivement utilis\'ees)~:
+
+\begin{tabz}{Xl}
+  \headrow \thd{Extension (identifiant \`a coller)} \& \thd{Pour} \\
+  \midrule
+  \link{ESLint}{https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint} \cmd{dbaeumer.vscode-eslint} \& JS/TS : analyse et auto-correction.\\
+  \link{Prettier}{https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode} \cmd{esbenp.prettier-vscode} \& Formatage automatique JS/TS/CSS/JSON/MD.\\
+  \link{Error Lens}{https://marketplace.visualstudio.com/items?itemName=usernamehw.errorlens} \cmd{usernamehw.errorlens} \& Affiche l'erreur inline, bout de la ligne.\\
+  \link{EditorConfig}{https://marketplace.visualstudio.com/items?itemName=EditorConfig.EditorConfig} \cmd{EditorConfig.EditorConfig} \& Respecte indentation/fins de ligne du projet.\\
+  \link{GitLens}{https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens} \cmd{eamodio.gitlens} \& Historique ligne par ligne.\\
+  \link{PHP Intelephense}{https://marketplace.visualstudio.com/items?itemName=bmewburn.vscode-intelephense-client} \cmd{bmewburn.vscode-intelephense-client} \& PHP : compl\'etion, types, navigation.\\
+  \link{PHP Debug}{https://marketplace.visualstudio.com/items?itemName=xdebug.php-debug} \cmd{xdebug.php-debug} \& Xdebug pas \`a pas.\\
+  \link{PHP Namespace Resolver}{https://marketplace.visualstudio.com/items?itemName=mehedidrac PHP Namespace Resolver} \& Import automatique des classes.\\
+  \link{Extension Pack for Java}{https://marketplace.visualstudio.com/items?itemName=vscjava.vscode-java-pack} \cmd{vscjava.vscode-java-pack} \& Les 6 extensions Java de Red~Hat/Microsoft d'un coup.\\
+  \link{Spring Boot Extension Pack}{https://marketplace.visualstudio.com/items?itemName=vmware.vscode-boot-dev-pack} \& Autocompl\'etion \verb|application.properties|, Initializr.\\
+  \link{REST Client}{https://marketplace.visualstudio.com/items?itemName=humao.rest-client} \cmd{humao.rest-client} \& Tester une API depuis un fichier \fichier{.http}.\\
+  \link{Thunder Client}{https://www.thunderclient.com/} \& Alternative \`a Postman int\'egr\'ee.\\
+  \link{Docker}{https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-docker} \& Containers, logs, volumes.\\
+  \link{SQLite}{https://marketplace.visualstudio.com/items?itemName=qwtel.sqlite-viewer} \& Explorer une base.\\
+  \link{Code Spell Checker}{https://marketplace.visualstudio.com/items?itemName=streetsidesoftware.code-spell-checker} \& \'Evite les fautes dans les noms de variables.\\
+  \link{Live Server}{https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer} \& Rechargement automatique d'une page statique.\\
+\end{tabz}
+
+R\'eglages que j'active imm\'ediatement (\keys{Ctrl+,}, puis \clic{Open Settings (JSON)})~:
+
+\begin{codejson}
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+  "editor.rulers": [80, 100, 120],
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": "active",
+  "editor.linkedEditing": true,
+  "editor.suggestSelection": "first",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.eol": "\n",
+  "[php]": { "editor.tabSize": 4, "editor.defaultFormatter": "xiaphu.php-build-tools" },
+  "[java]": { "editor.tabSize": 4 },
+  "javascript.preferences.importModuleSpecifier": "relative",
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.completion.enabled": true,
+  "editor.inlineSuggest.enabled": true,
+  "terminal.integrated.defaultProfile.windows": "Ubuntu-24.04 (WSL)"
+}
+\end{codejson}
+
+\begin{note}
+L'identifiant \cmd{xiaphu.php-build-tools} dans le bloc \verb|[php]| est optionnel~:
+si tu ne l'as pas install\'e, supprime la ligne \verb|editor.defaultFormatter| du bloc PHP,
+sinon VS~Code affichera une erreur de formateur introuvable \`a chaque sauvegarde.
+\end{note}
+
+\subsection{Option 2 --- les IDE \og  tout-en-un  \fg{} de r\'ef\'erence}
+
+\begin{tabz}{XlX}
+  \headrow \thd{IDE} \& \thd{Prix} \& \thd{Liens} \\
+  \midrule
+  \link{PhpStorm}{https://www.jetbrains.com/phpstorm/} (JetBrains) \& payant, gratuit pour \'etudiants / open source / enseignant \& le meilleur IDE PHP au monde ; int\`egre Xdebug, Composer, Doctrine, DB~Tools. \\
+  \link{IntelliJ~IDEA~Community}{https://www.jetbrains.com/idea/download/} \& gratuit \& l'IDE Java de r\'ef\'erence ; la version Ultimate (payante) ajoute Spring, Jakarta EE, bases de donn\'ees. \\
+  \link{VS~Code}{https://code.visualstudio.com/} \& gratuit \& suffisant pour tout ce que contient ce livre. \\
+  \link{Eclipse~IDE~for~Java}{https://www.eclipse.org/downloads/} \& gratuit \& encore tr\`es pr\'esent en entreprise et en fac. \\
+  \link{Apache NetBeans}{https://netbeans.apache.org/download/index.html} \& gratuit \& excellent avec Java, Maven, GlassFish. \\
+  \link{Zed}{https://zed.dev/} \& gratuit \& \'editeur Rust ultra-rapide, multi-langage, en pleine croissance. \\
+  \link{Vim/Neovim}{https://neovim.io/} \& gratuit \& investissement long, rendement infini. \\
+\end{tabz}
+
+\begin{astuce}
+Choisis \textbf{un} \'editeur pour les trois langages et garde-le trois mois. Changer d'outil
+ toutes les deux semaines est la forme la plus fr\'equente de procrastination d\'eguis\'ee en
+ productivit\'e. Si ton budget le permet et que tu fais beaucoup de PHP, PhpStorm + IntelliJ
+ Community est le duo qui fait gagner le plus de temps.
+\end{astuce}
+
+\section{Bases de donn\'ees et clients}
+
+\subsection{La m\'ethode Docker (recommand\'ee)}
+
+Tu ne pollues pas ta machine, tu lances et tu jettes une base \`a volont\'e.
+
+\begin{terminal}
+# MySQL 8 utilise par le chapitre PHP
+docker run -d --name mysql-dev \
+  -e MYSQL_ROOT_PASSWORD=secret \
+  -e MYSQL_DATABASE=blog \
+  -e MYSQL_USER=nour -e MYSQL_PASSWORD=nourpwd \
+  -p 3306:3306 -v mysql-data:/var/lib/mysql \
+  mysql:8.4 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+# PostgreSQL 16 utilise par les chapitres Java
+docker run -d --name pg-dev \
+  -e POSTGRES_PASSWORD=secret -e POSTGRES_DB=boutique \
+  -p 5432:5432 -v pg-data:/var/lib/postgresql/data \
+  postgres:16
+
+# Adminer : un client web en un conteneur (alternative legere a phpMyAdmin)
+docker run -d --name adminer -p 8080:8080 adminer:5
+
+# Redis (cache/queues, utilise dans la partie Node)
+docker run -d --name redis-dev -p 6379:6379 redis:7-alpine
+
+docker ps          # la liste des conteneurs qui tournent
+docker logs -f mysql-dev
+docker stop mysql-dev && docker start mysql-dev
+\end{terminal}
+
+Clients graphiques~: \link{DBeaver~Community}{https://dbeaver.io/} (gratuit, toutes bases, mon pr\'ef\'er\'e),
+\link{TablePlus}{https://tableplus.com/} (magnifique, freemium, macOS/Windows/Linux),
+\link{HeidiSQL}{https://www.heidisql.com/} (Windows, gratuit, excellent avec MySQL),
+\link{phpMyAdmin}{https://www.phpmyadmin.net/} (web), \link{pgAdmin}{https://www.pgadmin.org/}.
+
+\subsection{Sans Docker}
+\begin{itemize}
+  \item Windows/macOS~: \link{XAMPP}{https://www.apachefriends.org/fr/index.html} ou
+        \link{Laragon}{https://laragon.org/} (Windows, le meilleur choix local PHP+MySQL+nginx).
+  \item Linux~: \cmd{sudo apt install apache2 mariadb-server php-mysql} puis
+        \cmd{sudo a2enmod rewrite && sudo systemctl restart apache2}.
+  \item \link{MySQL~Shell}{https://dev.mysql.com/downloads/shell/} et
+        \link{Postgres.app}{https://postgresapp.com/} (macOS, z\'ero configuration).
+\end{itemize}
+
+\section{Tester une API : le client HTTP}
+
+\begin{itemize}
+  \item \link{Postman}{https://www.postman.com/downloads/} --- le standard, gratuit avec compte.
+  \item \link{Insomnia}{https://insomnia.rest/download} --- open source, l\'eger, sans compte.
+  \item \link{Bruno}{https://www.usebruno.com/} --- collections stock\'ees dans Git, tr\`es appr\'eci\'e des \'equipes.
+  \item \link{Hoppscotch}{https://hoppscotch.io/} --- dans le navigateur, rien \`a installer.
+  \item \cmd{curl} --- la ligne de commande~: tu l'utiliseras tous les jours dans ce livre.
+  \item L'extension \link{REST~Client}{https://marketplace.visualstudio.com/items?itemName=humao.rest-client}
+        de VS~Code~: des requ\^etes \'ecrites dans un fichier \fichier{http/api.http} versionn\'e avec le code.
+\end{itemize}
+
+\begin{terminal}
+# Exemple type d'appel a une API locale
+curl -i http://localhost:8000/api/health
+curl -s -X POST http://localhost:8000/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Nour","email":"nour@example.com"}' | jq .
+\end{terminal}
+
+\section{Le minimum syndical : v\'erifier que tout fonctionne}
+
+\begin{terminal}
+node -v ; npm -v
+php -v ; php -m | grep -E "pdo_mysql|mbstring|curl|openssl" ; composer -V
+java -version ; javac -version ; echo $JAVA_HOME
+mvn -v ; gradle -v
+git --version ; docker -v ; docker compose version
+sqlite3 --version ; mysql --version ; psql --version
+\end{terminal}
+
+Si \cmd{mvn} ou \cmd{gradle} manquent~: \cmd{sudo apt install maven} et \cmd{brew install maven},
+ou utilise les wrappers \cmd{./mvnw} et \cmd{./gradlew} fournis par chaque projet
+(voir \cref{ch-java-build}).
+
+\section{R\'eparation express}
+
+\begin{tabz}{Xl}
+  \headrow \thd{Sympt\^ome} \& \thd{Cause probable et rem\`ede} \\
+  \midrule
+  \texttt{command not found: php} \& Le binaire n'est pas dans le \verb|PATH|. \cmd{which php} / \cmd{where.exe php}. Sous Windows, red\'emarre le terminal apr\`es modification du PATH.\\
+  \texttt{java: command not found} \& JAVA\_HOME non d\'efini sous Windows ou \verb|PATH| non rafra\^ichi. Relance le terminal.\\
+  \texttt{EACCES: permission denied} (npm) \& N''utilise jamais \cmd{sudo npm}. Change le pr\'efixe~: \cmd{npm config set prefix \textasciitilde/.npm-global}.\\
+  \texttt{PHP Startup: Unable to load dynamic library} \& Extension comment\'ee ou mauvaise version dans \fichier{php.ini}~; v\'erifie \cmd{php -i | grep "Loaded Configuration"}.\\
+  \texttt{docker: permission denied on socket} \& Session non recharg\'ee apr\`es \cmd{usermod -aG docker}. D\'econnexion/reconnexion, ou \cmd{newgrp docker}.\\
+  Port 3306/5432/80 d\'ej\`a utilis\'e \& Un serveur local tourne d\'ej\`a~: \cmd{sudo lsof -i :3306} (Linux/macOS) ou \cmd{netstat -ano | findstr :3306} (Windows), puis change le port mapp\'e dans Docker.\\
+  WSL lent \& Projet plac\'e dans \fichier{/mnt/c}. D\'eplace-le dans le syst\`eme de fichiers Linux.\\
+\end{tabz}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Installe les trois runtimes et fais afficher leurs versions. Fais une capture d'\'ecran~:
+        tu t'en serviras dans les rapports de bug et sur les forums.
+  \item Cr\'ee \verb|~/labo/| (ou \fichier{C:\textbackslash labo}), mets-la sous Git avec
+        \cmd{git init} et un \fichier{.gitignore} contenant \verb|node\_modules/|,
+        \verb|vendor/|, \verb|target/|, \verb|.env|.
+  \item Lance les deux conteneurs MySQL et PostgreSQL, v\'erifie avec \cmd{docker ps},
+        puis arr\^ete-les proprement~: \cmd{docker stop mysql-dev pg-dev}.
+  \item Configure VS~Code pour que \keys{Ctrl+S} formate, enl\`eve les espaces de fin et ajoute
+        un saut de ligne final.
+  \item Bonus~: installe le th\`eme \link{Catppuccin}{https://github.com/catppuccin/vscode} ou
+        \link{One~Dark~Pro}{https://marketplace.visualstudio.com/items?itemName=binaryify.onedarkpro}
+        et la police \link{JetBrains~Mono}{https://www.jetbrains.com/lp/mono/} (gratuite,
+        avec ligatures~: \verb|=>| et \verb|!=| deviennent lisibles).
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- \emph{Installation of Node.js}~: \url{https://developer.mozilla.org/en-US/docs/Learn/Tools_and_testing/Understanding_client-side_tools/Overview#installing_node.js}
+  \item PHP --- \emph{Installation}~: \url{https://www.php.net/manual/en/install.php}
+  \item OpenJDK --- \url{https://openjdk.org/install/} --- Adoptium Temurin~: \url{https://adoptium.net/fr/}
+  \item Composer --- \url{https://getcomposer.org/download/}
+  \item Docker Desktop --- \url{https://docs.docker.com/desktop/install/windows-install/}
+  \item WSL --- \url{https://learn.microsoft.com/fr-fr/windows/wsl/install}
+\end{itemize}
+\end{ressources}
+
+\index{installation}\index{outils}\index{VS Code}

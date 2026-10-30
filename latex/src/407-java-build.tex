@@ -1,0 +1,486 @@
+% ============================================================================
+\chapter{Outillage~: Maven, Gradle, JDK multi-versions, CI}
+\label{ch-java-build}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Lire et \'ecrire un \fichier{pom.xml} et un \fichier{build.gradle.kts} sans les copier \`a l'aveugle.
+  \item Comprendre le cycle de vie, la r\'esolution de d\'ependances, les p\'erim\`etres et les BOM.
+  \item Utiliser le wrapper~: \verb|./mvnw| / \verb|./gradlew|--- le build fonctionne chez le voisin.
+  \item Produire un ex\'ecutable~: jar, uber-jar, image native GraalVM, Docker.
+  \item Formater, analyser et publier~: Spotless, Checkstyle, Error Prone, Release, CI GitHub Actions.
+\end{itemize}
+\end{objectif}
+
+\section{Cr\'eer le projet}
+
+\begin{terminal}
+# Maven : archetypes (le plus simple pour un projet nu)
+mvn archetype:generate -DgroupId=com.exemple -DartifactId=app \
+    -DarchetypeArtifactId=maven-archetype-quickstart -DarchetypeVersion=1.4 -DinteractiveMode=false
+# Gradle (apr\`es installation du CLI)
+gradle init --type java-application --dsl kts --test-framework junit-jupiter
+# Generateurs en ligne (le plus courant en pratique) :
+#   Spring Initializr https://start.spring.io  |  https://start.quarkus.io  |  https://micronaut.io/launch
+# Mise a jour des wrappers (a commiter !) :
+mvn wrapper:wrapper -Dmaven=3.9.9
+gradle wrapper --gradle-version 8.11.1
+\end{terminal}
+
+\subsection{La structure~: un contrat, pas une mode}
+
+\begin{codeplain}
+app/
+|-- mvnw, mvnw.cmd, .mvn/wrapper/          # le wrapper (toujours)
+|-- pom.xml            ou   build.gradle.kts + settings.gradle.kts
+|-- src/main/java/com/exemple/app/         # code
+|-- src/main/resources/                    # config, i18n, schemas SQL, templates
+|-- src/test/java/...                       # tests (miroir des paquets)
+|-- src/test/resources/                      # jeux de donnees de test
+|-- .editorconfig  .gitignore  README.md
+'-- (Gradle) build/    (Maven) target/       # JAMAIS versionnes
+\end{codeplain}
+
+\section{Maven~: le \texttt{pom.xml} utile}
+
+\begin{codeconf}
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- 1. Identite : groupId = espace de noms, artifactId = nom, version = semver -->
+  <groupId>com.exemple</groupId>
+  <artifactId>blog-app</artifactId>
+  <version>1.4.0-SNAPSHOT</version>          <!-- -SNAPSHOT = en developpement -->
+  <packaging>jar</packaging>
+
+  <!-- 2. Proprietes : encoding, version du langage, versions centralisees -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.release>21</maven.compiler.release>   <!-- mieux que source/target -->
+    <junit.version>5.11.4</junit.version>
+  </properties>
+
+  <!-- 3. BOM : une dependance "import" qui aligne les versions de toute une famille -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>                            <!-- ne la mets pas dans <dependencies> -->
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>2.18.2</version>
+        <type>pom</type><scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <!-- 4. Depandances -->
+  <dependencies>
+    <dependency>
+      <groupId>org.slf4j</groupId><artifactId>slf4j-simple</artifactId><version>2.0.16</version>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><version>42.7.4</version>
+      <scope>runtime</scope>                  <!-- necessaire a l'execution seulement -->
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId><artifactId>assertj-core</artifactId><version>3.27.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.projectlombok</groupId><artifactId>lombok</artifactId><version>1.18.36</version>
+      <scope>provided</scope>                 <!-- vu a la compilation, pas embarque -->
+    </dependency>
+    <dependency>                              <!-- exclusion : l'artefact "le plus faux" -->
+      <groupId>commons-logging</groupId><artifactId>commons-logging</artifactId>
+      <version>1.3.4</version>
+      <exclusions><exclusion><groupId>log4j</groupId><artifactId>log4j</artifactId></exclusion></exclusions>
+    </dependency>
+  </dependencies>
+
+  <!-- 5. Plugins : le cycle de vie est fait de goals branches sur des phases -->
+  <build>
+    <finalName>${project.artifactId}</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+        <version>3.5.2</version>
+        <configuration><argLine>-Xshare:off -XX:+EnableDynamicAgentLoading</argLine></configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId>
+        <version>3.5.2</version>
+        <executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>                <!-- uber-jar executable -->
+        <executions><execution><phase>package</phase><goals><goal>shade</goal></goals>
+          <configuration><transformers>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+              <mainClass>com.exemple.app.App</mainClass>
+            </transformer>
+          </transformers></configuration>
+        </execution></executions>
+      </plugin>
+      <plugin>                                 <!-- execution : mvn exec:java -->
+        <groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.5.0</version>
+        <configuration><mainClass>com.exemple.app.App</mainClass></configuration>
+      </plugin>
+      <plugin>                                 <!-- versionner proprement -->
+        <groupId>org.apache.maven.plugins</groupId><artifactId>maven-release-plugin</artifactId><version>3.1.1</version>
+      </plugin>
+    </plugins>
+  </build>
+
+  <!-- 6. Profils : <profile> avec <id>dev/prod</id>, active par -Pprod ou par activation -->
+</project>
+\end{codeconf}
+
+\begin{terminal}
+mvn clean                # supprime target/
+mvn compile              # src/main/java -> target/classes
+mvn test                 # tests unitaires (surefire) : src/test/java
+mvn package              # jar dans target/
+mvn verify               # + tests d'integration (failsafe) + analyses
+mvn install              # dans ~/.m2/repository (consomme par les autres projets)
+mvn site                 # javadoc, rapports de qualite
+mvn -Pprod -DskipTests package
+# Diagnostic (les commandes qui te sauvent) :
+mvn -X package                                   # log de debug
+mvn dependency:tree -Dverbose -Dincludes=com.fasterxml.jackson*   # qui tire quoi
+mvn dependency:analyze                            # inutilisees / undeclared
+mvn versions:display-dependency-updates ; mvn versions:use-latest-releases
+mvn help:effective-pom                            # le POM reel apres heritage et BOM
+mvn enforcer:enforce                              # regles (version de Java, interdits)
+\end{terminal}
+
+\begin{tablez}[p{0.14\textwidth}p{0.3\textwidth}X]
+  \headrow \thd{Scope} \& \thd{Pr\'esent o\`u ?} \& \thd{Effet sur ton artefact} \\
+  \midrule
+  \verb|compile| (d\'efaut) \& compile + tests + ex\'ecution \& il se retrouve dans le classpath de tes consommateurs : chaque \verb|compile| est une dette publique \\
+  \verb|provided| \& compile + tests seulement \& le conteneur ou le JDK le fournit (servlet-api, annotation processors) \\
+  \verb|runtime| \& tests + ex\'ecution \& parfait pour un driver JDBC ou une impl\'ementation de log \\
+  \verb|test| \& tests seulement \& JUnit, Mockito, Testcontainers, assertions \\
+  \verb|system| \& --- \& \`a fuir (jar pos\'e sur le disque) \\
+\end{tablez}
+
+\section{Gradle~: le build en Kotlin DSL}
+
+\begin{codeconf}
+// build.gradle.kts
+plugins {
+    java
+    application
+    `maven-publish`
+    id("com.diffplug.spotless") version "6.25.0"
+    id("org.graalvm.buildtools.native") version "0.10.4"
+    checkstyle
+}
+
+group = "com.exemple"
+version = "1.4.0"
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }   // Gradle telecharge le JDK s'il manque
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()                       // pour tes artefacts SNAPSHOT locaux
+}
+
+dependencies {
+    implementation(platform("org.junit:junit-bom:5.11.4"))
+    implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.2"))
+    implementation("org.slf4j:slf4j-simple")
+    implementation("org.postgresql:postgresql:42.7.4")
+    compileOnly("org.projectlombok:lombok:1.18.36")
+    annotationProcessor("org.projectlombok:lombok:1.18.36")
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.assertj:assertj-core:3.27.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation("org.testcontainers:postgresql")
+}
+
+application { mainClass.set("com.exemple.app.App") }
+
+testing {
+    suites {
+        val test by getting(JvmTestSuite::class) { useJUnitJupiter() }
+        val integrationTest by registering(JvmTestSuite::class) {
+            dependencies { implementation(project()) ; implementation("org.testcontainers:postgresql") }
+        }
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    testLogging { events("failed", "skipped") }
+    reports.html.required = false
+}
+
+tasks.withType<JavaCompile>().configureEach { options.encoding = "UTF-8"; options.compilerArgs += "-parameters" }
+
+spotless { java { target("src/*/java/**/*.java"); googleJavaFormat("1.24.0"); removeUnusedImports() } }
+check.dependsOn("spotlessCheck")
+\end{codeconf}
+
+\begin{codeconf}
+// settings.gradle.kts -- multi-module + catalogue de versions centralise
+rootProject.name = "blog"
+include("app", "domaine", "infra", "api")
+dependencyResolutionManagement {
+    versionCatalogs {
+        create("libs") {
+            from(files("gradle/libs.versions.toml"))
+        }
+    }
+}
+\end{codeconf}
+
+\begin{codeconf}
+# gradle/libs.versions.toml -- le "catalogue" : une seule source de verite
+[versions]
+junit = "5.11.4"
+jackson = "2.18.2"
+[libraries]
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
+jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", version.ref = "jackson" }
+[plugins]
+spotless = { id = "com.diffplug.spotless", version = "6.25.0" }
+\end{codeconf}
+
+\begin{terminal}
+./gradlew build                # compile + testes + assemble + verifs (le reflexe)
+./gradlew run --args="--port 9090"
+./gradlew test --tests "*DepotArticles*" --rerun-tasks
+./gradlew --scan               # rapport de build en ligne (Gradle Enterprise/Develocity public)
+./gradlew build --offline      # sans reseau (cache deja peuple)
+./gradlew build --stacktrace --info
+./gradlew dependencies --configuration runtimeClasspath | head -60
+./gradlew buildEnvironment ; ./gradlew properties | grep version
+./gradlew clean build -x test -PskipChecks
+gradle wrapper --gradle-version 8.11.1 --distribution-type bin   # et commite gradle/wrapper/*
+# Config globale : ~/.gradle/gradle.properties
+org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=512m
+org.gradle.parallel=true ; org.gradle.caching=true ; org.gradle.configuration-cache=true
+org.gradle.daemon=true ; org.gradle.console=rich ; org.gradle.workers.max=8
+\end{terminal}
+
+\subsection{Maven ou Gradle~?}
+
+\begin{tablez}[p{0.2\textwidth}p{0.28\textwidth}X]
+  \headrow Crit\`ere \& Maven \& Gradle \\
+  \midrule
+  Courbe d'apprentissage \& douce, convention forte, XML verbeux mais lisible \& plus exigeante (DSL, t\^aches), mais expressive \\
+  Vitesse \& correcte, r\'esolutions s\'equentielles \& incr\'ementale + cache + parall\`ele~: 2--10\,$\times$ sur les gros builds \\
+  Multi-module \& \verb|<modules>| simple \& excellent, graphes de t\^aches fins \\
+  Plugins \& \'enorme d\'ep\^ot, versions fig\'ees par super-POM \& \'ecosyst\`eme riche, API de plugin en JVM/Kotlin \\
+  Reprisibilit\'e \& \'elev\'ee (XML d\'eclaratif) \& \'elev\'ee \emph{si} le script est disciplin\'e \\
+  IDE \& IntelliJ natif, VS~Code correct \& IntelliJ/Android natifs, import parfois capricieux \\
+\end{tablez}
+
+\begin{note}
+Choisis Gradle pour~: un monorepo, Android, des builds lents, des besoins sur-mesure (g\'en\'eration de
+code, Docker, graal). Choisis Maven pour~: un projet serveur classique, une \'equipe h\'et\'erog\`ene, une
+entreprise qui centralise d\'ej\`a un d\'ep\^ot Nexus. Les deux se valent techniquement~; la pire option est
+le \og ~on a mis les deux~ \fg{}.
+\end{note}
+
+\section{Produire un ex\'ecutable~: les quatre formats}
+
+\begin{terminal}
+# 1. jar simple (librairie) : mvn package -> target/app.jar ; java -cp app.jar:lib/* com.exemple.App
+# 2. uber-jar (tout embarque) -- Maven shade/assembly, Gradle shadow ; attention aux META-INF/services
+java -jar app.jar
+# 3. distribution avec launcher + classpath (recommande pour un serveur) :
+mvn -Pdist package         # ou Gradle : installDist -> build/install/app/bin/app
+# 4. image native GraalVM (d\'emarrage ~10 ms, ~40 Mo de RSS, mais build long et r\'eflexion \`a configurer)
+nativeCompile          # Gradle : ./gradlew nativeCompile
+mvn -Pnative native:compile
+native-image -jar app.jar -H:Name=app -march=native --initialize-at-build-time
+# 5. Conteneur (la vraie cible en prod) : un Dockerfile multi-etapes
+\end{terminal}
+
+\begin{codeconf}
+# Dockerfile -- Maven (adapte pour Gradle avec gradle build --no-daemon nativeCompile)
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /m
+COPY . .
+RUN mvn -B -DskipTests package
+FROM eclipse-temurin:21-jre-jammy
+RUN useradd -r -u 10001 app && mkdir -p /data && chown app /data
+USER app
+WORKDIR /app
+COPY --from=build /m/target/app.jar .
+EXPOSE 8080
+HEALTHCHECK --interval=10s --timeout=3s CMD ["sh","-c","wget -qO- http://localhost:8080/health || exit 1"]
+ENTRYPOINT ["java","-XX:MaxRAMPercentage=75","-XX:+ExitOnOutOfMemoryError","-jar","/app/app.jar"]
+\end{codeconf}
+
+\begin{codeconf}
+# .mvn/jvm.config (options de build) ; .mvn/maven.config : -T 1C -Dstyle.color=always
+# settings.xml (~/.m2/settings.xml) : miroir, credentials, profils
+<settings>
+  <mirrors><mirror>
+    <id>central-miroir</id><mirrorOf>central</mirrorOf>
+    <url>https://maven.aliyun.com/repository/central</url>   <!-- ou un Nexus interne -->
+  </mirror></mirrors>
+  <servers><server><id>repo-interne</id><username>${env.NEXUS_USER}</username>
+           <password>${env.NEXUS_PASS}</password></server></servers>
+</settings>
+\end{codeconf}
+
+\section{Qualit\'e du build~: la cha\^ine qui rend le code propre tout seul}
+
+\begin{terminal}
+# Formatage (le m\^eme partout, sans discussion en revue)
+./gradlew spotlessApply            # ou : mvn spotless:apply
+mvn com.diffplug.spotless:spotless-maven-plugin:apply
+# Analyse statique
+mvn -Panalysis verify              # checkstyle + spotbugs + pmd + dependency-check
+./gradlew checkstyleMain spotbugsMain pmdMain
+mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7
+# Reproduire et debugger le build
+mvn -Dmaven.repo.local=/tmp/m2 -o package      # depot local isole / hors ligne
+\end{terminal}
+
+\begin{codeconf}
+<!-- Checkstyle + PMD + SpotBugs + JaCoCo : les reglages qui rendent le build utile -->
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId><artifactId>maven-checkstyle-plugin</artifactId><version>3.6.0</version>
+  <configuration>
+    <configLocation>google_checks.xml</configLocation>       <!-- ou sun_checks.xml, ou le tien -->
+    <consoleOutput>true</consoleOutput><failOnViolation>true</failOnViolation>
+    <violationSeverity>warning</violationSeverity>
+  </configuration>
+</plugin>
+<plugin>
+  <groupId>com.github.spotbugs</groupId><artifactId>spotbugs-maven-plugin</artifactId><version>4.8.3.1</version>
+  <configuration><effort>Max</effort><threshold>Medium</threshold><xmlOutput>true</xmlOutput></configuration>
+</plugin>
+<plugin>
+  <groupId>org.jacoco</groupId><artifactId>jacoco-maven-plugin</artifactId><version>0.8.12</version>
+  <executions>
+    <execution><goals><goal>prepare-agent</goal></goals></execution>
+    <execution><id>rapport</id><phase>test</phase><goals><goal>report</goal></goals></execution>
+    <execution><id>seuil</id><phase>verify</phase><goals><goal>check</goal></goals>
+      <configuration><rules><rule><limits><limit><counter>LINE</counter><minimum>0.80</minimum></limit></limits></rule></configuration>
+    </execution>
+  </executions>
+</plugin>
+\end{codeconf}
+
+\section{CI GitHub Actions~: le mod\`ele Java}
+
+\begin{codeyml}
+name: build
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  java:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven            # ou: gradle  (le cache fait gagner 2 a 4 min)
+      - name: Build + tests + verification
+        run: mvn -B -ntp verify                # ou: ./gradlew build --no-daemon
+      - name: Rapport de couverture (JaCoCo)
+        run: mvn -B -ntp jacoco:report site -DskipTests
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapports-${{ matrix.os ?? 'linux' }}
+          path: |
+            target/site
+            target/surefire-reports
+            build/reports
+  matrice:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        java: [17, 21]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "${{ matrix.java }}" }
+      - run: mvn -B -ntp verify
+\end{codeyml}
+
+\etape{Publication}
+\begin{itemize}
+  \item En interne~: \verb|mvn deploy| / \verb|publish| vers un Nexus, Artifactory, GitHub Packages,
+        \verb|packagecloud|--- ou un d\'ep\^ot \verb|file:///home/deploy/m2| si tu es seul.
+  \item Sur Maven Central~: compte \link{Sonatype Central Portal}{https://central.sonatype.com/},
+        groupes valid\'es, \verb|gpg|-signature, javadoc + sources obligatoires,
+        \link{central-publishing-maven-plugin}{https://github.com/central-publishing/central-publishing-maven-plugin}
+        ou \verb|./gradlew publishToMavenLocal| puis le portal web.
+  \item Versionnement~: \verb|x.y.z-SNAPSHOT| en dev~; \verb|mvn release:prepare release:perform|
+        (tag \verb|v1.4.0|, passage en \verb|1.4.1-SNAPSHOT|)~; ou \link{Revapi}{https://github.com/revapi/revapi}
+        pour refuser une rupture de compatibilit\'e binaire dans une \verb|minor|.
+\end{itemize}
+
+\begin{piege}
+Cinq erreurs de build classiques~: (1) le wrapper non committ\'e~: chacun a une version de Maven et
+les builds diff\`erent~; (2) \verb|maven.compiler.source| sans \verb|release|~: tu compiles avec le
+JDK~21 en visant~17 et tu utilises des API de~21~; (3) \verb|<scope>compile| partout~: tes
+d\'ependances deviennent publiques et cassent les consommateurs~; (4) deux versions de Jackson
+dans l'arbre~: \verb|NoClassDefFoundError| al\'eatoire~; (5) le cache CI sans \verb|~/.m2/repository|.
+\end{piege}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Prends le projet du chapitre pr\'ec\'edent (ou un carnet d'adresses maison) et fais-le passer
+        de \og ~\verb|javac| dans un terminal~ \fg{} \`a un projet Maven complet~: BOM, tests, javadoc,
+        surefire, failsafe, uber-jar \verb|package|, README avec captures.
+  \item Ajoute la m\^eme chose c\^ot\'e Gradle~: toolchain, catalogue de versions, t\^ache
+        \verb|int\'egrationTest|~; garde les deux builds un moment et tranche avec des chiffres
+        (temps de \verb|clean build| \`a froid et \`a chaud).
+  \item Fais \'echouer un build volontairement et r\'epare-le~: d\'ependance en double avec versions
+        incompatibles, \verb|NoSuchMethodError|~: puis \verb|dependency:tree|~; un \verb|pom.xml|
+        sans UTF-8~: les accents du fichier de propri\'et\'es deviennent illisibles.
+  \item Ajoute la cha\^ine qualit\'e~: Spotless (google-java-format), Checkstyle avec une config
+        maison de 10 r\`egles, JaCoCo avec seuil bloquant \`a 80 \%, OWASP dependency-check.
+        Fais en sorte que \verb|mvn verify| soit ton r\'eflexe local avant chaque push.
+  \item \'Ecris le \verb|Dockerfile| multi-\'etapes~: puis une image \verb|-distroless| ou
+        \verb|jre-alpine|~: compare taille et temps de d\'emarrage~; ajoute un \verb|HEALTHCHECK|
+        et fais tourner le conteneur avec \verb|-XX:MaxRAMPercentage|.
+  \item Compile en natif (GraalVM)~: mesure le temps de d\'emarrage et l'empreinte m\'emoire face au
+        jar~; documente les r\'eflexions n\'ecessaires (\verb|reflect-config.json|) et ce que tu as
+        perdu (diagnostic \`a chaud, JIT qui s'\'echauffe, \verb|jcmd|).
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Maven --- \url{https://maven.apache.org/guides/} --- Reference Model (le POM, par c\oe{}ur en 2 h)
+  \item Gradle --- \url{https://docs.gradle.org/current/userguide/userguide.html} --- Kotlin DSL --- \url{https://docs.gradle.org/current/userguide/kotlin_dsl.html}
+  \item \link{Maven Central Search}{https://central.sonatype.com/search} (trouver l'\verb|artifactId| exact)
+  \item \link{mvnrepository}{https://mvnrepository.com/} (utile, mais la source de v\'erit\'e reste Central)
+  \item GraalVM Native Image --- \url{https://www.graalvm.org/latest/reference-manual/native-image/}
+  \item \link{Setup Java action}{https://github.com/actions/setup-java} --- \link{Spotless}{https://github.com/diffplug/spotless}
+\end{itemize}
+\end{ressources}
+
+\index{Maven}\index{Gradle}\index{wrapper}\index{uber-jar}\index{GraalVM}\index{CI Java}

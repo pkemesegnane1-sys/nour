@@ -1,0 +1,24 @@
+
+# LaTeX & Python
+__pycache__/
+*.pyc
+latex/*.pdf
+latex/*.aux
+latex/*.idx
+latex/*.ind
+latex/*.log
+latex/*.toc
+latex/*.out
+latex/*.lof
+latex/*.lot
+latex/*.fls
+latex/*.fdb_latexmk
+latex/*.synctex.gz
+
+# artefacts lourds regeneres par site/generate.py
+latex/
+latex-livre.zip
+site/manuel-js-php-java.html
+site/*.print.html
+/cours-*.pdf
+/manuel-*.pdf

@@ -1,0 +1,320 @@
+% ============================================================================
+\chapter{Modules, npm et outillage}
+\label{ch-js-modules}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item \'Ecrire et lire des modules ES sans h\'esiter sur la syntaxe (\texttt{export}, \texttt{import}).
+  \item Comprendre \texttt{package.json}, les versions s\'emantiques et les confusions CJS/ESM.
+  \item Utiliser npm, pnpm ou yarn comme un professionnel~: scripts, lockfiles, audits.
+  \item Choisir une d\'ependance sans se faire pi\'eger (taille, maintenance, licences).
+  \item Cr\'eer, publier et versionner son propre paquet.
+\end{itemize}
+\end{objectif}
+
+\section{Modules ES : le syst\`eme officiel}
+
+Un module est un fichier avec sa \textbf{port\'ee propre}~: pas de variable globale, \'evaluation
+une seule fois (singleton), imports r\'esolus avant ex\'ecution (graphe, pas d'ordre \`a g\'erer).
+
+\begin{codejs}
+// ---- math.js : exporter
+export const PI = 3.141592653589793;
+export function carree(x) { return x * x; }
+export function racine(n) { return n < 0 ? null : Math.sqrt(n); }
+export function* sequence(n) { for (let i = 0; i < n; i++) yield i; }
+export class Vecteur { constructor(x, y) { Object.assign(this, { x, y }); } }
+export default function formater(n) { return n.toLocaleString("fr-FR"); }   // UN seul default
+
+// ---- app.js : importer
+import formater, { PI, carree as sq, Vecteur } from "./math.js";      // l'extension .js est OBLIGATOIRE en ESM natif
+import * as maths from "./math.js";                                    // namespace (pratique pour les gros modules)
+import "./side-effect.css";                                            // effet de bord uniquement
+const module = await import("./lourd.js");                             // chargement dynamique (code splitting)
+export { PI as CONSTANT_PI };                                          // re-export
+export * from "./math.js";
+export { Vecteur as Vec2 } from "./math.js";
+
+// Top-level await : permitted au niveau superieur d'un module (Node 14.8+, navigateurs 2021+)
+const config = await fetch("/config.json").then((r) => r.json());
+\end{codejs}
+
+\begin{note}
+Les imports sont \textbf{statiques et hoist\'es}~: tu peux utiliser \texttt{PI} avant la ligne
+d'\texttt{import}. Tu ne peux pas mettre un \texttt{import} dans un \texttt{if}~: pour \c{c}a il
+existe \texttt{await import()}. C'est exactement ce m\'ecanisme qui permet le tree-shaking
+(et qui explique pourquoi \texttt{require} dynamique emp\^eche tout optimisation).
+\end{note}
+
+\subsection{CommonJS (l'ancien monde) et la cohabitation}
+
+\begin{codejs}
+// CommonJS (Node historique, tres present dans les anciens paquets)
+const { carree } = require("./math.js");
+module.exports = { carree };
+exports.carree = carree;
+
+// Dans un paquet ESM ("type": "module"), require n'existe pas.
+// Fallback propre quand on en a vraiment besoin :
+const require = createRequire(import.meta.url);
+const legacy = require("./vieux-paquet.cjs");
+import { createRequire } from "node:module";
+
+// CJS peut importer ESM... seulement de facon asynchrone : (node --experimental-vm-modules ou dynamic import)
+const { carree } = await import("./math.js");
+\end{codejs}
+
+R\`egles de survie~: (1) un projet neuf = ESM partout, \verb|"type": "module"|~;
+(2) les extensions sont \'ecrites dans les chemins relatifs~;
+(3) \verb|\_\_dirname|/\verb|require| n'existent pas en ESM~;
+(4) ne m\'elange pas les deux dans le m\^eme paquet, sauf si tu publishes
+\verb|exports| avec les conditions \verb|import|/\verb|require| (voir plus bas).
+
+\section{\texttt{package.json}--- le contrat du projet}
+
+\begin{codejson}
+{
+  "name": "@nour/outils",
+  "version": "1.4.0",
+  "type": "module",
+  "description": "Boite a outils partagee : formatage, validation, HTTP.",
+  "license": "MIT",
+  "author": "Nour <nour@example.com>",
+  "repository": { "type": "git", "url": "git+https://github.com/nour/outils.git" },
+  "keywords": ["utils", "validation"],
+  "sideEffects": false,
+  "engines": { "node": ">=20" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" },
+    "./db": { "import": "./dist/db.js" },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "prepare": "husky || true",
+    "release": "npm run check && npm version patch && npm publish --access public"
+  },
+  "dependencies": { "zod": "^4.0.0" },
+  "devDependencies": {
+    "vite": "^7.0.0", "vitest": "^3.0.0", "typescript": "^5.7.0",
+    "eslint": "^9.0.0", "prettier": "^3.4.0", "husky": "^9.1.0",
+    "lint-staged": "^15.3.0", "@vitest/coverage-v8": "^3.0.0"
+  },
+  "lint-staged": { "*.{js,ts,json,md,css}": ["prettier --write", "eslint --fix"] }
+}
+\end{codejson}
+
+\etape{Les versions s\'emantiques, en une page}
+\verb|MAJEURE.MINEURE.PATCH|~: \verb|3.1.4|. Changement \textbf{majeur} = rupture d'API.
+\textbf{Mineure} = nouveaut\'e compatible. \textbf{Patch} = correction compatible.
+Dans \texttt{package.json}~:
+
+\begin{tabz}{clX}
+  \headrow \thd{Pr\'efixe} \& \thd{Exemple} \& \thd{Ce que l'installateur accepte} \\
+  \midrule
+  \verb|^| (d\'efaut de \cmd{npm i}) \& \verb|^3.1.0| \& $\geq$3.1.0 \verb|<|4.0.0 --- mineures et patchs \\
+  \verb|~| \& \verb|~3.1.0| \& $\geq$3.1.0 \verb|<|3.2.0 --- patchs seulement \\
+  \verb|>|, \verb|>=|, \verb|<|, \verb|=| \& \verb|>=3.1 <3.3| \& plages explicites \\
+  \verb|*| \& \verb|3.x| \& tout ce qui commence par 3 \\
+  aucun \& \verb|3.1.4| \& fig\'e exactement \\
+\end{tabz}
+
+Le \textbf{lockfile} (\verb|package-lock.json|, \verb|pnpm-lock.yaml|) fige tout l'arbre, y
+compris les d\'ependances de tes d\'ependances. \emph{Il doit \^etre versionn\'e}~; sans lui, deux
+installations du m\^eme projet peuvent produire deux r\'esultats diff\'erents. En CI, utilise
+\cmd{npm ci} (installe exactement le lockfile, refuse sinon) ou \cmd{pnpm i --frozen-lockfile}.
+
+\etape{Semver et les prereleases}
+\verb|1.0.0-rc.1| n'est \emph{pas} inclus dans \verb|^1.0.0| tant que le tag latest n'est pas
+sorti. Pour tester une b\^eta~: \cmd{npm i vite@beta}.
+
+\section{npm, pnpm, yarn, bun : les commandes du quotidien}
+
+\begin{terminal}
+# Creation
+mkdir mon-projet && cd mon-projet && npm init -y         # ou : pnpm init / npm create vite@latest
+
+# Installer / retirer / mettres a jour
+npm install lodash zod                    # dependance de production
+npm i -D vitest typescript                # dependance de developpement
+npm i -g create-vite                      # outil global (CLI) -- a eviter avec npx
+npm uninstall lodash
+npm update zod
+npm outdated                              # ce qui a pris du retard
+npx vitest run                            # executer un binaire local SANS l'installer globalement
+npm exec --package=eslint -- npx eslint .
+
+# Inspecter / securiser
+npm ls --all ; npm ls react --depth=0     # l'arbre, ou qui depend de quoi
+npm why zod                                # POURQUOI ce paquet est la
+npm audit                                  # vulnerabilites connues (bruyant)
+npm audit --omit=dev ; npm audit fix       # ou npm audit fix --force (attention aux majeures)
+pnpm audit --audit-level=high
+npm view vite version repository homepage dist.unpackedSize time --json
+npm outdated --json | jq -r 'to_entries[] | "\(.key) \(.value.current) -> \(.value.wanted)"'
+
+# Nettoyage / reparation
+rm -rf node_modules package-lock.json && npm i      # l'option "tout casser et recommencer"
+npm cache clean --force
+pnpm store prune
+
+# Gestion de versions et publication
+npm version patch|minor|major            # bump + tag git
+npm publish --access public
+npm deprecate mon-paquet "Utilise @nour/outils a la place"
+\end{terminal}
+
+\subsection{Quel gestionnaire de paquets ?}
+
+\begin{tabz}{lXl}
+  \headrow \thd{Outil} \& \thd{Pourquoi lui} \& \thd{Vitesse (relative)} \\
+  \midrule
+  \link{npm}{https://docs.npmjs.com/} \& livr\'e avec Node, standard, suffisant. \& 1$\times$ \\
+  \link{pnpm}{https://pnpm.io/fr/} \& store global + liens durs~: disque divis\'e par 3, monorepo naturel, \texttt{node\_modules} strict (moins de bugs d'imports fant\^omes). \textbf{Mon choix par d\'efaut.} \& 2--3$\times$ plus rapide \\
+  \link{yarn}{https://yarnpkg.com/} \& m\^ur, PnP (z\'ero \texttt{node\_modules}), bien en monorepo. \& $\approx$ pnpm \\
+  \link{bun}{https://bun.sh/docs/install/} \& le gestionnaire est int\'egr\'e au runtime~: tr\`es rapide, API diff\'erente. \& tr\`es rapide \\
+\end{tabz}
+
+\begin{terminal}
+# pnpm : installation propre (via corepack, livre avec Node)
+corepack enable
+corepack prepare pnpm@latest --activate
+pnpm install
+pnpm add -D typescript
+pnpm -r run build          # monorepo : construit tous les paquets
+\end{terminal}
+
+\section{Les scripts npm : ton vrai syst\`eme de build}
+
+Ne sous-estime pas ce m\'ecanisme~: sur 90 \% des projets, un \verb|Makefile|-like bien nomm\'e
+dans \verb|scripts| vaut mieux qu'une usine \`a gaz.
+
+\begin{codejson}
+{
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:web": "vite",
+    "dev:api": "node --watch --env-file=.env src/server.js",
+    "build": "npm run build:css && vite build",
+    "preview": "vite preview",
+    "test": "vitest run --coverage",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "check": "run-s lint typecheck test",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "hooks:install": "husky"
+  }
+}
+\end{codejson}
+
+\begin{itemize}
+  \item Les pr\'e/post existent~: \verb|"prebuild"| s'ex\'ecute avant \verb|build| (depuis toujours).
+  \item \verb|npm-run-all| / \verb|concurrently| pour parall\'eliser~; \verb|run-s| pour s\'equencer proprement.
+  \item Les variables \verb|npm\_package\_json|, \verb|npm\_lifecycle\_event| sont expos\'ees~;
+        \cmd{npm run dev -- --port 4000} passe les arguments apr\`es \verb|--|.
+  \item Node~20.6+ lit un fichier d'environnement tout seul~: \cmd{node --env-file=.env app.js},
+        et \link{dotenv}{https://github.com/motdotla/dotenv} fait la m\^eme chose depuis plus longtemps.
+        \label{sec-dotenv}
+\end{itemize}
+
+\section{Choisir une d\'ependance (la check-list anti-regret)}
+
+\begin{enumerate}
+  \item \textbf{Est-ce que j'en ai vraiment besoin ?} Une fonction de 15 lignes ne justifie pas
+        300~Ko de d\'ependances transitives. \verb|npm ls| et \og ~combien de paquets cela ajoute-t-il~?~ \fg{}
+  \item \textbf{Maintenance}~: dernier commit, nombre de contributeurs, issues ouvertes,
+        \verb|releaseType| r\'ecurrent. Un paquet sans release depuis 4 ans est un passif.
+  \item \textbf{Adoption}~: d\'ependants invers\'es sur \link{nicedoc.io}{https://npmgraph.js.org/},
+        t\'el\'echargements \cmd{npm view mon-paquet} ou \link{napi}{https://npm-stat.com/charts.html}.
+  \item \textbf{Taille}~: \link{bundlephobia}{https://bundlephobia.com/} (poids gzipp\'e du bundle).
+  \item \textbf{Licence}~: MIT/Apache-2.0/ISC = tranquille. GPL/AGPL = v\'erifie ton usage.
+        \link{Choose a license}{https://choosealicense.com/}.
+  \item \textbf{S\'ecurit\'e}~: \cmd{npm audit}, \link{Socket}{https://socket.dev/},
+        \link{OpenSSF Scorecard}{https://scorecard.dev/}.
+  \item \textbf{Alternative native}~: beaucoup de biblioth\`eques populaires (lodash pour une
+        partie, moment.js, axios en partie, classnames, uuid) ont \'et\'e remplac\'ees par le langage.
+\end{enumerate}
+
+\subsection{Quelques paquets qui reviennent dans tous les bons projets}
+
+\begin{tabz}{lX}
+  \headrow \thd{Paquet} \& \thd{Usage} \\
+  \midrule
+  \link{zod}{https://zod.dev/} \& validation de donn\'ees + types TypeScript d\'eriv\'es. Le meilleur rapport utilit\'e/ligne de code. \\
+  \link{date-fns}{https://date-fns.org/} ou \link{Day.js}{https://day.js.org/} \& dates sans monolithe (ou \verb|Temporal| en natif, ES2024+). \\
+  \link{nanoid}{https://github.com/ai/nanoid} ou \verb|crypto.randomUUID()| \& identifiants. \\
+  \link{picocolors}{https://github.com/alexeyraspopov/picocolors} \& couleurs en CLI, 2~Ko. \\
+  \link{commander}{https://github.com/tj/commander.js} / \link{yargs}{https://yargs.js.org/} / \link{citty}{https://github.com/unjs/citty} \& cr\'eer un CLI. \\
+  \link{p-limit}{https://github.com/sindresorhus/p-limit} / \link{throat}{https://github.com/ForbesLindesay/throat} \& concurrence born\'ee (ou ta version maison, cf. \cref{ch-js-async}). \\
+  \link{fast-glob}{https://github.com/mrmlnc/fast-glob} \& recherche de fichiers par motif. \\
+  \link{chalk}{https://github.com/chalk/chalk} \& sortie CLI styl\'ee. \\
+  \link{vitest}{https://vitest.dev/} \& runner de test rapide, compatible Jest, int\'egr\'e \`a Vite. \\
+  \link{msw}{https://mswjs.io/} \& mock d'API r\'eseau au niveau r\'eseau : tes tests ignorent fetch. \\
+  \link{playwright}{https://playwright.dev/} \& tests bout-en-bout multi-navigateurs. \\
+  \link{tsx}{https://github.com/privatenumber/tsx} \& TypeScript dans Node sans \'etape de compilation. \\
+\end{tabz}
+
+\section{Publier un paquet : la recette compl\`ete}
+
+\begin{terminal}
+mkdir outils && cd outils && npm init -y
+npm pkg set type=module name=@nour/outils version=0.1.0 license=MIT sideEffects=false
+npm pkg set exports.import=./dist/index.js exports.require=./dist/index.cjs
+npm install -D tsup typescript
+# package.json -> "scripts": { "build": "tsup src/index.ts --format esm,cjs --dts --clean" }
+npm login          # ou : npm publish --provenance --access public (avec un token precise)
+npm version patch && npm publish
+npm view @nour/outils versions
+# cote consommateur :
+npm i @nour/outils && node -e 'import("@nour/outils").then(m => console.log(m.carree(9)))'
+\end{terminal}
+
+Sur GitHub, publie aussi via \link{npm + Actions}{https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages}
+avec \verb|NODE\_AUTH\_TOKEN| et un registre \link{GitHub Packages}{https://github.com/features/packages}.
+
+\begin{exercice}
+\begin{enumerate}
+  \item Transforme tes utilitaires des chapitres pr\'ec\'edents (\verb|debounce|, \verb|retry|,
+        \verb|echapper|, \verb|chunk|) en un paquet ESM \verb|@tonnom/utils| avec
+        \verb|tsup|, types, et un \verb|README| d'exemples. Publie-le.
+  \item Mets le paquet dans \verb|package.json| d'un projet de test et remplace ton code
+        local par l'import. Simule une incompatibilit\'e~: passe \`a la version majeure suivante et
+        observe la casse~; explique la politique de versions que tu choisirais.
+  \item Installe un CLI depuis npm (\verb|npm i -g httpie| ou \verb|npx create-vite@latest|) puis
+        explique pourquoi \verb|npx| est pr\'ef\'erable \`a \verb|-g|.
+  \item Lance \verb|npm outdated| sur un vrai projet, puis fais monter une d\'ependance mineure
+        en gardant les tests au vert. Note dans ton carnet ce qui a cass\'e.
+  \item Ex\'ecute \verb|npm ls| et rep\`ere une d\'ependance dont tu ne comprends pas la pr\'esence~;
+        trouve son origine avec \verb|npm why|~; d\'ecide de la garder ou de l'\'eliminer.
+  \item Configure un \verb|prepare| npm + \link{husky}{https://typicode.github.io/husky/}
+        pour que \verb|lint-staged| tourne avant chaque commit.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Docs Node --- Modules --- \url{https://nodejs.org/api/packages.html}
+  \item MDN --- Modules JavaScript --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Guide/Modules}
+  \item npm docs --- \url{https://docs.npmjs.com/cli/} --- pnpm --- \url{https://pnpm.io/fr/motivation}
+  \item \link{Node ESM : le guide complet}{https://gist.github.com/sindresorhus/a39789f98801d908bbc7ff3ecc99d99c}
+  \item \link{Phenomenon de la chaine d'approvisionnement}{https://en.wikipedia.org/wiki/Supply\_chain\_attack} --- pourquoi la prudence paie.
+\end{itemize}
+\end{ressources}
+
+\index{modules}\index{npm}\index{package.json}\index{semver}

@@ -1,0 +1,494 @@
+% ============================================================================
+\chapter{PHP : les bases, le langage serveur le plus direct qui soit}
+\label{ch-php-bases}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Comprendre le cycle d'une requ\^ete PHP et l'installer en local en trois commandes.
+  \item \'Ecrire du PHP moderne~: typage strict, tableaux, fonctions, fermetures.
+  \item Ma\^itriser le type \og ~array~ \fg{}, qui est en r\'ealit\'e une table ordonn\'ee, et ses fonctions.
+  \item Structurer un projet PHP sans framework~: un front controller, des fonctions, de la clart\'e.
+  \item Conna\^itre les erreurs de d\'ebutant (headers, encodage, \verb|==|, includes) et les \'eviter.
+\end{itemize}
+\end{objectif}
+
+\section{PHP, c'est quoi exactement}
+
+PHP est un moteur qui ex\'ecute un script \emph{\`a chaque requ\^ete}, puis meurt. Il n'y a pas d'\'etat
+persistant entre deux requ\^etes~: tout ce que tu ne stockes pas (base de donn\'ees, fichier, session,
+cache m\'emoire) est perdu quand le script se termine. Cette contrainte explique \`a la fois la
+simplicit\'e de PHP (pas de serveur \`a garder vivant, pas d'\'ev\'enements, pas d'async) et ses pi\`eges.
+
+\begin{enumerate}
+  \item Une requ\^ete HTTP arrive (Apache avec \verb|mod\_php|, ou nginx + \verb|php-fpm|).
+  \item le moteur \textbf{compile} le script en opcode, le met en cache (\textbf{OPcache})~;
+  \item le script s'ex\'ecute de la premi\`ere \`a la derni\`ere ligne~; il produit du texte (souvent du HTML)~;
+  \item la r\'eponse est envoy\'ee, la m\'emoire est lib\'er\'ee. Point final.
+\end{enumerate}
+
+Version de r\'ef\'erence pour ce livre~: \textbf{PHP 8.3 / 8.4}. Tout ce qui est marqu\'e \og ~PHP~8+~ \fg{}
+n'existe pas en 7.4 (finie de support, encore trop fr\'equente sur les vieilles mutualisations).
+
+\begin{terminal}
+# Verifier / installer
+php -v
+# Debian/Ubuntu : sudo apt install php-cli php-fpm php-mysql php-curl php-mbstring php-xml php-zip
+# macOS          : brew install php
+# Windows        : https://windows.php.net/download/ (voir chap. 1)
+# Alternative : conteneur
+docker run --rm -it -v $PWD:/app -w /app php:8.3-cli php script.php
+
+# Le serveur de developpement integre : remplace apache pour apprendre
+php -S localhost:8000 -t public
+php -S 127.0.0.1:8000 public/router.php       # avec un routeur pour simuler les rewrites
+\end{terminal}
+
+\begin{note}
+Le serveur int\'egr\'e (\verb|php -S|) est mono-thread~: une seule requ\^ete \`a la fois, parfait pour
+apprendre, jamais pour un test de charge. Il refuse aussi les connexions entrantes autres que
+localhost par d\'efaut~: utilise \verb|0.0.0.0:8000| pour tester depuis un t\'el\'ephone.
+\end{note}
+
+\section{Premier script, et les r\`egles de syntaxe}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);                    // PRECIEUX : interdit la conversion implicite des types
+header('Content-Type: text/html; charset=utf-8');
+
+$prenom = 'Nour';
+$age = 28;
+printf('%s a %d ans.%s', $prenom, $age, PHP_EOL);
+
+// Une balise ouvrante, une seule par fichier ; JAMAIS de balise fermante dans un fichier
+// qui ne contient que du PHP (sinon tu ajoutes un saut de ligne a la reponse, et les
+// en-tetes "headers already sent" deviennent un cauchemar).
+\end{codephp}
+
+\begin{tabz}{lX}
+  \headrow \thd{R\`egle} \& \thd{D\'etail qui compte} \\
+  \midrule
+  \verb|;| obligatoire \& chaque instruction se termine par un point-virgule. Le \verb|?>| final en implique un. \\
+  \verb|$| devant toute variable \& \verb|$x|~; \verb|x| est une constante ou un nom de fonction. \\
+  Insensible \`a la casse pour les mots-cl\'es/fonctions \& \verb|ECHO|, \verb|strlen| et \verb|StrLen| sont \'egaux. \textbf{Les noms de classes le sont aussi}~: d'o\`u les conventions PSR. \\
+  Sensible pour les variables \& \verb|$nom| et \verb|$Nom| sont deux variables diff\'erentes. \\
+  Cha\^ines \& \verb|'simple'| = litt\'erale~; \verb|"double"| = interpol\'ee (\verb|"$a[0]|, \verb|"{$obj->p}|). \\
+  Commentaires \& \verb|//|, \verb|\#|, \verb|/* */|, et \verb|/** DocBlock */| pour la documentation lue par les IDE. \\
+  \verb|echo| / \verb|print| / \verb|printf| \& \verb|echo| plusieurs valeurs~; \verb|print| renvoie 1~; \verb|printf| formate. \\
+\end{tabz}
+
+\section{Types, variables, et le typage moderne}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+// Types scalaires
+$entier = 42;            // int (64 bits, sauf sur 32 bits : 2^31-1 -- un id de tweet qui casse, ca existe)
+$flottant = 3.14;        // float ; 1e3, 0x1A, 0b1010, 1_000_000 sont valides
+$chaine = "cinq";        // string : une suite d'octets, pas de notion de caractere unicode
+$booleen = true;         // bool
+$rien = null;            // null : "absence de valeur"
+$tableau = [1, 2, 3];    // array
+$objet = new stdClass(); // object
+$ressource = fopen('php://memory', 'r');   // ressource (fermeture explicite recommandee)
+
+// Declarations typ\'ees : la norme en PHP moderne
+function compter(array $articles, ?string $filtre = null, int $limite = 20): int
+{
+    $n = 0;
+    foreach ($articles as $a) {
+        if ($filtre === null || str_contains((string) $a['titre'], $filtre)) {
+            $n++;
+            if ($n >= $limite) { break; }
+        }
+    }
+    return $n;
+}
+
+// Types d'union et d'intersection, nommes, readonly (8.1+), jamais (8.1)
+function id(): int|string { return random_int(1, 1000); }
+function traiter(Countable&ArrayAccess $c): never { throw new RuntimeException('non'); }
+
+// Propriete typ\'ee : pas de valeur par defaut implicite -> une erreur nette si non initialisee
+final class Point { public function __construct(public float $x = 0.0, public readonly float $y = 0.0) {} }
+
+// gettype() est un outil de debug ; get_debug_type() (8.0) est plus lisible
+// var_dump() : le reflexe. settype(), intval() : a eviter, prefere les casts (int), (float), (string), (bool), (array)
+
+// Comparaison : comme en JS, mais en pire. TOUJOURS === et !==.
+var_dump(0 == 'a');           // PHP 8 : false (avant PHP 8 : TRUE -- un CVE en puissance)
+var_dump('12abc' == 12);      // false en PHP 8 (true en PHP 7)
+var_dump(100 === '100');      // false
+var_dump(NAN === NAN);        // false
+var_dump(0.1 + 0.2 === 0.3);  // false ; compare avec abs(a-b) < PHP_FLOAT_EPSILON
+\end{codephp}
+
+\subsection{Cha\^ines : tout ce qu'on utilise vraiment}
+
+\begin{codephp}
+<?php
+$s = "  Le Chat et le CHIEN  ";
+
+strlen($s);                       // en OCTETS ("\'e" = 2 octets en UTF-8) -> ne l'utilise pas pour l'affichage
+mb_strlen($s, 'UTF-8');           // en caracteres reels ; mb_* = l'extension indispensable
+mb_strtolower($s);  mb_convert_case($s, MB_CASE_TITLE, 'UTF-8');
+str_contains($s, 'chat');          // 8.0 : remplace strpos !== false
+str_starts_with($s, '  Le');  str_ends_with($s, ' ');
+trim($s);  ltrim($s);  rtrim($s, " \t\n\r\0\x0B");
+str_replace(['le', 'et'], ['LES', 'ET'], strtolower($s));
+str_repeat('-', 10);  substr($s, 2, 5);  substr_count($s, 'e');
+strpos(strtolower($s), 'chat');     // position ou false
+explode(',', 'a,b,c');  implode(', ', ['a', 'b']);
+sprintf('%s : %05d | %-10s | %+.2f', 'facture', 42, 'total', -12.5);
+number_format(1234.5678, 2, ',', ' ');        // "1 234,57" (fr)
+nl2br($texteUtilisateur);                       // sauts de ligne -> <br>
+strip_tags($html);  htmlspecialchars($html, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');   // echapper pour le HTML
+wordwrap($s, 80, "\n", true);  str_pad('7', 3, '0', STR_PAD_LEFT);
+str_word_count($s);  ucfirst($s);  ucfirst(mb_strtolower($s));
+
+// Interpolation et formatage multi-lignes
+$prenom = 'Nour';
+echo "Bonjour $prenom, tu as " . strlen($prenom) . " lettres.\n";
+echo "Detail : {$article['titre']} | {$user->nom}\n";
+$sql = <<<SQL
+    SELECT id, titre
+    FROM articles
+    WHERE publie = 1
+    ORDER BY id DESC
+    SQL;                     // 7.3+ : le cloturant peut etre indentes
+$md = <<<'TXT'               // nowdoc = comme une chaine simple, aucune interpolation
+Texte litteral : $variable, {$choses}, \n
+TXT;
+\end{codephp}
+
+\begin{piege}
+\textbf{Encodage.} PHP manipule des octets, pas des caract\`eres. Sans \verb|mbstring| et sans
+UTF-8 coh\'erent, tu auras des \og ~\~A~ \fg{} partout. La checklist~: fichiers en UTF-8 sans BOM~;
+base en \verb|utf8mb4| avec \verb|utf8mb4\_unicode\_ci|~; en-t\^ete \verb|Content-Type: text/html; charset=utf-8|~;
+et les fonctions \verb|mb\_*| pour tout ce qui touche au texte humain.
+\end{piege}
+
+\section{Tableaux~: le vrai type universel de PHP}
+
+Un tableau PHP est une \textbf{table ordonn\'ee}~: il accepte des cl\'es (entiers ou cha\^ines) et
+maintient l'ordre d'insertion. C'est \`a la fois un tableau, une liste, un dictionnaire et une file.
+
+\begin{codephp}
+<?php
+$article = [
+    'id' => 7,
+    'titre' => 'Apprendre PHP',
+    'tags' => ['php', 'web'],
+    'auteur' => ['nom' => 'Nour', 'email' => 'nour@example.com'],
+    0 => 'premiere cle numerique -- attention, "0" devient 0',
+];
+
+// Acces et ecriture
+$article['titre'];
+$article['auteur']['nom'];
+$article['vue'] ??= 0;                    // 7.4+ : initialise si absent/nul
+$article['titre'] .= ' (v2)';
+unset($article['tags']);
+
+// Creation et fusion
+$nouveau = array_fill_keys(['a', 'b'], 0);
+$combine = array_combine(['id', 'nom'], [1, 'Nour']);
+$fusion = $article + ['id' => 999];                 // les cles existantes gagnent
+$fusion2 = array_merge($a, $b);                    // reindexe les cles numeriques  <-- piege
+$deep = array_replace_recursive($config, $surcharges);
+$tabs = [...$premiers, ...$derniers];              // spread : seulement listes (cles numeriques seq.)
+
+// Cles et valeurs
+array_keys($article);  array_values($article);
+count($article);  in_array('php', $article['tags'] ?? [], true);   // le 3e parametre = comparaison stricte
+array_key_exists('id', $article);     // != isset() : lui voit les cles a valeur null
+
+// Transformer (les trois qui remplacent 90 % des boucles)
+$mots = explode(' ', strtolower(trim($s)));
+$longueurs = array_map(mb_strlen(...), $mots);
+$filtr\'es = array_filter($mots, static fn (string $m): bool => mb_strlen($m) > 3);
+$reindexe = array_column($articles, null, 'id');           // clef = id -> recherche O(1)
+$titre = array_map(static fn (array $a): string => $a['titre'], $articles);
+$total = array_reduce($lignes, static fn (float $c, array $l): float => $c + $l['prix'] * $l['qte'], 0.0);
+
+// Ordre
+sort($liste);                        // par valeur, reindexe -- MUTANT
+asort($tableauAssoc);                // par valeur, garde les cles
+ksort($parClef);
+usort($articles, static fn (array $a, array $b): int => $b['date'] <=> $a['date']);
+// spaceship <=> renvoie -1/0/1 : la seule bonne facon de comparator en PHP
+array_multisort(array_column($articles, 'note'), SORT_DESC, $articles);   // multi-criteres
+
+// Decoupage, piles, files
+array_slice($liste, 2, 5, preserve: true);
+array_chunk($articles, 20);
+array_splice($liste, 1, 2, $remplacement);
+array_push / array_pop / array_shift / array_unshift ;
+$array = [1, 2, 3]; $x = array_pop($array);      // 3
+end($array) / reset($array) / next($array) / current($array) / key($array);
+list($a, $b) = [1, 2];   [$x, $y] = [1, 2];    ['nom' => $n, 'id' => $i] = $article;   // destructuration
+\end{codephp}
+
+\section{Conditions, boucles, et le flux de contr\^ole}
+
+\begin{codephp}
+<?php
+$note = 14;
+if ($note >= 16) {
+    echo 'Tres bien';
+} elseif ($note >= 10) {
+    echo 'Admis';
+} else {
+    echo 'Releve';
+}
+
+// alternative syntax : tres lisible dans les vues (HTML mele au PHP)
+foreach ($articles as $i => $article): ?>
+    <article class="<?= $article['publie'] ? 'publie' : 'brouillon' ?>">
+        <h2><?= htmlspecialchars($article['titre']) ?></h2>
+        <p><?= e($article['extrait'] ?? '') /* fonction utilitaire a definir */ ?></p>
+    </article>
+<?php endforeach;
+
+switch ($etat) {                    // switch traditionnel : comparaison loose (==) -- evite-le
+    case 'ok': break;
+    default: throw new InvalidArgumentException("etat inconnu : {$etat}");
+}
+$resultat = match ($note) {        // 8.0 : comparaison stricte, expression, pas de fallthrough
+    20 => 'parfait',
+    16, 17, 18, 19 => 'tres bien',
+    10 ... 15 => 'bien',            // plage
+    default => 'a revoir',
+};
+$classe = match (true) {
+    $note >= 16 => 'excellent',
+    $note >= 10 => 'moyen',
+    default => 'faible',
+};
+
+for ($i = 0; $i < 10; $i++) {}
+while ($ligne = fgets($h)) {}        // idiomatique : affectation + test
+do { $n++; } while ($n < 10);
+foreach ($tableau as $clef => $valeur) {}
+foreach ($generateur() as $ligne) {}    // memoire constante sur un gros fichier
+for (;;) { break; }                     // boucle infinie propre
+\end{codephp}
+
+\section{Fonctions, fermetures, appelables}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+// Fonction nommee, typ\'ee, avec valeurs par defaut
+function envoyerEmail(
+    string $destinataire,
+    string $sujet,
+    string $corps = '',
+    array $piecesJointes = [],
+    ?DateTimeImmutable $programmePour = null,
+): bool {
+    if (!filter_var($destinataire, FILTER_VALIDATE_EMAIL)) {
+        throw new InvalidArgumentException("email invalide : {$destinataire}");
+    }
+    return true;    // ici, l'appel a la fonction mail() du serveur SMTP reel
+}
+
+// Nomme (8.0) : l'API devient lisible, l'ordre des parametres ne compte plus
+envoyerEmail(destinataire: 'nour@example.com', piecesJointes: ['facture.pdf'], sujet: 'Facture');
+
+// Passage par valeur (defaut) vs par reference (a eviter, sauf cas precis)
+function ajout(int &$compteur): void { $compteur++; }
+function tableauEnReferenc(array &$t): void { $t['vu'] = true; }
+
+// Fermetures : "use" importe le contexte (par copie ; par reference avec "&")
+$tva = 0.2;
+$ht = [10, 20, 30];
+$ttc = array_map(static fn (float $x): float => $x * (1 + $tva), $ht);
+$compteur = function () use (&$n): int { return ++$n; };     // le "&" est essentiel ici
+$appliquer = fn (callable $f, $v) => $f($v);                  // fleche : capture auto, une expression
+
+// Generateur : produire une sequence sans la stocker
+function lignes(string $chemin): Generator
+{
+    $h = fopen($chemin, 'rb');
+    if ($h === false) { throw new RuntimeException("lecture impossible : {$chemin}"); }
+    try {
+        while (($l = fgets($h)) !== false) {
+            yield rtrim($l, "\r\n");
+        }
+    } finally {
+        fclose($h);
+    }
+}
+foreach (lignes('acces.log') as $n => $ligne) { /* memoire = 1 ligne */ }
+
+// Callables : le PHP n'aime pas les fonctions de haut niveau silencieuses
+$tri = usort($articles, 'comparerParDate');            // nom de fonction
+$tri = usort($articles, [$objet, 'methode']);
+$tri = usort($articles, [MaClasse::class, 'statique']);
+$tri = usort($articles, $objet->methode(...));          // premier-class callable (8.1) : le plus propre
+$tri = usort($articles, fn (array $a, array $b) => $b['id'] <=> $a['id']);
+
+// Functions utiles a connaitre : call_user_func est depasse par $cb(...) ; array_* le reste.
+\end{codephp}
+
+\subsection{Les 15 fonctions globales qu'on cherche toujours}
+
+\begin{tabularx}{\textwidth}{@{}l X@{}}
+  \toprule
+  \textbf{Fonction} \& \textbf{Usage}\\
+  \midrule
+  \verb|count|, \verb|iterator\_to\_array|, \verb|is\_array| \& dimensions et v\'erifications.\\
+  \verb|array\_map|, \verb|array\_filter|, \verb|array\_values| \& transformations.\\
+  \verb|str\_contains|, \verb|str\_replace|, \verb|sprintf|, \verb|trim| \& cha\^ines.\\
+  \verb|htmlspecialchars| (\verb|ENT\_QUOTES|) \& sortir du texte en HTML.\\
+  \verb|json\_encode| / \verb|json\_decode|, avec \verb|JSON\_THROW\_ON\_ERROR| \& API et configs.\\
+  \verb|filter\_var| / \verb|filter\_input| \& validation d'email, d'URL, d'entier.\\
+  \verb|password\_hash| / \verb|password\_verify| \& mots de passe.\\
+  \verb|random\_int| / \verb|random\_bytes| \& al\'eatoire \emph{cryptographique} (jamais \verb|rand| pour un jeton).\\
+  \verb|file\_get\_contents| / \verb|file\_put\_contents| / \verb|is\_readable| \& fichiers simples.\\
+  \verb|date|, \verb|DateTimeImmutable| \& dates~; pr\'ef\'erence absolue \`a la classe.\\
+  \verb|var\_dump|, \verb|print\_r|, \verb|error\_log| \& debug (et \verb|dump()| de Symfony).\\
+  \verb|compact|, \verb|extract| \& variables vers une vue (le second est \`a fuir).\\
+  \verb|enum|? \verb|enum\_exists|, \verb|class\_exists|, \verb|function\_exists| \& introspection.\\
+  \verb|match|, \verb|throw expr| (8.0) \& flux de contr\^ole.\\
+\end{tabularx}
+
+\section{TP --- un mini-routage et un rapport CSV}
+
+Deux fichiers, sans base de donn\'ees, sans framework. L'id\'ee~: voir que PHP n'a besoin de rien
+de plus pour faire un vrai site.
+
+\begin{codephp}
+<?php
+// public/index.php --- le "front controller" : TOUT passe par la.
+declare(strict_types=1);
+error_reporting(E_ALL);
+ini_set('display_errors', '1');          // en DEV seulement ; en prod : 0 + logs
+
+session_start();
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
+$methode = $_SERVER['REQUEST_METHOD'];
+
+// Une petite fonction d'echappement, reutilisee dans les vues
+function e(?string $v): string { return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+
+$routes = [
+    'GET /' => 'accueil',
+    'GET /articles' => 'articles',
+    'POST /articles' => 'creerArticle',
+    'GET /rapport.csv' => 'rapport',
+];
+$action = $routes["$methode $uri"] ?? null;
+if ($action === null) {
+    http_response_code(404);
+    require __DIR__ . '/../src/vues/404.php';
+    exit;
+}
+require __DIR__ . "/../src/actions/{$action}.php";
+\end{codephp}
+
+\begin{codephp}
+<?php
+// src/actions/articles.php
+declare(strict_types=1);
+$cheminDonnees = __DIR__ . '/../../data/articles.json';
+$articles = json_decode((string) file_get_contents($cheminDonnees), true, 512, JSON_THROW_ON_ERROR);
+$filtre = trim((string) ($_GET['q'] ?? ''));
+$parPage = 10;
+$page = max(1, (int) ($_GET['page'] ?? 1));
+
+$q = array_values(array_filter(
+    $articles,
+    static fn (array $a): bool => $filtre === ''
+        || mb_stripos($a['titre'], $filtre) !== false
+        || mb_stripos($a['contenu'] ?? '', $filtre) !== false
+));
+$total = count($q);
+$nbPages = max(1, (int) ceil($total / $parPage));
+$page = min($page, $nbPages);
+$articles = array_slice($q, ($page - 1) * $parPage, $parPage);
+
+require __DIR__ . '/../vues/liste.php';
+\end{codephp}
+
+\begin{codephp}
+<?php
+// src/actions/rapport.php --- exporter un CSV correctement (le BOM UTF-8 est un detail reel)
+declare(strict_types=1);
+$articles = json_decode((string) file_get_contents(__DIR__ . '/../../data/articles.json'), true, 512, JSON_THROW_ON_ERROR);
+
+$entetes = ['id', 'titre', 'auteur', 'date', 'vues'];
+$corps = fopen('php://output', 'wb');
+fwrite($corps, "\xEF\xBB\xBF");                     // BOM : Excel ouvre alors en UTF-8
+fputcsv($corps, $entetes, ',', '"', '\\');           // 1ere colonne forcee en chaine, 4e argument = 8.4
+foreach ($articles as $a) {
+    fputcsv($corps, [
+        (string) $a['id'],
+        $a['titre'],
+        $a['auteur']['nom'] ?? '',
+        date('Y-m-d', (int) ($a['cree'] ?? time())),
+        (int) ($a['vues'] ?? 0),
+    ]);
+}
+fclose($corps);
+exit;
+\end{codephp}
+
+\begin{note}
+Les \verb|require|/ \verb|include| ont deux variantes. \verb|require| \'echoue fatalement,
+\verb|include| \'emet un avertissement~; \verb|*\_once| \'evite le double-chargement. \verb|\_\_DIR\_\_| rend
+le chemin insensible au r\'epertoire courant~: utilise-le syst\'ematiquement, sinon ton application
+casse d\`es que le serveur est lanc\'e depuis un autre dossier.
+\end{note}
+
+\subsection{Les erreurs de PHP que les d\'ebutants rencontrent}
+
+\begin{tabz}{lX}
+  \headrow \thd{Message} \& \thd{Cause r\'eelle} \\
+  \midrule
+  \verb|Cannot modify header information - headers already sent| \& Un espace, un retour \`a la ligne ou un \verb|echo| avant \verb|header()|~: v\'erifie l'absence de \verb|?>| final et d'octets parasites avant \verb|<?php|. \\
+  \verb|undefined array key "x"| \& la cl\'e n'existe pas~; utilise \verb|??| ou \verb|array\_key\_exists|. \\
+  \verb|TypeError: Return value must be of type int, string returned| \& \verb|strict\_types=1| fait son travail~: convertis explicitement avec \verb|(int)| ou \verb|intcap|. \\
+  \verb|Allowed memory size exhausted| \& boucle infinie, tableau gigantesque, ou r\'ecursion sans fin. \\
+  Page blanche \& une erreur fatale avec \verb|display\_errors=Off|. Regarde le journal~: \verb|tail -f /var/log/php-fpm/error.log|, ou active \verb|error\_reporting(E\_ALL)| + \verb|display\_errors=1|. \\
+  \verb|Class "X" not found| \& autoload non configur\'e (Composer n'est pas install\'e/charg\'e), ou nom d'espace de lignes incorrect. \\
+\end{tabz}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris \verb|slugify(string \$t): string|~: minuscules, accents retir\'es
+        (\verb|iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', \$t)| ou \verb|mb\_convert\_encoding|),
+        non-alphanum\'eriques en tirets, tirets dupliqu\'es et marges nettoy\'es~; test\'e sur
+        \og ~L'\'Ev\'enement de l'ann\'ee, \`a Thi\`es !~ \fg{}.
+  \item \'Ecris \verb|formaterDuree(int \$secondes): string| renvoyant \og ~2 h 05 min~ \fg{}, et
+        \verb|nombreEnLettres(int \$n): string| pour 0--999 (r\'ecursif).
+  \item Construis \verb|tableauVersCsv(array \$lignes): string| et \verb|csvVersTableau(string): array|
+        qui se comportent correctement avec guillemets, virgules et retours \`a la ligne dans les champs.
+  \item Analyse un fichier \verb|access.log|~: renvoie les 10 IP les plus fr\'equentes, le total de
+        requ\^etes par code HTTP, et la liste des 404, avec un g\'en\'erateur pour tenir sur un fichier
+        de 1~Go.
+  \item \'Ecris une fonction \verb|validerFormulaire(array $donnees, array $regles): array|~: r\`egles
+        \verb|required|, \verb|min:5|, \verb|email|, \verb|numeric|, \verb|in:a,b,c|,
+        \verb|confirmed|~; retour \verb|[champ => [erreurs]]| vide si tout passe. C'est la base
+        de ton futur micro-framework.
+  \item \'Ecris le \verb|creerArticle.php| de l'exemple~: v\'erifie la m\'ethode, valide, ajoute au JSON
+        avec un verrou (\verb|flock|) et une \'ecriture atomique (\verb|tempnam| + \verb|rename|),
+        renvoie une redirection (303) vers la page de l'article.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Le manuel officiel (avec les notes d'utilisateurs~; la 2\textsuperscript{e} meilleure doc du web) --- \url{https://www.php.net/manual/fr/}
+  \item PHP The Right Way (traduit, \`a lire en entier~: les bonnes pratiques modernes) --- \url{https://phptherightway.com/}
+  \item PHPFIG standards --- \url{https://www.php-fig.org/psr/}
+  \item php-pdo / PDO---\url{https://www.php.net/manual/en/book.pdo.php}
+  \item \link{PHP~Watched}{https://php.watch/} (nouveautes par version) et \url{https://stitcher.io/blog/php-84-in-a-hurry}
+\end{itemize}
+\end{ressources}
+
+\index{PHP!bases}\index{array}\index{strict\_types}

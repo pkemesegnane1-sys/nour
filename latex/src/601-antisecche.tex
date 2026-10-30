@@ -1,0 +1,258 @@
+% ============================================================================
+\chapter*{Annexes~: antis\`eches, messages d'erreur et listes de contr\^ole}
+\label{ch-antisecche}
+\addcontentsline{toc}{chapter}{Annexes~: antis\`eches, messages d'erreur et listes de contr\^ole}
+% ============================================================================
+
+Ces pages sont faites pour \^etre imprim\'ees ou gard\'ees ouvertes dans un second \'ecran.
+Rien ici n'est nouveau~: tout est dans le livre, juste l\`a o\`u ton \oe{}il en a besoin.
+
+\section{JavaScript en une page}
+
+\begin{codejs}
+// Variables, types, egalite
+let x = 1; const y = { a: 1 }; typeof y;               // "object" ; typeof null === "object"
+Object.freeze(o); structuredClone(o);                   // lecture seule / copie profonde
+x === 1; Object.is(NaN, NaN);                           // equality stricte / NaN-sur
+// Fonctions, objets, classes
+const add = (a, b) => a + b;
+const { a: alias = 0, ...reste } = objet;
+const [premier, ...queue] = tableau;
+class A extends B { #prive = 0; static c = 1; get v() { return this.#prive; } #m() { } }
+// Tableaux -- les 14 qui comptent
+t.map(f).filter(p).reduce((acc, x) => acc + x, 0).find(p).findIndex(p).some(p).every(p)
+ .sort((a, b) => a - b).toSorted(cmp).reverse().slice(d, f).at(-1).flat(Infinity)
+ .join(", ").includes(v).indexOf(v).forEach(f).toReversed()   // toSorted/toReversed: immutables
+// Chaines
+s.includes(sub); s.padStart(8, "0"); s.split(/[,;]/).map(t => t.trim());
+s.normalize("NFD").replace(/\p{Diacritic}/gu, "");      // retirer les accents
+// Promises et async
+await Promise.all(p); await Promise.allSettled(p); await Promise.any(p);
+const ctrl = new AbortController(); fetch(u, { signal: ctrl.signal }); ctrl.abort();
+// Modules, DOM, evenements
+import defaut, { nom as alias } from "./f.js"; export default ...;
+const el = document.querySelector("[data-x]");
+el.classList.toggle("on", force); el.setAttribute("aria-expanded", "true");
+el.insertAdjacentHTML("beforeend", html); el.dataset.x = "1";
+el.addEventListener("click", h, { once: true, signal: ctrl.signal });
+// Reseau et stockage
+const r = await fetch(u, { method: "POST", headers: { "content-type": "application/json" },
+  body: JSON.stringify(d), credentials: "include" }); r.ok; await r.json();
+localStorage.setItem("k", JSON.stringify(v)); sessionStorage; indexedDB;
+// Utilitaires
+const d = new Date(); d.toISOString(); Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(9.9);
+structuredClone; queueMicrotask; setTimeout; requestAnimationFrame; performance.now();
+// Debug : console.table(donnees), console.count(label), console.timeLog(), debugger;
+\end{codejs}
+
+\section{PHP en une page}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+// Tablesau (array) = liste + hashmap ; les 16 qui comptent
+$arr = ['a' => 1]; count($arr); isset($arr['a']); unset($arr['a']);
+array_map(fn, $arr); array_filter($arr); array_values($arr); array_keys($arr);
+array_merge($a, $b); + ; [...$a, ...$b]; in_array($v, $a, true);
+array_key_exists('a', $a); sort($a); usort($a, fn); array_slice($a, 0, 3);
+array_column($rows, 'nom', 'id'); array_combine($cles, $valeurs);
+array_sum($n); array_unique($a); array_reverse($a); array_diff($a, $b);
+// Chaines -- toujours mb_* avec de l'humain dedans
+strlen($s); mb_strlen($s); mb_substr($s, 0, 10); mb_strtolower($s);
+str_contains($s, 'x'); str_starts_with($s, 'x'); trim($s); sprintf('%.2f', $f);
+number_format($n, 2, ',', ' '); str_pad($s, 8, '0', STR_PAD_LEFT); nl2br(e($s));
+// Echappement par contexte
+echo htmlspecialchars($txt, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');   // HTML  (ou e() de Twig/Blade)
+echo rawurlencode($slug);                                            // URL
+json_encode($d, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);       // JSON
+// Fonctions, classes, typage
+function f(int $a, ?string $b = null, string ...\$reste): array { }
+$fn = fn(int $i): int => $i * 2;                                     // fleche : capture auto
+class C implements I { use T; public function __construct(private readonly Id $id) { } }
+enum Statut: string { case Publie = 'publie'; }
+interface I { public function x(): void; }   abstract class A implements I { }
+// Superglobales et requete
+$_GET $_POST $_FILES $_COOKIE $_SESSION $_SERVER $_ENV   // php://input pour le JSON
+session_start(); $_SESSION['csrf'] = bin2hex(random_bytes(32));
+header('Location: ' . $url, true, 303); exit;             // apres un POST : PRG
+// PDO
+$pdo = new PDO($dsn, $u, $p, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+  PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false]);
+$st = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $st->execute([$id]); $ligne = $st->fetch();
+$pdo->beginTransaction(); /* ... */ $pdo->commit();
+// Dates
+$d = new DateTimeImmutable('now', new DateTimeZone('Europe/Paris'));
+$d->format('Y-m-d H:i'); $d->modify('+1 day'); $d->diff($autre)->days;
+// Divers
+filter_var($email, FILTER_VALIDATE_EMAIL); password_hash($m, PASSWORD_ARGON2ID);
+password_verify($m, $h); random_int(1, 100); bin2hex(random_bytes(16));
+is_file($f); file_get_contents($f); json_decode($j, false, 512, JSON_THROW_ON_ERROR);
+// Erreurs : display_errors=On en dev, Off en prod ; log_errors=On ; error_reporting(E_ALL)
+// Tests : vendor/bin/phpunit ; Qualite : php-cs-fixer, phpstan, psalm, rector, composer audit
+\end{codephp}
+
+\section{Java en une page}
+
+\begin{codejava}
+// Types et variables
+int i = 0; long l = 9L; double d = .5; boolean b = true; char c = 'x'; String s = "a";
+var v = 3;                                  // inference ; final f = ...; (non reassignable)
+// Collections et boucles
+List<String> l = new ArrayList<>(); Set<String> se = new HashSet<>(); Map<String, Integer> m = new HashMap<>();
+List<String> imm = List.of("a", "b");       // immuable ; Map.of / Set.of / List.copyOf
+for (String x : l) { } for (int j = 0; j < n; j++) { } while (c) { } do { } while (c);
+l.sort(Comparator.comparing(String::length)); l.removeIf(x -> x.isEmpty());
+// API utiles : List.of, Map.entry, String.join, String.format("a %s", b), "a".repeat(3), strip()
+l.stream().filter(p).map(f).collect(Collectors.toList()); l.stream().toList();
+m.forEach((k, v2) -> System.out.println(k + v2)); m.merge(k, 1, Integer::sum);
+m.computeIfAbsent(k, x -> new ArrayList<>()).add(v);
+// Streams : .map .filter .flatMap .sorted .limit .distinct .peek .min .max .sum .average
+// .count .anyMatch .allMatch .findFirst .reduce(id, op) .collect(groupingBy | toMap | joining)
+// .mapToInt(..).sum() .summaryStatistics() .boxed() .parallel() .unordered()
+// Objets et null
+Objects.equals(a, b); Objects.hash(x, y); Objects.requireNonNull(o, "msg");
+Optional<T> o = Optional.ofNullable(x); o.map(..).filter(..).orElseGet(..).orElseThrow(..);
+// Erreurs et entrees/sorties
+try (var in = Files.newInputStream(p); var out = Files.newOutputStream(q)) { in.transferTo(out); }
+catch (IOException e) { throw new UncheckedIOException(e); }
+String t = Files.readString(p); List<String> ls = Files.readAllLines(p);
+Files.writeString(p, t, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+try (Stream<String> s2 = Files.lines(p)) { s2.filter(x -> !x.isBlank()).forEach(System.out::println); }
+// Dates
+Instant.now(); LocalDate.of(2026, 1, 31); ZonedDateTime.of(ldt, ZoneId.of("Europe/Paris"));
+Duration.between(a, b).toSeconds(); Period.between(d1, d2); DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.FRENCH);
+// Concurrence
+ExecutorService pool = Executors.newFixedThreadPool(n);
+try (var vx = Executors.newVirtualThreadPerTaskExecutor()) { vx.submit(() -> tache()); }
+CompletableFuture.supplyAsync(() -> a(), pool).thenApply(x -> b).exceptionally(ex -> defaut).join();
+var queue = new ArrayBlockingQueue<T>(cap); queue.put(t); queue.poll(1, TimeUnit.SECONDS);
+// Outils
+System.out.printf("%-8s %6.2f%n", s, d); Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
+// JVM usuelles : -Xmx512m -XX:MaxRAMPercentage=75 -Xlog:gc* -Dfile.encoding=UTF-8
+// Build : ./mvnw -B verify | ./gradlew build test --no-daemon | java -jar app.jar
+\end{codejava}
+
+\section{Le tableau des messages d'erreur qui reviennent}
+
+\begin{tablez}[p{0.3\textwidth}p{0.24\textwidth}X]
+  \headrow \thd{Message (exact)} \& \thd{Cause racine} \& \thd{Le geste qui r\'epare} \\
+  \midrule
+  \verb|Cannot read properties of undefined (reading 'x')| \& objet absent \`a ce moment (typo, async, destructuration) \& remonter \`a la source~; guard-clause \verb|?.| ou valider l'\'etat~; \textbf{ne pas} mettre un \verb|try/catch| autour \\
+  \verb|ReferenceError: x is not defined| \& variable hors port\'ee, script non charg\'e, \verb|type="module"| oubli\'e \& v\'erifier l'ordre des \verb|<script>| et le nom export\'e \\
+  \verb|Cannot access 'x' before initialization| \& zone morte \verb|let|/ \verb|const|, ou d\'ependance circulaire d'un module \& d\'eclarer plus haut~; casser le cycle (extraire un module commun) \\
+  \verb|unhandledRejection: ...| \& promesse non attendue dans une \verb|forEach|/ un handler \& \verb|for...of| + \verb|await|, ou \verb|Promise.all(map)| \\
+  \verb|CORS policy: No 'Access-Control-Allow-Origin'| \& le serveur n'autorise pas l'origine~; ou \verb|withCredentials| sans \verb|Allow-Credentials| \& corriger le serveur (jamais le front)~; v\'erifier \verb|preflight| en 401 \\
+  PHP \verb|Undefined array key "x"| \& cl\'e absente, ou nom de champ different du SQL \& \verb|??| / \verb|array\_key\_exists|~; var\_dump l\'eger de \verb|array\_keys| \\
+  PHP \verb|Cannot use a scalar value as an array| \& \verb|$x[0] = 1| alors que \verb|$x| est un scalaire \& initialiser \verb|\$x = []| explicitement \\
+  PHP \verb|SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry| \& unicit\'e~; ou deux clics sur le bouton \& \verb|INSERT ... ON DUPLICATE|/ \verb|upsert|~; idempotence c\^ot\'e requ\^ete \\
+  PHP \verb|headers already sent| \& un espace/une BOM avant \verb|<?php|, ou un \verb|echo| pr\'ealable \& supprimer la sortie~; pas de \verb|?>| final dans un fichier de classe \\
+  PHP \verb|Allowed memory size of ... bytes exhausted| \& boucle qui accumule, \verb|fetchall| d'un million de lignes \& \verb|LIMIT|~; curseur~;/streaming~; mesurer avant d'augmenter la limite \\
+  Java \verb|cannot find symbol| \& import manquant, casse, m\'ethode inexistante \& \verb|Ctrl+Space| sur le type~; v\'erifier le package r\'eel (les 2 \verb|List| de Java) \\
+  Java \verb|variable x might not have been initialized| \& variable locale non initialis\'ee (pas de d\'efaut) \& initialiser~: ou rendre le chemin d'affectation exhaustif \\
+  Java \verb|unreported exception X; must be caught or declared| \& exception v\'erifi\'ee \& propag\'ee (\verb|throws|) ou convertie en exception m\'etier~: ne pas gober \\
+  Java \verb|incompatible types: String cannot be converted to int| \& parsing absent \& \verb|Integer.parseInt| avec \verb|try/catch NumberFormatException| (ou \verb|Scanner.nextInt|) \\
+  Java \verb|Non-resolvable import POM| / \verb|Could not resolve ...| \& d\'ependance introuvable, mauvais \verb|groupId|, r\'eseau, cache \& \verb|dependency:tree|~: chercher sur Maven Central~: \verb|-U|~: v\'erifier le miroir \\
+  Java \verb|java: package javax.servlet does not exist| \& Spring 6 = Jakarta EE 9+ \& remplacer \verb|javax.*| par \verb|jakarta.*| \\
+  Java \verb|LazyInitializationException: failed to lazily initialize| \& acc\`es hors transaction / hors session \& \verb|join fetch|~: projection~: ou mapper en DTO dans la requ\^ete \\
+  Java \verb|OOM: Java heap space| / \verb|GC overhead limit| \& objet trop gros~: cache non born\'e~: \verb|-Xmx| ridicule \& mesurer avec un dump~: borner le cache (Caffeine)~: adapter le tas~: ne pas grossir \verb|-Xmx| d'abord \\
+\end{tablez}
+
+\section{Terminal, Git, HTTP---les 40 commandes utiles}
+
+\begin{terminal}
+# Navigation et fichiers
+ls -la ; cd - ; pwd ; tree -L 2 ; cp -r a b ; mv a b ; rm -rf dossier ; mkdir -p x/y
+find . -name "*.php" -not -path "./vendor/*" ; grep -rn --include="*.js" "motif" . | head
+# Pipes et recherche
+cmd | tee log.txt ; cmd 2>&1 | less ; xargs -n1 -P4 ; sed -i.bak 's/an 2024/an 2026/g' f
+sort -u ; uniq -c | sort -rn | head ; wc -l ; du -sh * ; lsof -i :8080 ; kill -TERM <pid>
+env | grep -i proxy ; curl -i -s -o /dev/null -w '%{http_code} %{time_total}s\n' URL ; dig +short domaine
+tar czf a.tgz dossier/ ; tar xzf a.tgz ; unzip f.zip -d d/ ; chmod +x script
+# Git : le quotidien
+git status -sb ; git diff ; git add -p ; git commit -m "portee: sujet" ; git push -u origin HEAD
+git log --oneline --graph --decorate -15 ; git switch -c sujet ; git switch main ; git pull --rebase
+# Git : les 5 situations qui font paniquer (et leur sortie)
+git restore --staged f ; git restore f ; git clean -fd            # annuler stage / fichier / non-suis
+git commit --amend --no-edit                                       # corriger le dernier commit
+git revert <sha> ; git reset --soft HEAD~1                         # annuler un commit publie / le defaire localement
+git rebase -i origin/main ; :q pour abandonner un rebase ; git rebase --abort
+git stash push -u -m "wip" ; git stash pop ; git stash list
+git bisect start HEAD v1.0 ; git bisect run npm test ; git bisect reset   # trouver le commit fautif
+git blame -L 40,60 f ; git log --oneline -- src/fichier ; git show --stat <sha>
+git worktree add ../sujet sujet ; git worktree list                # deux branches en parallele
+# Git : signature et propres historiques
+git config --global core.editor "code --wait" ; git config --global pull.rebase true
+git config --global init.defaultBranch main ; git config --global alias.lg "log --oneline --graph"
+git filter-repo --invert-paths --path secret.env                   # purger un secret (puis changer le secret !)
+# HTTP : comprendre en une minute
+curl -v -X OPTIONS URL -H 'Origin: https://x' -H 'Access-Control-Request-Method: POST'
+curl -H 'Authorization: Bearer '$T -s URL | jq . ; curl -I URL | grep -Ei 'cache|etag|set-cookie|security'
+\end{terminal}
+
+\section{Codes de statut~: le r\'eflexe en 12 lignes}
+
+\begin{tablez}[p{0.1\textwidth}p{0.2\textwidth}X]
+  \headrow Code \& Nom \& L'utiliser quand \\
+  \midrule
+  200 \& OK \& r\'eponse avec corps \\
+  201 \& Created \& ressource cr\'e\'ee~: + \verb|Location| \\
+  204 \& No Content \& suppression~: ou action sans corps \\
+  301/302 \& Moved \& redirect permanent (SEO) / temporaire (apr\`es POST~: 303) \\
+  400 \& Bad Request \& corps illisible, JSON cass\'e, param\`etre mal form\'e \\
+  401 \& Unauthorized \& identit\'e absente ou expir\'ee (+ \verb|WWW-Authenticate|) \\
+  403 \& Forbidden \& identit\'e connue~: permission absente \\
+  404 \& Not Found \& ressource absente (ou cach\'ee volontairement pour ne pas la r\'ev\'eler) \\
+  409 \& Conflict \& doublon, version obsol\`ete, \'etat incompatible \\
+  413/415 \& Payload / Media \& fichier trop gros / type non accept\'e \\
+  422 \& Unprocessable \& syntaxe correcte~: s\'emantique refus\'ee (validation m\'etier) \\
+  429 \& Too Many Requests \& limitation d\'epass\'ee (+ \verb|Retry-After|) \\
+  500/503 \& Internal / Unavailable \& bug~: ou panne d\'ependance (avec \verb|Retry-After|) \\
+\end{tablez}
+
+\section{Le dernier carr\'e~: la liste de contr\^ole avant de dire \og ~c'est fini~ \fg{}}
+
+\begin{enumerate}
+  \item[] Une requ\^ete SQL de la liste des 5 plus lentes a \'et\'e expliqu\'ee (\verb|EXPLAIN|)~; les index n\'ecessaires existent.
+  \item[] Toute entr\'ee utilisateur est valid\'ee au serveur~: toute sortie est \'echapp\'ee selon son contexte.
+  \item[] Aucun secret dans le d\'ep\^ot~; aucun \verb|display\_errors|~; aucun \verb|actuator/env| expos\'e~; les erreurs 500 ne fuient pas la stack.
+  \item[] Les actions mutantes sont prot\'eg\'ees (CSRF ou jeton) et idempotentes au moins par erreur~: et test\'ees.
+  \item[] Les en-t\^etes de base sont l\`a~: \verb|Content-Security-Policy|, \verb|X-Content-Type-Options|, cookies \verb|Secure| \verb|HttpOnly| \verb|SameSite|, \verb|Strict-Transport-Security| si TLS.
+  \item[] Une requ\^ete lente, un appel sortant cass\'e, une base injoignable~: l'application d\'egrade proprement (timeout~: repli~: message clair).
+  \item[] Les journaux contiennent un identifiant de corr\'elation~; on peut retrouver la panne d'un utilisateur en une commande.
+  \item[] Les tests tournent en local \emph{et} en CI~: et la CI ne peut pas \^etre contourn\'ee par un \verb|--no-verify| silencieux.
+  \item[] Le d\'eploiement est reproductible par une commande~; le retour arri\`ere aussi.
+  \item[] Le README dit comment lancer~: tester~: configurer~: et pourquoi l'architecture est ce qu'elle est.
+  \item[] Tu as supprim\'e le code comment\'e~: les variables \verb|temp2|~: et le \verb|console.log| du vendredi soir.
+  \item[] Tu sais expliquer---\`a voix haute, sans l'IDE---chaque choix de la PR. Si tu ne sais pas~: ce n'est pas fini.
+\end{enumerate}
+
+\section{Outils~: la table de rappel}
+
+\begin{tablez}[p{0.2\textwidth}p{0.24\textwidth}X]
+  \headrow Besoin \& Choisir \& Lien \\
+  \midrule
+  \'Editeur \& VS Code + extensions (ESLint, Prettier, PHP Intelephense, Extension Pack for Java) \& \url{https://code.visualstudio.com/} \\
+  IDE \& IntelliJ IDEA Community (Java) / PhpStorm (PHP, JS) \& \url{https://www.jetbrains.com/} \\
+  JDK \& Temurin 21, g\'er\'e par SDKMAN ou mise \& \url{https://adoptium.net/} \\
+  Node \& LTS via \verb|nvm| ou \verb|mise| \& \url{https://nodejs.org/fr} \\
+  PHP \& 8.3+ via le PPA ondrej, \verb|mise| ou MAMP/Laragon \& \url{https://www.php.net/downloads.php} \\
+  Base \& PostgreSQL 17 (ou MariaDB) + DBeaver \& \url{https://dbeaver.io/} \\
+  Build \& Maven wrapper / Gradle wrapper \& \url{https://maven.apache.org/} \\
+  HTTP client \& Bruno (open source) ou Insomnia \& \url{https://www.usebruno.com/} \\
+  Conteneurs \& Docker Desktop / OrbStack (macOS) / Podman \& \url{https://www.docker.com/} \\
+  Git GUI \& GitKraken free, GitHub Desktop, ou la ligne de commande \& \url{https://git-scm.com/} \\
+  Proxy local \& Caddy (TLS automatique) ou Nginx \& \url{https://caddyserver.com/} \\
+  D\'eploiement \& Netlify/Vercel (front), Fly.io/Railway/Coolify, VPS + Docker \& \url{https://fly.io/} \\
+  Tests \& Vitest / Playwright~: PHPUnit~: JUnit + Testcontainers \& \url{https://vitest.dev/} \\
+  Qualit\'e \& ESLint+Prettier~: PHPStan+CS-Fixer~: Spotless+Checkstyle+PIT \& \url{https://phpstan.org/} \\
+  Observabilit\'e \& Grafana+Prometheus~: ou Sentry pour les erreurs \& \url{https://sentry.io/} \\
+\end{tablez}
+
+\begin{note}
+Si tu ne devais garder qu'une page de tout le livre~: garde celle des messages d'erreur. Un bug
+n'est pas une punition~: c'est un message. Les lire en entier~: mot pour mot~: est la comp\'etence
+la plus rentable de ce m\'etier--- et celle qui distingue celui qui \og ~ne comprend rien au Java~ \fg{}
+de celui qui a simplement appris \`a lire les diagnostics.
+\end{note}
+
+\index{antis\`eche}\index{messages d'erreur}\index{checklist}\index{Git}

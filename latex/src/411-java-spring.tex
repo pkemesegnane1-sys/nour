@@ -1,0 +1,456 @@
+% ============================================================================
+\chapter{Spring Boot~: l'atelier complet}
+\label{ch-java-spring}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Comprendre ce que Spring Boot automatise (et ce qu'il ne fait pas \`a ta place).
+  \item Construire une application MVC compl\`ete~: contr\^oleurs, validation, gestion d'erreurs,
+        s\'ecurit\'e, donn\'ees, tests.
+  \item Lire une configuration Spring sans se noyer~: beans, profils, propri\'et\'es, auto-configuration.
+  \item Choisir Spring~: ou d\'ecider de ne pas le choisir.
+\end{itemize}
+\end{objectif}
+
+\section{Pourquoi Spring~: le contrat}
+
+\begin{description}
+  \item[Boot] des \emph{starters} (d\'ependances coh\'erentes), de l'\emph{auto-configuration} (des beans
+        cr\'e\'es si les classes sont l\`a et rien ne les configure), un serveur embarqu\'e, un fichier
+        de configuration, un \verb|actuator| de supervision.
+  \item[Framework] IoC/DI (\verb|ApplicationContext|), MVC, Data, Security, Transactions, Messaging,
+        Test --- tous coh\'erents et test\'es ensemble.
+  \item[Co\^ut] abstractions, r\'eflexion, taille de la stack, courbe de lecture des messages,
+        d\'emarrage lent hors image native. Une \og ~simple~ \fg{} \verb|@SpringBootApplication| monte
+        une centaine de beans.
+\end{description}
+
+\begin{terminal}
+# Creer le projet : https://start.spring.io (Dependencies : Web, Data JPA, Validation,
+#   Security, Actuator, PostgreSQL, Flyway, Testcontainers(?) -> puis "Generate Project")
+# ou en CLI :
+curl "https://start.spring.io/starter.zip" -d type=maven-project -d javaVersion=21 \
+  -d dependencies=web,data-jpa,validation,security,actuator,postgresql,flyway \
+  -d groupId=com.exemple -d artifactId=blog -d name=blog -o blog.zip && unzip blog.zip
+# L'outil de ligne de commande officiel (Boot 3.5+) :
+sdk install springboot ; spring init --dependencies=web,data-jpa blog.zip
+./mvnw spring-boot:run          # http://localhost:8080
+./mvnw spring-boot:build-image  # image OCI via buildpacks (pas de Dockerfile a ecrire)
+\end{terminal}
+
+\begin{codeplain}
+src/main/java/com/exemple/blog/
+|-- BlogApplication.java                 @SpringBootApplication
+|-- api/
+|   |   |   |-- ArticleController.java           @RestController : le monde HTTP
+|   |   |   |-- dto/                             records de requete/reponse (+ mapper)
+|   |   |   '-- GlobalExceptionHandler.java      @RestControllerAdvice
+|-- domain/                              entites, regles, services : AUCUN import Spring ici
+|-- infra/
+|   |   |   |-- ArticleRepository.java           Spring Data (interface)
+|   |   |   '-- config/                          @Configuration (securite, HTTP client, Jackson, openapi)
+'-- src/test/java/...                     miroir : *Test (unites), *IT (integration)
+src/main/resources/
+|-- application.yml  application-dev.yml  application-prod.yml
+|-- db/migration/V1__init.sql
+'-- static/ , templates/ (si Thymeleaf)
+\end{codeplain}
+
+\section{Le conteneur de beans, en 30 lignes de t\^ete}
+
+\begin{codejava}
+@SpringBootApplication                // = @Configuration + @EnableAutoConfiguration + @ComponentScan
+public class BlogApplication {
+    public static void main(String[] args) {
+        var ctx = SpringApplication.run(BlogApplication.class, args);
+        // ctx.getBeanDefinitionCount()  -->  ~150 beans pour une app "vide" : c'est normal
+        for (String n : ctx.getBeanDefinitionNames()) { if (n.contains("DataSource")) System.out.println(n); }
+    }
+    @Bean
+    Clock horloge() { return Clock.systemDefaultZone(); }            // une methode = un bean
+    @Bean
+    @Profile("prod")
+    Filter corsProd() { /* ... */ }
+    @Bean
+    @ConditionalOnProperty(name = "blog.feature.export", havingValue = "true")
+    Exporteur exporteur() { return new ExporteurCsv(); }             // bean conditionnel
+}
+
+// L'injection : par constructeur, toujours (finale, testable, impossible d'oublier une dependance)
+@Service
+@RequiredArgsConstructor                 // Lombok ; sinon ecris le constructeur a la main
+class ServiceArticles {
+    private final ArticleRepository repo;
+    private final Journal journal;
+    private final Clock horloge;
+    // @Autowired sur les champs = lisibilite en moins, immuabilite en moins, tests plus lourds : a eviter.
+    // @Value / environnement : un composant @ConfigurationProperties (typ\'e) > des @Value parsemes.
+}
+
+// Scopes : singleton (defaut), prototype (nouvelle instance a chaque injection/getBean),
+// request / session / websocket (actifs uniquement dans un contexte web).
+// Le cycle de vie : constructeur -> @Autowired -> @PostConstruct (ou InitializingBean)
+//                   -> utilisation -> @PreDestroy -> DisposableBean.
+// Circulaires : Spring les refuse par defaut depuis Boot 2.6 ("circular reference") -- c'est un
+// signal de conception, pas un obstacle a franchir avec @Lazy.
+// Les extensions qui t'evitent du code : @ConfigurationProperties, @EventListener,
+// @Async (attention au pool), @Scheduled, @Cacheable (avec Caffeine/Redis), @Validated.
+\end{codejava}
+
+\section{Configuration : le fichier, les profils, le typage}
+
+\begin{codeconf}
+# application.yml
+spring:
+  application.name: blog
+  threads.virtual.enabled: true            # Boot 3.2+ : Tomcat sur threads virtuels
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/blog}
+    username: ${DB_USER:blog}
+    password: ${DB_PASS:}                  # jamais de mot de passe en dur dans le depot
+    hikari: { maximum-pool-size: 10, leak-detection-threshold: 20000 }
+  jpa:
+    open-in-view: false
+    hibernate.ddl-auto: validate
+    properties.hibernate.jdbc.batch_size: 50
+  flyway: { enabled: true, locations: classpath:db/migration }
+  security.user.name: ${admin}             # (dev seulement ; en prod : OIDC ou base)
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+  error.include-message: never
+  compression.enabled: true
+  forward-headers-strategy: framework       # derriere un proxy : sinon les URLs sont fausses
+management:
+  endpoints.web.exposure.include: health,info,prometheus,metrics
+  endpoint.health.show-details: when_authorized
+blog:
+  upload: { taille-max: 5MB, dossiers-autorises: [image, pdf] }
+  rate-limit: { par-minute: 120, burst: 40 }
+---
+spring.config.activate.on-profile: dev
+logging.level.com.exemple: DEBUG
+spring.jpa.show-sql: true
+---
+spring.config.activate.on-profile: prod
+logging.structured.format.console: ecs          # ou gelf/ecs/otel : des logs que Logstash avale
+management.endpoint.health.probes.enabled: true # /actuator/health/readiness + /liveness
+\end{codeconf}
+
+\begin{codejava}
+// La configuration typee : la seule facon propre de lire du YAML
+@ConfigurationProperties(prefix = "blog")
+@Validated
+record ConfigBlog(@NotNull Upload upload, @NotNull RateLimit rateLimit) {
+    record Upload(@DataSize.Max(10_000_000) long tailleMax, List<String> dossiersAutorises) { }
+    record RateLimit(@Min(1) int parMinute, @Min(1) int burst) { }
+}
+// Enregistre : @EnableConfigurationProperties(ConfigBlog.class) ou @ConfigurationPropertiesScan.
+// 3 sources, dans l'ordre de priorite (la plus forte ecrase) :
+//   ligne de commande (--blog.rate-limit.par-minute=50) > variables d'env (BLOG_RATELIMIT_...) >
+//   application-{profil}.yml > application.yml > valeurs par defaut du @Bean.
+// Secret : jamais dans le YAML versionne ; env, Vault, AWS Secrets, ou un fichier monte en lecture seule.
+\end{codejava}
+
+\section{MVC~: contr\^oleurs, validation, erreurs, contenu}
+
+\begin{codejava}
+@RestController
+@RequestMapping(path = "/api/articles", produces = MediaType.APPLICATION_JSON_VALUE)
+public class ArticleController {
+    private final ServiceArticles service;
+    public ArticleController(ServiceArticles service) { this.service = service; }
+
+    @GetMapping
+    @Cacheable(value = "articlesPage")                       // si tu as mis un cache
+    public Page<ArticleResume> liste(@RequestParam(defaultValue = "0") @Min(0) int page,
+                                     @RequestParam(defaultValue = "20") @Min(1) @Max(100) int taille,
+                                     @RequestParam(required = false) Statut statut,
+                                     @PageableDefault(size = 20, sort = "publieLe", direction = Sort.Direction.DESC)
+                                     Pageable pageable) {
+        return service.rechercher(statut, pageable);
+    }
+
+    @GetMapping("/{id}")
+    public ArticleDetail detail(@PathVariable @Positive long id) { return service.detail(id).orElseThrow(() -> new Introuvable(id)); }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ResponseEntity<ArticleResume> creer(@Valid @RequestBody CreerArticle requete,
+                                               @AuthenticationPrincipal UtilisateurCourant moi,
+                                               UriComponentsBuilder uri) {
+        var cree = service.creer(requete, moi.id());
+        return ResponseEntity.created(uri.path("/api/articles/{id}").buildAndExpand(cree.id()).toUri()).body(cree);
+    }
+
+    @PatchMapping("/{id}")
+    public ArticleResume modifier(@PathVariable long id, @Valid @RequestBody ModifierArticle requete) { return service.modifier(id, requete); }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void supprimer(@PathVariable long id, @RequestHeader(name = "If-Match", required = false) String etag) { }
+
+    // Fichiers : upload multipart + telechargement streaming (le Content-Disposition fait le nom)
+    @PostMapping(path = "/{id}/illustration", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public void illustration(@PathVariable long id, @RequestPart MultipartFile fichier) throws IOException {
+        service.enregistrerIllustration(id, fichier.getOriginalFilename(), fichier.getSize(), fichier.getInputStream());
+    }
+    @GetMapping(path = "/{id}/illustration", produces = MediaType.IMAGE_PNG_VALUE)
+    public ResponseEntity<InputStreamResource> image(@PathVariable long id) {
+        return ResponseEntity.ok().contentType(MediaType.IMAGE_PNG).eTag("\"" + service.etag(id) + "\"")
+                .cacheControl(CacheControl.maxAge(Duration.ofDays(7)).cachePublic()).body(new InputStreamResource(service.flux(id)));
+    }
+    // N\'egociation de contenu : @RequestMapping(produces = "text/csv") ou un HttpMessageConverter maison.
+}
+
+// La validation : annotations + groupes + validation croisee
+public record CreerArticle(
+        @NotBlank @Size(min = 3, max = 160) String titre,
+        @NotBlank @Size(max = 100_000) String corps,
+        @Size(max = 8) List<@Pattern(regexp = "[a-z0-9\\-]{1,30}") String> tags,
+        @Nullable @Future Instant publieLe) { }
+@Target({ FIELD, TYPE }) @Retention(RUNTIME) @Constraint(validatedBy = SlugUnique.class)
+@interface SlugUnique { String message() default "slug deja pris" ; Class<?>[] groups() default { } ; Class<? extends Payload>[] payload() default { } }
+class SlugUnique implements ConstraintValidator<SlugUnique, String> {
+    @Autowired transient ArticleRepository repo;              // seul endroit ou @Autowired est tolere
+    public boolean isValid(String slug, ConstraintValidatorContext c) { return slug == null || !repo.existsBySlug(slug); }
+}
+
+// Erreurs : une classe, un format, partout. (Boot 3 expose deja /error en ProblemDetail.)
+@RestControllerAdvice
+class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    ProblemDetail surValidation(MethodArgumentNotValidException e) {
+        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_ENTITY, "Donnees invalides");
+        pd.setTitle("Validation"); pd.setProperty("erreurs", e.getFieldErrors().stream()
+                .collect(Collectors.toMap(FieldError::getField, f -> defaultString(f.getDefaultMessage()), (a, b) -> a, LinkedHashMap::new)));
+        return pd;
+    }
+    @ExceptionHandler(Introuvable.class)
+    ProblemDetail surIntrouvable(Introuvable e) {
+        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage()); pd.setTitle("Introuvable"); return pd;
+    }
+    @ExceptionHandler(ErreurDomaine.class)
+    ResponseEntity<ProblemDetail> surDomaine(ErreurDomaine e) { /* map code -> statut */ }
+    @ExceptionHandler(Exception.class)
+    ProblemDetail surImprevu(Exception e, HttpServletRequest req) {
+        log.error("non ger\'e uri={}", req.getRequestURI(), e);
+        var pd = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Erreur interne");
+        pd.setProperty("trace", currentTraceId());            // un id a donner au support, pas une stack
+        return pd;
+    }
+    // Les convertisseurs d'URL/JSON (MethodArgumentTypeMismatch, HttpMessageNotReadable) merite
+    // aussi un handler : sinon le client recoit un 400 vide et inexplicable.
+}
+\end{codejava}
+
+\section{Spring Data~: les repos qui font le travail}
+
+\begin{codejava}
+public interface ArticleRepository extends JpaRepository<ArticleEntity, Long>, JpaSpecificationExecutor<ArticleEntity> {
+    Optional<ArticleEntity> findBySlug(String slug);
+    List<ArticleEntity> findByStatutOrderByPublieLeDesc(Statut statut, Pageable page);
+    @Query("""
+           select a from ArticleEntity a left join fetch a.tags
+           where (:statut is null or a.statut = :statut)
+             and (:depuis is null or a.publieLe >= :depuis)
+             and lower(a.titre) like lower(concat('%', :q, '%'))
+           order by a.publieLe desc
+           """)
+    Page<ArticleEntity> rechercher(@Param("q") String q, @Param("statut") Statut statut,
+                                   @Param("depuis") Instant depuis, Pageable pageable);
+    @Query(value = "select * from articles where to_tsvector('french', titre || ' ' || corps) @@ plainto_tsquery('french', :q)",
+           countQuery = "select count(*) from articles where ...", nativeQuery = true)
+    Page<ArticleEntity> pleineTexte(@Param("q") String q, Pageable pageable);
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update ArticleEntity a set a.vues = a.vues + 1 where a.id = :id")
+    int incrementerVues(@Param("id") long id);
+    boolean existsBySlug(String slug);
+    @EntityGraph(attributePaths = { "tags", "auteur" }) List<ArticleEntity> findTop10ByStatutOrderByVuesDesc(Statut s);
+}
+// Projection fermee (Hibernate ne charge que ces colonnes) :
+interface Entete { Long getId(); String getTitre(); String getAuteurNom(); }
+@Query("select a.id as id, a.titre as titre, u.nom as auteurNom from ArticleEntity a join a.auteur u")
+Page<Entete> entetes(Pageable pageable);
+// Transactions : @Transactional au niveau service, readOnly = true sur les lectures ;
+// PROPAGATION_REQUIRES_NEW rarement, NEVER pour "pas de transaction ici".
+// Le piege : @Transactional appelee en interne (this.methode()) ne passe pas par le proxy ->
+// solution : injecter soi-meme (self), ou separer les classes.
+// Auditing : @EnableJpaAuditing + @CreatedDate/@LastModifiedBy sur des champs @CreatedBy.
+// Specifications ( predicats composables ) pour les filtres dynamiques ; Criteria API si tu es seul juge.
+// Spring Data JDBC (sans Hibernate, sans proxy) merite un coup d'oeil : souvent suffisant.
+\end{codejava}
+
+\section{Spring Security~: tout est un filtre}
+
+\begin{codejava}
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity                                    // @PreAuthorize / @PostAuthorize
+class SecurityConfig {
+    @Bean
+    SecurityFilterChain api(HttpSecurity http, JwtDecoder decoder, Limitateur limitateur) throws Exception {
+        http.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**").csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+            .cors(Customizer.withDefaults())
+            .securityContext(sc -> sc.requireExplicitSave(false))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET, "/api/articles/**", "/health", "/assets/**").permitAll()
+                .requestMatchers("/api/auth/**", "/v3/api-docs/**", "/swagger-ui/**").permitAll()
+                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/**").hasRole("OPS")
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated())
+            .oauth2ResourceServer(o -> o.jwt(j -> j.jwtAuthenticationConverter(rolesConverter())))
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(e -> e.authenticationEntryPoint(new BearerTokenAuthenticationEntryPoint())
+                                    .accessDeniedHandler(new BearerTokenAccessDeniedHandler()))
+            .headers(h -> h.contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'self'; frame-ancestors 'none'")))
+            .requiresChannel(c -> c.requestMatchers("/api/auth/**").requiresSecure())
+            .addFilterBefore(limitateur, RateLimitFilter.class)
+            .logout(l -> l.logoutUrl("/api/auth/logout").logoutSuccessHandler((q, r, a) -> r.setStatus(204)));
+        return http.build();
+    }
+    @Bean PasswordEncoder encoder() {
+        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();   // ou BCryptPasswordEncoder(12)
+    }
+    @Bean AuthenticationManager authManager(List<AuthenticationProvider> providers) { return new ProviderManager(providers); }
+    // Pour un resource server OIDC : spring.security.oauth2.resourceserver.jwt.issuer-uri suffit ;
+    // un decoder sur mesure se declare par JwtDecoders.fromIssuerLocation(URI).
+    // rolesConverter() : JWT -> GrantedAuthority en lisant un claim ("roles" ou "groups")
+    @Bean
+    CorsConfigurationSource cors() {
+        var c = new CorsConfiguration();
+        c.setAllowedOrigins(List.of("https://blog.exemple.fr"));
+        c.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        c.setAllowedHeaders(List.of("Authorization", "Content-Type", "If-Match"));
+        c.setAllowCredentials(true); c.setMaxAge(3600L);
+        var src = new UrlBasedCorsConfigurationSource(); src.registerCorsConfiguration("/api/**", c); return src;
+    }
+}
+// Methode : @PreAuthorize("hasRole('ADMIN') or @services.proprietaire(#id, authentication)")
+// Form login + sessions (si c'est un site, pas une API) : formLogin(...).loginProcessingUrl("/login")
+//   + CsrfTokenRequestAttributeHandler ; password manager avec DelegatingPasswordEncoder ({argon2}...)
+//   => le prefixe dans la base choisit l'algo : c'est ainsi qu'on fait migrer les vieux hashes.
+// OAuth2 client (se connecter avec Google/GitHub) : spring.security.oauth2.client.registration.*
+// Les pieges : CSRF active par defaut sur les mutations ; un permitAll oublie sur /actuator/env
+//   (fuite de secrets) ; hasRole vs hasAuthority (le prefixe ROLE_) ; un AuthenticationManager
+//   chiffre a la main dans le controleur au lieu de deleguer.
+\end{codejava}
+
+\section{Tester Spring~: les quatre niveaux}
+
+\begin{codejava}
+@ImportTestcontainers(PgTest.class)
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
+@AutoConfigureMockMvc
+class ArticleApiIT {
+    @Autowired MockMvc mvc;
+    @Autowired ArticleRepository repo;
+    @LocalServerPort int port;
+
+    @Test @WithMockUser(roles = "AUTEUR")
+    void creer_un_article_repond_201_et_le_rend() throws Exception {
+        var corps = """
+                {"titre":"Bien demarrer","corps":"...","tags":["java"]}""";
+        var res = mvc.perform(post("/api/articles").contentType(APPLICATION_JSON).content(corps))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.titre").value("Bien demarrer"))
+                .andReturn();
+        var location = res.getResponse().getHeader("Location");
+        mvc.perform(get(location)).andExpect(status().isOk()).andExpect(jsonPath("$.statut").value("BROUILLON"));
+    }
+    @Test void validation_renvoie_les_champs_en_erreur() throws Exception {
+        mvc.perform(post("/api/articles").contentType(APPLICATION_JSON).content("{\"titre\":\"x\"}"))
+           .andExpect(status().isUnprocessableEntity())
+           .andExpect(jsonPath("$.erreurs.titre").exists());
+    }
+    @Test void non_authentifie_renvoie_401() throws Exception {
+        mvc.perform(get("/api/mes-articles")).andExpect(status().isUnauthorized());
+    }
+    // Les tranches : @WebMvcTest(ArticleController.class) (service mocke) ; @DataJpaTest (repo, H2 ou
+    // conteneur) ; @JsonTest (serialisation) ; @RestClientTest (appels sortants, MockRestServiceServer).
+    // Reseaux sortants : @MockBean/Mockito sur le RestClient, ou WireMock ; jamais d'Internet en CI.
+    // Doc genere : springdoc-openapi + "mvn test" qui verifie que chaque route est decrite.
+    // Charge : Gatling (scala/java DSL) ou k6 -- un scenario de 30 s a 500 req/s, avec p95 < 250 ms.
+}
+\end{codejava}
+
+\section{Actuator, natif, et les limites du cadre}
+
+\begin{terminal}
+curl localhost:8080/actuator/health      # {"status":"UP"} + db, ping, diskSpace (si autorise)
+curl localhost:8080/actuator/info
+curl -s localhost:8080/actuator/metrics/http.server.requests | jq .
+curl localhost:8080/actuator/metrics/http.server.requests?tag=uri:/api/articles   # details
+curl localhost:8080/actuator/env ; curl localhost:8080/actuator/configprops        # A NE JAMAIS exposer
+curl localhost:8080/actuator/scheduledtasks ; curl localhost:8080/actuator/threaddump
+curl -X POST localhost:8080/actuator/loggers/com.exemple -d '{"configuredLevel":"DEBUG"}' -H 'Content-Type: application/json'
+# En prod : exposer health, info, prometheus seulement ; proteger le reste (hasRole('OPS') ci-dessus).
+# Boot 3 : /actuator/health/liveness et /readiness -> Kubernetes sonde dessus.
+\end{terminal}
+
+\begin{codeconf}
+<!-- Image native : Boot 3 genere les hints, mais c'est un contrat (pas de reflexion sauvage) -->
+<plugin><groupId>org.graalvm.buildtools</groupId><artifactId>native-maven-plugin</artifactId></plugin>
+<profile><id>native</id><build><plugins>
+  <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId>
+    <configuration><image><builder>paketobuildpacks/builder-jammy-base:latest</builder></image></configuration></plugin>
+</plugins></build></profile>
+\end{codeconf}
+
+\begin{terminal}
+./mvnw -Pnative native:compile          # ~5 min, RAM genereuse necessaire
+du -h target/blog ; ./target/blog &     # demarrage en ~0,1 s ; ~60 Mo de RSS
+./mvnw -Dspring.aot.enabled=true test   # verifier le AOT avant de builder
+./mvnw processAotResources              # les hints de reflexion generes
+\end{terminal}
+
+\begin{tablez}[p{0.3\textwidth}X]
+  \headrow Situations o\`u Spring est le bon choix \& Pourquoi \\
+  \midrule
+  application d'entreprise, \'equipe de 3 \`a 30 \& tout est standardis\'e, la revue et l'onboarding sont faciles \\
+  besoin de Security/Data/Transaction/AMQP/Kafka \& ces briques sont les mieux finies du march\'e JVM \\
+  int\'egrations (LDAP, OAuth2, JMS, mail, ws) \& starters + docs + r\'eponses Stack Overflow \\
+\end{tablez}
+Et l'inverse~: un microservice \`a 4 routes et 2 requ\^etes SQL, un CLI, une fonction serverless \`a
+d\'emarrage critique, une \'equipe qui veut z\'ero magie~: un Javalin/Helidon + Hikari + Flyway bien
+rang\'es fait le m\^eme travail avec 5 fois moins de d\'ependances. Spring n'est pas une obligation~;
+c'est un pari sur l'\'ecosyst\`eme.
+
+\begin{exercice}
+\begin{enumerate}
+  \item Reprends le projet du chapitre~10 (API Javalin) et porte-le sur Spring Boot~: la m\^eme API,
+        les m\^emes tests. Note ce que Boot t'a \'evit\'e, et ce que Boot t'a impos\'e.
+  \item Ajoute Flyway et une entit\'e JPA~: puis active \verb|ddl-auto=validate| et v\'erifie que Boot
+        refuse de d\'emarrer si tu retires une colonne \`a la main~: c'est le filet que beaucoup n'ont jamais.
+  \item Mets la s\'ecurit\'e en place~: resource server OIDC contre Keycloak en conteneur (le
+        \verb|docker-compose| officiel fait 20 lignes)~: puis ajoute \verb|@PreAuthorize| et un test
+        par r\^ole (AUTEUR peut modifier son article, pas celui du voisin).
+  \item Fais tourner les 4 tranches de test sur la m\^eme application~: \verb|@WebMvcTest|,
+        \verb|@DataJpaTest|, \verb|@SpringBootTest|, et un test de contr\^ole d'architecture~: compare
+        les temps d'ex\'ecution et d\'ecide quoi garder dans la CI bloquante.
+  \item Configure l'observabilit\'e~: actuator + Prometheus + Grafana en local (compose), puis la
+        sonde Kubernetes de lecture~; casse volontairement la BDD et observe le passage \`a
+        \verb|/readiness| en \verb|OUT\_OF\_SERVICE|.
+  \item Compile en natif~: la plupart du temps il faudra ajouter
+        \verb|@RegisterReflectionForBinding(...)| ou hint de Jackson~: documente ce que la magie
+        t'avait \'epargn\'e. Compare RSS, d\'emarrage et d\'ebit apr\`es \'echauffement avec le mode JVM.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Spring Boot Reference --- \url{https://docs.spring.io/spring-boot/index.html}
+  \item Guides Spring (les ~90 \og ~Getting Started~ \fg{}) --- \url{https://spring.io/guides}
+  \item Spring Security architecture --- \url{https://docs.spring.io/spring-security/reference/servlet/architecture.html}
+  \item Spring Data JPA --- \url{https://docs.spring.io/spring-data/jpa/reference/} --- springdoc-openapi --- \url{https://springdoc.org/}
+  \item Testcontainers + Boot --- \url{https://docs.spring.io/spring-boot/reference/testing/testcontainers.html}
+  \item AOT/Natif --- \url{https://docs.spring.io/spring-boot/reference/aot/} --- Start --- \url{https://start.spring.io/}
+\end{itemize}
+\end{ressources}
+
+\index{Spring Boot}\index{auto-configuration}\index{Spring Data}\index{Spring Security}\index{actuator}

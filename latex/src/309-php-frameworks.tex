@@ -1,0 +1,341 @@
+% ============================================================================
+\chapter{Frameworks PHP~: Laravel, Symfony, et les autres}
+\label{ch-php-frameworks}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Situer les cadres PHP en 2026, et choisir sans dogme.
+  \item Reconna\^itre leurs concepts communs~: routage, DI, ORM, migrations, vues, files, tests.
+  \item \'Ecrire, dans chacun, le CRUD qu'on vient de faire \og ~\`a la main~ \fg{}, et mesurer le gain.
+  \item Comprendre les templates et l'\'ecosyst\`eme (bundles, packages, Forge, Octane...).
+  \item Savoir quand s'en passer, et comment migrer une application legacy vers l'un d'eux.
+\end{itemize}
+\end{objectif}
+
+\begin{note}
+Ce chapitre n'est pas un cours de Laravel ni de Symfony~: ces cadres ont chacun une
+documentation vaste et un livre entier leur serait consacr\'e. Il te donne la \textbf{carte}~:
+tu sauras o\`u chercher, et surtout, tout ce que tu as \'ecrit \og ~\`a la main~ \fg{} dans les chapitres
+pr\'ec\'edents porte un nom dans ces cadres. C'est cet aller-retour~: comprendre le m\'ecanisme,
+puis utiliser l'outil.
+\end{note}
+
+\section{Le paysage}
+
+\begin{tabz}{lXll}
+  \headrow \thd{Cadre} \& \thd{Ce qui le d\'efinit} \& \thd{Version} \& \thd{Lien} \\
+  \midrule
+  \link{Laravel}{https://laravel.com/} \& la productivit\'e~: Eloquent, Artisan, \'ecosyst\`eme \'enorme (Nova, Forge, Livewire, Inertia), tr\`es bonne documentation, le plus d'offres \og ~web agency~ \fg{}. \& 12 \& \url{https://laravel.com/docs} \\
+  \link{Symfony}{https://symfony.com/} \& les composants r\'eutilisables + un cadre~: rigueur, DI explicite, long support LTS, tr\`es pr\'esent en France/Europe et dans le secteur public. \& 7.x (6.4 LTS) \& \url{https://symfony.com/doc/current/index.html} \\
+  \link{Slim}{https://www.slimframework.com/} \& un routeur + PSR-7/15, rien d'autre~: id\'eal pour une API l\'eg\`ere. \& 4.x \& \url{https://www.slimframework.com/docs/} \\
+  \link{Laminas / Mezzio}{https://mezzio.dev/} \& PSR pur, modulaire, tr\`es typ\'e entreprise. \& --- \& \url{https://docs.laminas.dev/} \\
+  \link{CodeIgniter~4}{https://codeigniter.com/} \& l\'eger, simple, h\'eritage du mutualis\'e. \& 4.x \& \url{https://codeigniter.com/user_guide/} \\
+  \link{Yii~2}{https://www.yiiframework.com/} \& Gii (g\'en\'eration de CRUD), tr\`es rapide, populaire en Asie. \& 2.0 \& \url{https://www.yiiframework.com/doc/} \\
+  \link{Phalcon}{https://phalcon.io/} \& extension C~: performances brutes \'elev\'ees. \& 5.x \& \url{https://docs.phalcon.io/} \\
+  \link{CakePHP}{https://book.cakephp.org/} \& \og ~convention over configuration~ \fg{}, le doyen. \& 5.x \& \\
+  \link{WordPress}{https://wordpress.org/develop/} \& pas un cadre MVC, mais 40 \% du web~: l'API Plugin/Theme vaut le d\'etour pro. \& 6.x \& \url{https://developer.wordpress.org/} \\
+\end{tabz}
+
+\section{Le dictionnaire commun~: le m\^eme objet, trois noms}
+
+\begin{tabz}{lXXX}
+  \headrow \thd{Concept} \& \thd{En PHP nu (tes chapitres)} \& \thd{Laravel} \& \thd{Symfony} \\
+  \midrule
+  Point d'entr\'ee unique \& \verb|public/index.php| \& \verb|public/index.php| + \verb|bootstrap/app.php| \& \verb|public/index.php| + \verb|Kernel| \\
+  Routage \& ta table \verb|\$routes| \& \verb|routes/web.php|, \verb|Route::get()| \& attributs \verb|\#[Route]| sur un contr\^oleur \\
+  Contr\^oleur \& ta fonction \& \verb|app/Http/Controllers| \& \verb|src/Controller| \\
+  Injection de d\'ependances \& ton conteneur maison \& le conteneur/service container auto-wired \& \verb|services.yaml| + autoconfigure \\
+  ORM \& ton d\'ep\^ot PDO \& Eloquent (ActiveRecord) \& Doctrine ORM (Data Mapper) \\
+  Migrations \& Phinx \& \verb|php artisan make:migration| \& \verb|bin/console doctrine:migrations:migrate| \\
+  Validation \& ton \verb|Valideur| \& Form Requests + \verb|validate()| \& symfony/validator + attributs \\
+  Vues \& \verb|require| + \'echappement \& Blade \& Twig \\
+  Journal \& \verb|error\_log| \& \verb|Log::channel()| \& Monolog (c'est un composant Symfony) \\
+  Files d'attente \& Redis + cron \& \verb|dispatch()| + Horizon \& Messenger + transport \\
+  T\^aches planifi\'ees \& crontab \& scheduler \& Messenger scheduled tasks \\
+  Tests \& PHPUnit \& \verb|php artisan test| (Pest par d\'efaut) \& PHPUnit + \verb|WebTestCase|/Panther \\
+\end{tabz}
+
+\subsection{Le m\^eme CRUD dans les trois styles}
+
+\begin{codephp}
+<?php
+// ---------- LARAVEL : routes/api.php
+use App\Http\Controllers\ArticleController;
+Route::apiResource('articles', ArticleController::class)->parameters(['articles' => 'slug']);
+
+// ---------- LARAVEL : ArticleController.php
+namespace App\Http\Controllers;
+
+use App\Http\Requests\StoreArticle;
+use App\Models\Article;
+
+class ArticleController extends Controller
+{
+    public function index(): \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+    {
+        return Article::with('auteur:id,nom,email')          // evite le N+1
+            ->where('statut', 'publie')
+            ->latest('publie_le')
+            ->paginate(20)
+            ->through(fn (Article $a) => ArticleResource::make($a));
+    }
+
+    public function store(StoreArticle $request): \Symfony\Component\HttpFoundation\Response
+    {
+        $article = Article::create($request->validated() + ['auteur_id' => $request->user()->id]);
+        return response()->json(ArticleResource::make($article), 201)
+            ->header('Location', route('articles.show', $article));
+    }
+}
+
+// ---------- LARAVEL : StoreArticle.php (la validation devient un objet reutilisable)
+class StoreArticle extends \Illuminate\Foundation\Http\FormRequest
+{
+    public function rules(): array
+    {
+        return [
+            'titre' => ['required', 'string', 'min:3', 'max:160'],
+            'corps' => ['required', 'string', 'min:20', 'max:100000'],
+            'tags' => ['array', 'max:12'],
+            'tags.*' => ['string', 'max:30', 'distinct'],
+        ];
+    }
+}
+
+// ---------- LARAVEL : Models/Article.php (ActiveRecord : le modele porte la persistance)
+class Article extends \Illuminate\Database\Eloquent\Model
+{
+    protected $fillable = ['titre', 'corps', 'slug', 'statut', 'publie_le', 'auteur_id'];
+    protected $casts = ['publie_le' => 'datetime', 'tags' => 'array'];
+
+    public function auteur(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    { return $this->belongsTo(Auteur::class); }
+    public function commentaires(): \Illuminate\Database\Eloquent\Relations\HasMany
+    { return $this->hasMany(Commentaire::class)->where('approuve', true); }
+
+    public function scopePublies($q) { return $q->where('statut', 'publie'); }
+}
+\end{codephp}
+
+\begin{codephp}
+<?php
+// ---------- SYMFONY : src/Controller/ArticleController.php
+namespace App\Controller;
+
+use App\Entity\Article;
+use App\Repository\ArticleRepository;
+use App\Form\ArticleType;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\{Request, Response, JsonResponse};
+use Symfony\Component\Routing\Attribute\{Route, Method};
+use Symfony\Component\Validator\Constraints as Assert;
+
+final class ArticleController extends AbstractController
+{
+    public function __construct(private readonly ArticleRepository $articles) {}
+
+    #[Route('/api/articles', name: 'api_articles', methods: ['GET'])]
+    public function index(Request $request): JsonResponse
+    {
+        $page = max(1, (int) $request->query->getInt('page', 1));
+        $items = $this->articles->parPage($page, min(100, max(1, $request->query->getInt('limite', 20))));
+        return $this->json([
+            'items' => $items,
+            'page' => $page,
+            'total' => $this->articles->compterPublies(),
+        ], headers: ['cache-control' => 'public, max-age=30']);
+    }
+
+    #[Route('/articles/new', name: 'article_new', methods: ['GET', 'POST'])]
+    public function new(Request $request, EntityManagerInterface $em): Response
+    {
+        $article = new Article();
+        $form = $this->createForm(ArticleType::class, $article);
+        $form->handleRequest($request);
+        if ($form->isSubmitted() && $form->isValid()) {
+            $article->publier(new \DateTimeImmutable());
+            $em->persist($article);
+            $em->flush();                       // une seule ecriture, la transaction est implicite
+            $this->addFlash('succes', 'Article cree.');
+            return $this->redirectToRoute('article_voir', ['slug' => $article->getSlug()]);
+        }
+        return $this->render('article/new.html.twig', ['form' => $form]);
+    }
+}
+
+// ---------- SYMFONY : src/Entity/Article.php (Data Mapper : l'entite est pure)
+#[\Doctrine\ORM\Mapping\Entity]
+#[\Doctrine\ORM\Mapping\Table(name: 'articles')]
+#[\Doctrine\ORM\Mapping\HasLifecycleCallbacks]
+class Article
+{
+    #[\Doctrine\ORM\Mapping\Id, \Doctrine\ORM\Mapping\GeneratedValue, \Doctrine\ORM\Mapping\Column]
+    private ?int $id = null;
+
+    #[Assert\Length(min: 3, max: 160)]
+    #[\Doctrine\ORM\Mapping\Column(length: 191, unique: true)]
+    private string $slug = '';
+
+    /** @phpstan-ignore-next-line */
+    #[\Doctrine\ORM\Mapping\ManyToOne(targetEntity: Utilisateur::class)]
+    #[\Doctrine\ORM\Mapping\JoinColumn(nullable: false)]
+    private ?Utilisateur $auteur = null;
+
+    public function publier(\DateTimeImmutable $quand): void
+    {
+        $this->publieLe = $quand;
+        $this->statut = Statut::Publie;
+    }
+    /* getters/setters : php bin/console make:entity les genere */
+}
+\end{codephp}
+
+\begin{codephp}
+<?php
+// ---------- Slim 4 : le "presque rien" pour une API
+use Psr\Http\Message\ServerRequestInterface as Requete;
+use Psr\Http\Message\ResponseInterface as Reponse;
+use Slim\Factory\AppFactory;
+
+$app = AppFactory::create();
+$app->addBodyParsingMiddleware();
+$app->addRoutingMiddleware();
+$app->addErrorMiddleware(true, true, true);          // affiche les details en dev
+
+$app->get('/api/v1/articles', function (Requete $r, Reponse $res, array $args) use ($depot) {
+    $q = $r->getQueryParams();
+    $donnees = $depot->page((int) ($q['page'] ?? 1), min(100, (int) ($q['limite'] ?? 20)));
+    $res->getBody()->write(json_encode($donnees, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+    return $res->withHeader('content-type', 'application/json');
+});
+$app->run();
+\end{codephp}
+
+\section{Les templates~: Blade et Twig}
+
+\begin{codeplain}
+{{-- Blade (Laravel) --}}
+@extends('layouts.app')
+@section('title', $article->titre)
+
+@section('content')
+    <article>
+        <h1>{{ $article->titre }}</h1>          {{-- echappe par defaut ; {!! !!} = brut (dangereux) --}}
+        <p>{{ Str::limit($article->extrait, 200) }}</p>
+        @can('update', $article)
+            <a href="{{ route('articles.edit', $article) }}">Modifier</a>
+        @endcan
+        @foreach ($article->tags as $tag)
+            <x-ui.badge>{{ $tag->nom }}</x-ui.badge>       {{-- un composant Blade --}}
+        @endforeach
+        @empty($article->commentaires)
+            <p>Aucun commentaire.</p>
+        @endempty
+    </article>
+@endsection
+\end{codeplain}
+
+\begin{codeplain}
+{# Twig (Symfony) #}
+{% extends 'base.html.twig' %}
+{% block title %}{{ article.titre }}{% endblock %}
+{% block content %}
+  <article>
+    <h1>{{ article.titre }}</h1>                          {# echappe par defaut #}
+    <p>{{ article.extrait|u.truncate(200, '...') }}</p>
+    {% is_granted('update', article) %}
+      <a href="{{ path('article_edit', { slug: article.slug }) }}">Modifier</a>
+    {% endis_granted %}
+    {% for tag in article.tags %}
+      {% include 'components/_badge.html.twig' with { label: tag.nom } %}
+    {% else %}
+      <p>Aucun tag.</p>
+    {% endfor %}
+    {{ form_start(form) }}{{ form_end(form) }}
+  </article>
+{% endblock %}
+\end{codeplain}
+
+\section{Les outils qui accompagnent chaque cadre}
+
+\begin{tabz}{XX}
+  \headrow \thd{Laravel} \& \thd{Symfony} \\
+  \midrule
+  \verb|artisan| (g\'en\'erateurs, migrations, tinker) \& \verb|bin/console| (+ debug:router, debug:container) \\
+  \link{Eloquent}{https://laravel.com/docs/eloquent} \& \link{Doctrine}{https://www.doctrine-project.org/projects/orm.html} \\
+  \link{Livewire}{https://livewire.laravel.com/} / \link{Inertia}{https://inertiajs.com/} (interactive sans SPA) \& \link{Stimulus + Turbo (Hotwire)}{https://symfony.com/doc/current/frontend/htmx.html} \\
+  \link{Forge}{https://forge.laravel.com/} / \link{Envoyer}{https://envoyer.io/} (d\'eploiement) \& \link{Symfony~Cloud}{https://symfony.com/cloud/} (PaaS officiel) \\
+  \link{Octane}{https://laravel.com/docs/octane} (FrankenPHP/Swoole, ~5x d\'ebit) \& \link{FrankenPHP}{https://frankenphp.dev/} (app worker, idem, et c'est un serveur web \`a lui seul) \\
+  Nova (back-office), Horizon (files), Reverb (WebSocket) \& Blackfire, Messenger, UX, Flex, MakerBundle \\
+  \link{Name~of~Zen~docs}{https://laravel-news.com/} \& \url{https://symfony.com/blog/} + la newsletter \\
+\end{tabz}
+
+\begin{astuce}
+\textbf{FrankenPHP} m\'erite ton attention~: un serveur applicatif PHP (fork de Caddy) qui garde le
+processus vivant~: d\'emarrage d'app quasi instantan\'e, mont\'ee en d\'ebit, mont\'ees de charge \og ~\`a la
+Node~ \fg{}, et int\'egration avec Mercure/SSE. C'est la nouveaut\'e d'infrastructure PHP la plus
+int\'eressante depuis longtemps, et elle marche avec Laravel (Octane), Symfony et Slim.
+\end{astuce}
+
+\section{Choisir --- et migrer}
+
+\begin{enumerate}
+  \item \textbf{Tu veux livrer vite, seul, avec peu de lignes~?} Laravel. La communaut\'e est tr\`es
+        active, presque tout existe d\'ej\`a en paquet.
+  \item \textbf{Tu vises une entreprise, un march\'e fran\c{c}ais/europ\'een, un projet \`a longue dur\'ee de
+        vie, ou tu aimes le typage fort~?} Symfony. Ses composants sont utilisables sans le cadre.
+  \item \textbf{API minuscule, ou tu veux garder la main~?} Slim, ou ton noyau du chapitre~7.
+  \item \textbf{Site \'editorial, clients non techniques~?} WordPress (avec Roots Bedrock + Acorn si tu veux du moderne). C'est un m\'etier \`a part~; ne le m\'eprise pas, mais ne l'appelle pas un cadre.
+  \item \textbf{Portfolio et apprentissage~?} Fais le m\^eme projet en PHP nu, puis en Laravel~: tu
+        sauras expliquer \emph{pourquoi} le cadre est utile. C'est exactement ce qui distingue un
+        d\'eveloppeur d'un utilisateur de tutoriel.
+\end{enumerate}
+
+\etape{Migration d'un projet legacy~: la strat\'egie r\'ealiste}
+\begin{enumerate}
+  \item Ne r\'e\'ecris rien d'abord~: ajoute \verb|declare(strict\_types=1)|, Composer, PSR-4,
+        PHPStan, et les tests sur le comportement actuel (tests \og ~de caract\'erisation~ \fg{}).
+  \item Extrais le routeur et la liaison vers les contr\^oleurs (une table, une fonction par page).
+  \item Introduis un conteneur de service~; remplace les \verb|new| globaux et les
+        \verb|include| par de l'injection~; enrobe l'acc\`es \`a la base dans un d\'ep\^ot.
+  \item Remplace les \verb|echo| \'epars par un moteur de template (Twig~: il s'installe seul).
+  \item Garde l'application \og ~enrob\'ee~ \fg{} dans un cadre (Symfony/Laravel peuvent servir un script
+        legacy via une route)~: les pages migrent une par une, pendant des mois, sans gros plan.
+\end{enumerate}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Installe Laravel (\cmd{composer create-project laravel/laravel blog}) et Symfony
+        (\cmd{composer create-project symfony/skeleton:"7.2.\*" blog}), fais tourner les deux,
+        et trouve la route d'accueil de chacun dans le code~: tu dois pouvoir dire o\`u le
+        fichier\ est et pourquoi.
+  \item Dans Laravel~: mod\`ele \verb|Article| + migration + factory + seeder, contr\^oleur resource,
+        validation par FormRequest, ressource JSON, paginate, autorisation avec Policies~;
+        10 tests (feature tests avec SQLite en m\'emoire).
+  \item Dans Symfony~: m\^eme chose avec MakerBundle (\verb|make:entity|, \verb|make:controller|),
+        Doctrine fixtures, formulaire, validation par attributs, un test fonctionnel avec
+        \verb|WebTestCase|.
+  \item Compare la production~: nombre de fichiers, lignes \'ecrites, temps pass\'e, courbe
+        d'apprentissage~; r\'edige une d\'ecision argument\'ee dans \verb|ANALYSE.md| (c'est un livrable
+        que les recruteurs lisent).
+  \item Ajoute dans le projet Laravel une file d'attente~: \`a la publication, envoyer un email en
+        arri\`ere-plan avec \verb|ShouldQueue|, un job retry et un \'echec visible dans Horizon.
+  \item D\'eploie le projet Symfony ou Laravel sur un VPS avec Deployer ou Ploi~: z\'ero
+        \verb|git pull| manuel, migrations automatiques, OPcache invalid\'e, HTTPS, et rollback.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Laravel --- docs, Laracasts, News --- \url{https://laravel.com/docs/12.x}, \url{https://laracasts.com/}, \url{https://laravel-news.com/}
+  \item Symfony --- les guides (excellents, en fran\c{c}ais partiel) --- \url{https://symfony.com/doc/current/page_blocks.html} \\
+        et la formation gratuite Open Classrooms --- \url{https://openclassrooms.com/fr/search?query=symfony}
+  \item \link{Symfony~Casts}{https://symfonycasts.com/} (les meilleures vid\'eos de l'\'ecosyst\`eme, beaucoup sont gratuites)
+  \item \link{Laravel~Daily~Learn}{https://laraveldaily.com/learn}, \link{Relay}{https://laravelrelay.app/}
+  \item Comparatifs honn\^etes et r\'ecents --- \url{https://packagist.org/stats/} (parts d'usage des paquets)
+\end{itemize}
+\end{ressources}
+
+\index{Laravel}\index{Symfony}\index{Blade}\index{Twig}\index{migration legacy}

@@ -1,0 +1,117 @@
+<section class="chap" id="ressources">
+<h2><span class="n">·</span>Ressources&nbsp;: la bibliothèque de travail</h2>
+
+<p>Un développeur professionnel ne sait pas tout&nbsp;: il sait <em>où</em> vérifier en dix secondes.
+Cette liste est courte parce qu'elle est triée — la documentation officielle d'abord, deux ou trois
+ouvrages par langage, et rien d'autre. Tout ce qui est « formation vidéo à 997&nbsp;€ » ou « la
+méthode secrète pour être senior en 30 jours » est hors liste, volontairement.</p>
+
+<h3 id="les-indispensables">Les dix pages à mettre en favori</h3>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Ressource</th><th>Adresse</th><th>Ce que tu y cherches</th></tr></thead>
+<tbody>
+<tr><td>MDN JavaScript</td><td><a href="https://developer.mozilla.org/fr/docs/Web/JavaScript">developer.mozilla.org/fr/docs/Web/JavaScript</a></td>
+<td>La référence du langage, en français, avec les tableaux de compatibilité. Commence par là, toujours.</td></tr>
+<tr><td>ECMA-262</td><td><a href="https://tc39.es/ecma262/">tc39.es/ecma262</a></td>
+<td>La norme. À lire une fois pour comprendre ce qu'est une spécification, pas tous les jours.</td></tr>
+<tr><td>Node.js API</td><td><a href="https://nodejs.org/api/">nodejs.org/api</a></td>
+<td><code>fs</code>, <code>http</code>, <code>test</code>, <code>worker_threads</code>, et la matrice des
+versions supportées (LTS actives et dates de fin de vie).</td></tr>
+<tr><td>Manuel PHP</td><td><a href="https://www.php.net/docs.php">php.net/docs.php</a></td>
+<td>Chaque fonction, chaque classe, chaque directive <code>php.ini</code>. La version anglaise est
+à jour&nbsp;; la française traîne.</td></tr>
+<tr><td>PHP-FIG (PSR)</td><td><a href="https://www.php-fig.org/psr/">php-fig.org/psr</a></td>
+<td>PSR-4 (autoloading), PSR-12 (style), PSR-7/11/15 (requête, conteneur, erreurs). C'est le latin
+commun de l'écosystème.</td></tr>
+<tr><td>Javadoc JDK 21</td><td><a href="https://docs.oracle.com/en/java/javase/21/docs/api/">docs.oracle.com/en/java/javase/21/docs/api</a></td>
+<td>Collections, concurrent, NIO, et la sémantique exacte de chaque méthode.</td></tr>
+<tr><td>OpenJDK JEPs</td><td><a href="https://openjdk.org/projects/jep/">openjdk.org/projects/jep</a></td>
+<td>Pourquoi une nouveauté existe (records, virtual threads, pattern matching). Les JEP se lisent
+comme des notes de design.</td></tr>
+<tr><td>MySQL 8.4 Reference</td><td><a href="https://dev.mysql.com/doc/refman/8.4/en/">dev.mysql.com/doc/refman/8.4/en</a></td>
+<td>Types, index, <code>EXPLAIN</code>, isolation, verrouillage. Le chapitre sur l'optimiseur vaut le
+détour avant de toucher à la production.</td></tr>
+<tr><td>OWASP Cheat Sheet Series</td><td><a href="https://cheatsheetseries.owasp.org/">cheatsheetseries.owasp.org</a></td>
+<td>Authentification, XSS, CSRF, upload, secrets, logging. Une fiche par soir pendant deux semaines.</td></tr>
+<tr><td>Can I use / MDN Baseline</td><td><a href="https://caniuse.com/">caniuse.com</a></td>
+<td>Vérifier une fonctionnalité navigateur avant de l'adopter (ou de la refuser).</td></tr>
+</tbody></table></div>
+
+<h3 id="livres">Les livres qui valent leur prix</h3>
+
+<div class="grille">
+  <div class="carte"><h4>JavaScript</h4>
+    <p><em>You Don't Know JS Yet</em> (Kyle Simpson, gratuit en ligne) — la sémantique&nbsp;: types,
+    portée et fermetures, <code>this</code> et classes, et l’asynchrone. <em>Effective JavaScript</em>
+    (David Herman) — soixante-huit items courts. <em>JavaScript: The Definitive Guide</em> 7e
+    (Flanagan) — l'ouvrage de chevet.</p></div>
+  <div class="carte"><h4>Node</h4>
+    <p><em>Node.js Design Patterns</em> (Casciaro, Ippolito) — streams, concurrence, modules,
+    architectures. Le seul livre Node qu'on relit deux fois.</p></div>
+  <div class="carte"><h4>PHP</h4>
+    <p><em>PHP 8 Objects, Patterns, and Practice</em> (Matt Zandstra) — la POO et les patterns en PHP
+    réel. <em>PHP: The Right Way</em> (en ligne) — l'état de l'art communautaire, court et à jour.</p></div>
+  <div class="carte"><h4>Java</h4>
+    <p><em>Effective Java</em> 3e (Bloch) — quatre-vingt-dix items, à lire un par jour pendant trois
+    mois. <em>Java Concurrency in Practice</em> (Goetz et al.) — plus vieux, toujours juste.
+    <em>Modern Java in Action</em> — streams et fonctionnel.</p></div>
+  <div class="carte"><h4>Bases de données</h4>
+    <p><em>SQL Antipatterns</em> (Bill Karwin) — les neuf erreurs qu'on fait tous. <em>Designing Data-Intensive
+    Applications</em> (Kleppmann) — quand tu veux comprendre les transactions, la réplication, le
+    stockage, indépendamment du langage.</p></div>
+  <div class="carte"><h4>Métier</h4>
+    <p><em>The Pragmatic Programmer</em> (Hunt, Thomas) — la posture. <em>Clean Architecture</em>
+    (Martin) — les limites et la dépendance. <em>Working Effectively with Legacy Code</em> (Feathers)
+    — le vrai quotidien&nbsp;: du code qui existe déjà.</p></div>
+</div>
+
+<h3 id="pratiquer">Où pratiquer sans se ruiner la soirée</h3>
+<ul>
+<li><strong>Exercices guidés</strong>&nbsp;: <a href="https://exercism.org/">Exercism</a> (mentorat
+humain gratuit sur JavaScript, PHP, Java), <a href="https://javascript.info/task">javascript.info/tasks</a>,
+<a href="https://adventofcode.com/">Advent of Code</a> en décembre (deux étoiles = une bonne soirée).</li>
+<li><strong>Algorithmique</strong>&nbsp;: <a href="https://leetcode.com/">LeetCode</a> ou
+<a href="https://codingame.com/">CodinGame</a>, vingt minutes par jour maximum — l'objectif est
+d'entretenir, pas de collectionner les badges.</li>
+<li><strong>Sécurité</strong>&nbsp;: <a href="https://portswigger.net/web-security">PortSwigger Web
+Security Academy</a> (laboratoires gratuits, du XSS à l'authentification),
+<a href="https://overthewire.org/wargames/">OverTheWire</a> pour le terminal.</li>
+<li><strong>Vrais dépôts</strong>&nbsp;: <a href="https://github.com/explore">GitHub Explore</a>,
+filtre <code>good first issue</code> dans un projet que tu utilises déjà. Un merge public vaut dix
+exercices.</li>
+<li><strong>Veille qui ne mange pas la journée</strong>&nbsp;: les <em>release notes</em> de Node,
+PHP et Java (une par version), <a href="https://php.watch/">php.watch</a>,
+<a href="https://javascriptweekly.com/">JavaScript Weekly</a>,
+<a href="https://www.phpweekly.com/">PHP Weekly</a> et <a href="https://inside.java/">Inside.java</a>.
+Deux lectures par semaine, dix minutes chacune.</li>
+</ul>
+
+<h3 id="outils-qui-comptent">Les outils qui changent la journée</h3>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Besoin</th><th>Outil</th><th>Pourquoi celui-là</th></tr></thead>
+<tbody>
+<tr><td>Formater sans débat</td><td>Prettier&nbsp;· PHP-CS-Fixer ou PHP-CS-Fixer&nbsp;· Spotless ou google-java-format</td>
+<td>Le style cesse d'être une opinion quand il est mécanique. Un hook de pré-commit et c'est réglé.</td></tr>
+<tr><td>Analyse statique</td><td>TypeScript&nbsp;· PHPStan (niveau 8) ou Psalm&nbsp;· Error Prone ou SpotBugs</td>
+<td>Ce que le compilateur ne voit pas, l'analyseur le voit. PHPStan niveau 8 trouve les bugs que les
+tests laissent passer.</td></tr>
+<tr><td>Refactorisation mécanisée</td><td>ts-morph&nbsp;· Rector&nbsp;· OpenRewrite</td>
+<td>Faire migrer 4 000 fichiers d'une API à l'autre sans fatigue, avec un diff relisible.</td></tr>
+<tr><td>Débogage</td><td>Chrome DevTools&nbsp;· Xdebug&nbsp;· le débogueur de l'IDE, plus <code>jcmd</code>/<code>jstack</code></td>
+<td>Un point d'arrêt avec condition bat dix <code>console.log</code>. Apprends-en un par langage.</td></tr>
+<tr><td>Profilage</td><td><code>--cpu-prof</code> Node&nbsp;· Xdebug profil&nbsp;· async-profiler ou JDK Flight Recorder</td>
+<td>Une mesure avant chaque optimisation. JFR en production, sans redémarrage, est un cadeau.</td></tr>
+<tr><td>Bacs à sable reproductibles</td><td>Docker ou Podman&nbsp;· <code>ddev</code>/<code>Lando</code> pour PHP&nbsp;· Testcontainers pour Java</td>
+<td>« ça marche sur ma machine » se règle en mettant la machine dans le dépôt.</td></tr>
+<tr><td>Environnements par projet</td><td><a href="https://mise.jdx.dev/">mise</a> ou asdf&nbsp;· nvm&nbsp;· phpenv/jenv</td>
+<td>Épingler Node 22, PHP 8.3 et JDK 21 par projet, sans conflit global.</td></tr>
+</tbody></table></div>
+
+<div class="box astuce"><p class="titre-boxe">Astuce</p>
+<p>Chapitre après chapitre, chaque encadré <em>Ressources officielles</em> donne les liens
+spécialisés. La règle de lecture est simple&nbsp;: si tu ne trouves pas la réponse dans la doc
+officielle en dix minutes, la question est mal posée — reformule-la (quel langage, quelle version,
+quel comportement attendu, quel message d'erreur exact) et reviens.</p></div>
+</section>

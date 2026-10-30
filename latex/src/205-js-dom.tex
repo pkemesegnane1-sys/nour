@@ -1,0 +1,426 @@
+% ============================================================================
+\chapter{Le navigateur : HTML, CSS et le DOM}
+\label{ch-js-dom}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Poser une page HTML correcte, accessible, et y brancher du JavaScript proprement.
+  \item S\'electionner, cr\'eer, modifier, supprimer des noeuds sans casser les performances.
+  \item Comprendre le rendu (reflow/repaint) et \'ecrire du code qui reste fluide \`a 60 fps.
+  \item Utiliser les API modernes~: \texttt{dataset}, \texttt{classList}, \texttt{dialog},
+        \texttt{details}, \texttt{IntersectionObserver}.
+  \item Livrer un premier mini-projet complet, sans framework.
+\end{itemize}
+\end{objectif}
+
+\section{Le squelette d'une page moderne}
+
+\begin{codeplain}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Liste de courses -- Nour</title>
+  <meta name="description" content="Une liste de courses qui persiste dans le navigateur.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>            <!-- defer = execute apres le parse du HTML -->
+</head>
+<body>
+  <a class="sr-only" href="#contenu">Aller au contenu</a>
+  <header>
+    <h1>Mes courses</h1>
+  </header>
+  <main id="contenu">
+    <form id="form-ajout" autocomplete="off">
+      <label for="nom">Article</label>
+      <input id="nom" name="nom" required maxlength="60" placeholder="Riz, tomates...">
+      <label for="qte">Quantit\'e</label>
+      <input id="qte" name="qte" type="number" min="1" max="99" value="1">
+      <button type="submit">Ajouter</button>
+    </form>
+    <ul id="liste" aria-live="polite"></ul>
+    <template id="tpl-article">
+      <li class="article">
+        <input type="checkbox" class="check">
+        <span class="nom"></span>
+        <button class="suppr" type="button" aria-label="Supprimer">x</button>
+      </li>
+    </template>
+  </main>
+  <footer><small><span id="compteur"></span></small></footer>
+</body>
+</html>
+\end{codeplain}
+
+Quatre d\'etails qui font la diff\'erence~: \cmd{lang="fr"} (prononciation, c\'esure, recherche),
+la balise \verb|viewport| (sinon ton site reste \og ~zoom\'e~ \fg{} sur mobile), \verb|defer|
+(le script attend le HTML, sans bloquer le parsing) et le \verb|<template>| (du HTML stock\'e,
+inerte, clonable \`a la demande -- l'anti-\verb|innerHTML| par excellence).
+
+\begin{tabz}{lX}
+  \headrow \thd{Attribut de script} \& \thd{Comportement} \\
+  \midrule
+  \verb|<script src="a.js">| \& bloque le parsing jusqu'au t\'el\'echargement et \`a l'ex\'ecution. \\
+  \verb|defer| \& t\'el\'echargement en parall\`ele, ex\'ecution dans l'ordre, apr\`es le parsing. \textbf{Le choix par d\'efaut pour un fichier externe.} \\
+  \verb|async| \& t\'el\'echargement en parall\`ele, ex\'ecution d\`es que pr\^et, ordre al\'eatoire. Pour la pub, l'analytics. \\
+  \verb|type="module"| \& diff\'er\'e par d\'efaut, port\'ee de module, \verb|import| disponibles. \textbf{Le choix pour du JS en modules.} \\
+  \verb|inlin\'e <script>| \& ex\'ecut\'e imm\'ediatement~: \`a placer en \emph{fin de body} si n\'ecessaire. \\
+\end{tabz}
+
+\section{S\'electionner}
+
+\begin{codejs}
+const box = document.querySelector(".boite");       // 1er element correspondant
+const tous = document.querySelectorAll(".article");  // NodeList statique (tableau-like)
+const parId = document.getElementById("liste");      // le plus rapide, a privilegier si tu as un id
+const parClasse = document.getElementsByClassName("article");   // HTMLCollection VIVANTE (piege)
+const parNom = document.getElementsByTagName("li");
+
+// Selections structurelles
+const parent = box.closest("main");          // remonte jusqu'au premier ancetre qui matche
+const suivant = box.nextElementSibling;
+const enfants = [...box.children];           // HTMLCollection -> vrai tableau
+const dansForm = document.querySelectorAll("form input:not([type=hidden])");
+const visible = [...document.querySelectorAll(".article")].filter((el) => el.checkVisibility());
+box.matches("main > .boite");                 // test de selecteur
+
+// Les selecteurs utiles a connaitre par coeur
+// :not(), :is(h1,h2,h3), :where(), :has(> input:checked), :nth-child(2n+1), :scope, ::selection
+document.querySelectorAll("li:has(.check:checked)");     // les lignes cochees (CSS + JS, tres puissant)
+\end{codejs}
+
+\begin{note}
+\texttt{querySelectorAll} renvoie une copie fig\'ee~: si tu ajoutes un \'el\'ement apr\`es, il n'y sera
+pas. \texttt{getElementsByClassName} renvoie une collection \emph{vivante}~: la modifier pendant
+une boucle produit des sauts d'index. Dans le doute~: \verb|[...document.querySelectorAll(...)]|.
+\end{note}
+
+\section{Lire et modifier un \'el\'ement}
+
+\begin{codejs}
+const li = document.querySelector(".article");
+
+// TEXTE : textContent securise (les <b> sont echappes), innerHTML non (XSS)
+li.textContent = "Riz <5kg>";              // affiche le texte literal, y compris les chevrons
+li.innerHTML = "<b>Riz</b> 5kg";           // parse du HTML : UNIQUEMENT avec du contenu de confiance
+li.insertAdjacentHTML("beforeend", "<i>bio</i>");  // le plus rapide des trois pour inserer du HTML
+
+// CLASSES ET ATTRIBUTS
+li.classList.add("actif"); li.classList.remove("cache");
+li.classList.toggle("fait", coche);         // 2e argument = booleen : la forme propre
+li.classList.replace("petit", "grand");
+li.classList.contains("fait");
+li.className = "a b c";                     // ecrase tout : a eviter
+li.setAttribute("aria-label", "Article riz");
+li.getAttribute("data-id");                 // "42" (toujours une chaine)
+li.id = "article-42";
+li.hidden = true;                           // equivalent de [hidden]
+
+// DONNEES UTILISATEUR : dataset (kebab-case <-> camelCase)
+// <li data-id="42" data-categorie="feculent">
+li.dataset.id;                // "42"
+li.dataset.categorie = "feculent";
+li.dataset.etatCoche = "1";   // data-etat-coche
+
+// STYLE : prefere une classe CSS a une propriete inline
+li.style.backgroundColor = "#eef";          // camelCase en JS, kebab-case en CSS
+li.style.setProperty("--hauteur", "40px");  // variable CSS
+getComputedStyle(li).fontSize;              // "16px" (la valeur calculee, pas celle ecrite)
+li.style.cssText = "color:red;padding:4px"; // remplace tout le style inline
+
+// DIMENSIONS (attention : forcent un reflow -- a lire par lots)
+li.offsetWidth; li.offsetHeight; li.getBoundingClientRect();
+document.documentElement.scrollTop;
+\end{codejs}
+
+\subsection{Cr\'eer, ins\'erer, supprimer, d\'eplacer}
+
+\begin{codejs}
+// La voie royale : template + clone (rapide, sans parse, sans injection)
+const tpl = document.getElementById("tpl-article");
+const creerArticle = ({ nom, qte }) => {
+  const frag = tpl.content.cloneNode(true);            // true = avec les descendants
+  frag.querySelector(".nom").textContent = `${nom} x${qte}`;
+  frag.querySelector(".suppr").dataset.id = nom;
+  return frag;
+};
+document.getElementById("liste").append(creerArticle({ nom: "Riz", qte: 2 }));
+
+// Creation manuelle
+const el = document.createElement("li");
+el.className = "article";
+el.append("texte ", document.createElement("b"), " et noeud");   // append accepte textes et noeuds
+el.prepend(puce);
+el.replaceChildren(...listeFils);        // remplace TOUS les enfants en une fois : tres efficace
+el.before(sibling); el.after(sibling); el.replaceWith(autre);
+el.remove();                              // le fils se detache du parent ; l'objet reste utilisable
+
+// Ou par HTML (rappel : seulement pour du contenu de confiance)
+const conteneur = document.getElementById("liste");
+conteneur.insertAdjacentHTML("beforeend", htmlSecurise);
+conteneur.children.length;
+\end{codejs}
+
+\etape{\'Ecrire une fonction de nettoyage si tu dois ins\'erer du HTML}
+\begin{codejs}
+const echapper = (s) => String(s)
+  .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+const rendu = (t) => `<strong>${echapper(t)}</strong>`;   // le texte est sur, la structure est la tienne
+\end{codejs}
+En production, ne r\'einvente pas ce filtre~: \link{DOMPurify}{https://github.com/cure53/DOMPurify}
+(\cmd{npm i dompurify}) g\`ere les cas tordus \verb|<svg>|, les gestionnaires inline, les URL
+\verb|javascript:|.
+
+\section{Le mod\`ele de l'arbre et les noeuds}
+
+\begin{codejs}
+document            // Document
+ .documentElement    // <html>
+ .firstElementChild  // <head>
+document.body; document.head; document.title;
+document.activeElement;                       // l'element qui a le focus
+document.getSelection().toString();           // texte selectionne
+node.parentNode; node.parentElement;         // parent, en incluant les noeuds de texte
+node.childNodes; node.children;               // idem : tous vs elements uniquement
+node.nextSibling / node.nextElementSibling;
+node.isConnected;                              // encore dans le document ?
+node.contains(other);
+node.innerText;                                // comme textContent mais respectant le CSS (lent !)
+\end{codejs}
+
+\begin{piege}
+\verb|innerText| d\'eclenche un calcul de style complet sur l'\'el\'ement et ses descendants.
+Sur une liste de mille lignes, c'est plusieurs secondes de g\^ach\'ees. Utilise
+\verb|textContent|~; garde \verb|innerText| pour reproduire l'affichage visible (sauts de ligne,
+\verb|display:none|).
+\end{piege}
+
+\section{Performance : ce que le navigateur paie}
+
+Le pipeline est~: JavaScript $\rightarrow$ styles (recalcul) $\rightarrow$ layout (g\'eom\'etrie)
+$\rightarrow$ paint (pixels) $\rightarrow$ composite (GPU). Tout changement de
+\texttt{width/top/left/height} relance layout~; tout changement de
+\texttt{transform/opacity} peut rester sur le compositeur~: c'est le chemin rapide.
+
+\begin{codejs}
+// ANTI-PATTERN : lecture puis ecriture = reflow a chaque tour (layout thrashing)
+for (const el of elements) {
+  el.style.height = el.offsetHeight + 10 + "px";      // lit la geometrie (reflow) puis ecrit
+}
+
+// CORRECT : lire tout, puis ecrire tout
+const hauteurs = elements.map((el) => el.offsetHeight);
+elements.forEach((el, i) => { el.style.height = `${hauteurs[i] + 10}px`; });
+
+// ENCORE MIEUX : laisser le CSS faire le travail
+el.classList.add("agrandi");
+// Animer uniquement transform et opacity
+el.animate(
+  [{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }],
+  { duration: 200, easing: "cubic-bezier(.2,.8,.2,1)", fill: "both" }
+);
+
+// Grouper les mutations importantes dans une frame
+requestAnimationFrame(() => { miseAJourLourde(); });
+
+// Observer les changements de DOM sans polluer : MutationObserver
+const obs = new MutationObserver((mutations) => {
+  for (const m of mutations) {
+    if (m.type === "childList") console.log("ajoutes :", [...m.addedNodes].length, "retires :", m.removedNodes.length);
+    if (m.type === "attributes") console.log("attribut", m.attributeName, "sur", m.target);
+  }
+});
+obs.observe(document.getElementById("liste"), { childList: true, subtree: true, attributes: true });
+obs.disconnect();
+
+// Le lazy-loading par IntersectionObserver : la fin du scroll listener couteux
+const io = new IntersectionObserver((entrees) => {
+  for (const e of entrees) if (e.isIntersecting) { chargerImage(e.target); io.unobserve(e.target); }
+}, { rootMargin: "200px", threshold: 0.1 });
+document.querySelectorAll("img[data-src]").forEach((i) => io.observe(i));
+\end{codejs}
+
+\begin{note}
+Le navigateur regroupe lui-m\^eme les \'ecritures d'un m\^eme bloc de JavaScript~: les \'ecritures
+\emph{pures} ne causent pas de reflow imm\'ediat. Ce qui co\^ute, c'est \textbf{lire une valeur de
+g\'eom\'etrie} juste apr\`es avoir \'ecrit. Donc~: on lit, puis on \'ecrit. Jamais en alternance.
+\end{note}
+
+\section{Composants natifs que tout le monde r\'einvente mal}
+
+\begin{codejs}
+// Boite de dialogue : gestion du focus, fermeture par Echap, piege modal inclus
+const dlg = document.querySelector("dialog");
+dlg.showModal();
+dlg.returnValue = "ok";
+dlg.addEventListener("close", () => console.log(dlg.returnValue));
+
+// Details/summary : accord\'eon accessible sans une ligne de JS
+// <details name="faq" open><summary>Question</summary><p>Reponse</p></details>
+// "name" cree un groupe exclusif (un seul ouvert) : natif depuis 2023.
+
+// Popover : menus, tooltips, sans lib
+// <button popovertarget="menu">Menu</button><div id="menu" popover>...</div>
+
+// Color/Date/Range : le controleur natif est deja accessible et mobile-friendly
+// <input type="date" min="2026-01-01"> <input type="color"> <input type="range">
+
+// Scroll fluide et ancrage
+document.querySelector("#tarif").scrollIntoView({ behavior: "smooth", block: "start" });
+// CSS : html { scroll-behavior: smooth }  ou  scroll-margin-top: 80px sur la cible
+
+// Historique et URL propre (le SPA tout entier tient la-dedans)
+history.pushState({ vue: "article" }, "", "/article/42");
+window.addEventListener("popstate", (e) => rendre(e.state?.vue ?? "accueil"));
+\end{codejs}
+
+\section{Accessibilit\'e : trente minutes qui changent la vie de tes utilisateurs}
+
+\begin{enumerate}
+  \item Un HTML s\'emantique (\verb|main|, \verb|nav|, \verb|button|, \verb|h1..h6|) avant
+        n'importe quel ARIA. \verb|<div onclick>| n'est pas un bouton~: ni focus, ni Echap,
+        ni annonce au lecteur d'\'ecran.
+  \item Chaque champ a un \verb|<label for>|~; les ic\^ones seules ont un \verb|aria-label|.
+  \item \verb|aria-live="polite"| sur une zone qui change (compteur, r\'esultat de recherche,
+        message d'erreur)~; \verb|aria-busy| pendant un chargement.
+  \item Ne retire jamais l'outline de focus sans la remplacer par un style visible.
+  \item Contraste minimal 4{,}5:1 pour le texte courant, 3:1 pour le gros texte
+        (\link{WebAIM~Contrast~Checker}{https://webaim.org/resources/contrastchecker/}).
+  \item Navigation clavier compl\`ete~: \keys{Tab} partout, \keys{Echap} ferme,
+        \keys{Enter}/\keys{Space} activent, fl\`eches dans les listes.
+\end{enumerate}
+
+\begin{codejs}
+// Focus piege pour une modale custom (si tu ne utilises pas <dialog>)
+function piegerFocus(conteneur) {
+  const selecteur = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  const premier = conteneur.querySelector(selecteur);
+  const focusables = () => [...conteneur.querySelectorAll(selecteur)].filter((el) => el.offsetParent !== null);
+  conteneur.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const els = focusables();
+    const idx = els.indexOf(document.activeElement);
+    if (e.shiftKey && (idx === 0 || idx === -1)) { els.at(-1).focus(); e.preventDefault(); }
+    else if (!e.shiftKey && idx === els.length - 1) { els[0].focus(); e.preventDefault(); }
+  });
+  premier?.focus();
+  return () => dernierElement?.focus();       // retablir le focus a la fermeture
+}
+\end{codejs}
+
+\section{Mini-projet complet --- liste de courses persistante}
+
+Le fichier \fichier{app.js} branch\'e sur le HTML de la \cref{ch-js-dom}~; tout est comment\'e,
+et tu dois le retaper int\'egralement.
+
+\begin{codejs}
+// app.js
+const stock = {
+  lire: () => { try { return JSON.parse(localStorage.getItem("courses") ?? "[]"); } catch { return []; } },
+  ecrire: (v) => localStorage.setItem("courses", JSON.stringify(v)),
+};
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+let articles = stock.lire();
+let filtre = "tous";
+
+function rendre() {
+  const ul = $("#liste");
+  const visibles = articles.filter((a) =>
+    filtre === "tous" ? true : filtre === "coches" ? a.fait : !a.fait
+  );
+  const frag = document.createDocumentFragment();
+  const tpl = $("#tpl-article");
+
+  for (const a of visibles) {
+    const n = tpl.content.cloneNode(true);
+    const li = n.querySelector("li");
+    li.dataset.id = a.id;
+    li.classList.toggle("fait", a.fait);
+    n.querySelector(".nom").textContent = a.nom;
+    const check = n.querySelector(".check");
+    check.checked = a.fait;
+    frag.append(li.parentNode ? n : n);
+  }
+  ul.replaceChildren(frag);
+  $("#compteur").textContent =
+    `${articles.filter((a) => !a.fait).length} article(s) a acheter sur ${articles.length}`;
+}
+
+function ajouter(nom, qte) {
+  nom = nom.trim();
+  if (!nom) return alert("Nom requis");
+  articles = [{ id: crypto.randomUUID(), nom, qte: Number(qte) || 1, fait: false }, ...articles];
+  stock.ecrire(articles);
+  rendre();
+}
+
+// Deleguer sur la liste : un seul ecouteur, meme pour les elements crees plus tard
+$("#liste").addEventListener("click", (e) => {
+  const li = e.target.closest("li[data-id]");
+  if (!li) return;
+  const id = li.dataset.id;
+  if (e.target.matches(".check")) {
+    articles = articles.map((a) => (a.id === id ? { ...a, fait: !a.fait } : a));
+  } else if (e.target.matches(".suppr")) {
+    articles = articles.filter((a) => a.id !== id);
+  } else return;
+  stock.ecrire(articles);
+  rendre();
+});
+
+$("#form-ajout").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  ajouter(f.get("nom"), f.get("qte"));
+  e.target.reset();
+  $("#nom").focus();
+});
+
+$$(".filtre").forEach((b) =>
+  b.addEventListener("click", () => {
+    filtre = b.dataset.filtre;
+    $$(".filtre").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    rendre();
+  })
+);
+
+rendre();
+\end{codejs}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Ajoute la r\'eordonnancement par glisser-d\'eposer (\verb|draggable="true"|,
+        \verb|dragstart|, \verb|dragover|, \verb|drop|) et persiste l'ordre.
+  \item Ajoute un champ de recherche avec \verb|debounce|~: filtrer sur le nom, en ignorant
+        accents et casse, et surligner la partie correspondante avec \verb|<mark>|.
+  \item Ajoute un mode sombre~: lire \verb|prefers-color-scheme| via
+        \verb|matchMedia|, stocker le choix de l'utilisateur, basculer la classe
+        \verb|dark| sur \verb|<html>|.
+  \item Ajoute l'annulation~: un tableau \verb|historique| des 20 derniers \'etats, et les
+        raccourcis \keys{Ctrl+Z} / \keys{Ctrl+Shift+Z}.
+  \item Rends le composant \emph{r\'eutilisable}~: \verb|creerListe(elise, { stock })| qui
+        accepte n'importe quel \'el\'ement conteneur et n'utilise aucun \verb|document.querySelector| global.
+  \item Mesure avec l'onglet \clic{Performance} de Chrome~: d\'eclenche 500 ajouts, trouve la
+        t\^ache la plus co\^uteuse, optimise, compare les chiffres.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- R\'ef\'erence DOM --- \url{https://developer.mozilla.org/fr/docs/Web/API/Document_Object_Model}
+  \item web.dev Learn CSS / Learn Performance (Google, gratuit, excellent) --- \url{https://web.dev/learn/}
+  \item Chrome DevTools, formation officielle --- \url{https://developer.chrome.com/docs/devtools/learn}
+  \item Check-list d'accessibilit\'e --- \url{https://www.a11yproject.com/checklist/}
+  \item \link{Can~I~Use}{https://caniuse.com/} pour chaque API ou s\'electeur CSS.
+\end{itemize}
+\end{ressources}
+
+\index{DOM}\index{navigateur}\index{accessibilite}

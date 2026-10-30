@@ -1,0 +1,319 @@
+% ============================================================================
+\chapter{S\'emantique avanc\'ee : prototypes, \texttt{this}, classes, Proxy}
+\label{ch-js-avance}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Expliquer ce qu'est r\'eellement une classe en JavaScript (du sucre sur les prototypes).
+  \item Pr\'edire la valeur de \texttt{this} dans n'importe quelle situation.
+  \item Utiliser les champs priv\'es, accesseurs, h\'eritage, mixins, \texttt{static}.
+  \item Intercepter des op\'erations avec \texttt{Proxy} et \texttt{Reflect} (r\'eactivit\'e, validation).
+  \item \'Eviter la pollution de prototype et les confusions valeur/r\'ef\'erence.
+\end{itemize}
+\end{objectif}
+
+\section{Propri\'et\'es : ce que voit le moteur}
+
+Chaque propri\'et\'e poss\`ede un descripteur. Le conna\^itre explique \texttt{Object.freeze},
+les acc\`es en \'ecriture silencieusement ignor\'es en mode strict, et les pi\`eges d'observable.
+
+\begin{codejs}
+const o = { nom: "Nour" };
+Object.getOwnPropertyDescriptor(o, "nom");
+// { value: "Nour", writable: true, enumerable: true, configurable: true }
+
+Object.defineProperty(o, "age", { value: 28, writable: false, enumerable: true, configurable: true });
+Object.defineProperties(o, {
+  ville: { value: "Thies", writable: true, enumerable: true, configurable: true },
+  id: { get() { return `${this.nom}-${this.age}`; }, enumerable: true, configurable: true },
+});
+"use strict";
+o.age = 30;          // TypeError en mode strict (silencieux en mode relax : le pire des deux)
+
+const drapeaux = { enumerable: false, configurable: false, writable: false };
+Object.defineProperty(Array.prototype, "dernier", {
+  get() { return this[this.length - 1]; },
+  ...drapeaux,
+});   // correct UNIQUEMENT dans un exercice : ne jamais toucher un prototype natif en prod
+\end{codejs}
+
+\section{La cha\^ine de prototypes}
+
+Un objet a une cl\'e cach\'ee \texttt{[[Prototype]]} (visible via \texttt{Object.getPrototypeOf}).
+Lire une propri\'et\'e absente remonte la cha\^ine jusqu'\`a \texttt{Object.prototype}, puis
+\texttt{null}. \'Ecrire une propri\'et\'e cr\'ee toujours une propri\'et\'e \emph{propre}, jamais
+sur le parent.
+
+\begin{codejs}
+const animal = {
+  respire() { return "oui"; },
+  decrire() { return `${this.nom} est un ${this.type}`; },
+};
+const chat = Object.create(animal);
+chat.nom = "Minou"; chat.type = "chat";
+
+chat.nom;                 // propre
+chat.respire();           // trouve sur animal via la chaine
+Object.getPrototypeOf(chat) === animal;         // true
+chat instanceof animal;                         // true
+animal.isPrototypeOf(chat);                     // true (prefere getPrototypeOf)
+Object.hasOwn(chat, "nom");                     // true  (ES2022, le bon test)
+"toString" in chat;                             // true  <-- "in" voit aussi l'herite !
+Object.keys(chat);                              // ["nom","type"] : seulement les propres enumerables
+
+class Chien {                 // la forme moderne ; "class" est du sucre sur ce qui precede
+  static espece = "canis";    // champ statique (ES2022)
+  #secret = "os cache";       // champ PRIVE veritable (inaccessible meme par reflection)
+  nom;                        // declaration de champ
+  constructor(nom) { this.nom = nom; }
+  aboyer() { return `${this.nom}: ouf`; }
+  get secretLong() { return this.#secret + " et demi"; }
+  [Symbol.toPrimitive](hint) { return hint === "string" ? `Chien(${this.nom})` : 0; }
+  static fromJSON(j) { return new this(j.nom); }
+}
+const medor = new Chien("M\'edor");
+medor.#secret;               // SyntaxError : le prive est reellement prive
+medor.secretLong;            // "os cache et demi"
+`${medor}`;                  // "Chien(Medors)" via Symbol.toPrimitive
+Object.getOwnPropertyNames(Chien.prototype);   // ["constructor","aboyer","secretLong"]
+\end{codejs}
+
+\begin{note}
+Les m\'ethodes de classe sont d\'efinies sur \texttt{Classe.prototype}, donc partag\'ees par toutes
+les instances (\'economie m\'emoire). Un \texttt{=>} d\'eclar\'e comme champ de classe devient une
+propri\'et\'e \emph{par instance}~: il est recr\'e\'e \`a chaque \texttt{new}, mais garde \texttt{this} fig\'e.
+C'est exactement ce qu'on veut pour les callbacks pass\'es \`a un composant UI.
+\end{note}
+
+\subsection{H\'eritage, mixins, composition}
+
+\begin{codejs}
+class Forme { #couleur = "noir"; constructor(c) { this.#couleur = c; } dessine() { return `[${this.#couleur}]`; } }
+class Cercle extends Forme {
+  constructor(c, r) { super(c); this.r = r; }                 // super() AVANT tout "this"
+  get aire() { return Math.PI * this.r ** 2; }
+  dessine() { return `${super.dessine()} cercle r=${this.r}`; }   // appel de la methode mere
+}
+// Le prototype de la classe est li\'e : Object.getPrototypeOf(Cercle) === Forme
+Object.getPrototypeOf(Cercle.prototype) === Forme.prototype;  // true      // true
+
+// Pas d'heritage multiple : on compose avec des mixins
+const Labellisable = (Base) => class extends Base { toLabel() { return `${this.nom} (${this.type ?? "n/a"})`; } };
+const Verifiable = (Base) => class extends Base {
+  valider() { return Object.values(this).every((v) => v !== undefined && v !== null && v !== ""); }
+};
+class Produit extends Verifiable(Labellisable(Forme)) {}   // les mixins s'empilent
+
+// Un objet d'utilitaires, pas une classe : souvent le meilleur choix
+const dates = {
+  today: () => new Date(),
+  iso: (d = new Date()) => d.toISOString().slice(0, 10),
+  diffJours: (a, b) => Math.round((b - a) / 86_400_000),
+};
+\end{codejs}
+
+\section{\texttt{this} : les quatre r\`egles}
+
+\texttt{this} n'est pas li\'e \`a l'endroit o\`u la fonction est \emph{\'ecrite} mais \`a l'endroit
+o\`u elle est \textbf{appel\'ee}. Quatre r\`egles, par ordre de priorit\'e d\'ecroissant~:
+
+\begin{enumerate}
+  \item \textbf{new} : \verb|new F()| --> \texttt{this} est le nouvel objet.
+  \item \textbf{Explicite} : \verb|f.call(obj)|, \verb|f.apply(obj, args)|, \verb|f.bind(obj)| --> \texttt{this} = \texttt{obj}.
+  \item \textbf{Implicite} : \verb|obj.f()| --> \texttt{this} = \texttt{obj} (le point juste avant les parenth\`eses).
+  \item \textbf{Par d\'efaut} : \texttt{undefined} en mode strict, \texttt{globalThis} sinon.
+\end{enumerate}
+
+\begin{codejs}
+const bouton = {
+  label: "Envoyer",
+  cliquer() { return `on clique sur ${this.label}`; },
+  cliquerFleche: () => `on clique sur ${this.label}`,   // fleche : this du module, pas du bouton !
+  cliquerLie: null,
+};
+bouton.cliquer();                       // "on clique sur Envoyer"
+const f = bouton.cliquer; f();          // TypeError : this === undefined (mode strict/module)
+bouton.cliquerFleche();                 // "on clique sur undefined"  <-- PIEGE CLASSIQUE
+bouton.cliquerLie = bouton.cliquer.bind(bouton);
+bouton.cliquerLie();                    // "on clique sur Envoyer"
+
+// Les trois appels explicites
+function presentation(ville, pays) { return `${this.nom}, ${ville} (${pays})`; }
+const user = { nom: "Nour" };
+presentation.call(user, "Thies", "SN");
+presentation.apply(user, ["Thies", "SN"]);
+const p = presentation.bind(user, "Thies");    // pre-remplissage partiel (currying)
+p("SN");
+
+// Les API qui perdent "this" : toujours lier ou utiliser une fleche
+class Chrono {
+  debut = 0;
+  demarrer = () => { this.debut = performance.now(); };   // bon : fleche = this fige a l'instance
+  afficher() { return `${performance.now() - this.debut} ms`; }
+}
+const c = new Chrono();
+setTimeout(c.demarrer, 100);      // OK grace a la fleche
+// setTimeout(c.afficher, 100)    // TypeError : "this" perdu. Solution : c.afficher.bind(c)
+
+// newFunction / this dans un objet literal imbrique
+const table = {
+  valeurs: [1, 2, 3],
+  total() { return this.valeurs.reduce((a, b) => a + b, 0); },  // fonction classique : "this" correct
+};
+\end{codejs}
+
+\begin{astuce}
+R\`egle mn\'emotechnique infaillible~: regarde \emph{imm\'ediatement \`a gauche des parenth\`eses}
+de l'appel. S'il y a un objet, c'est lui \texttt{this}. S'il n'y a rien, \texttt{this} est
+\texttt{undefined} (module/strict). Une fonction fl\'ech\'ee ignore totalement cette r\`egle~:
+elle capture le \texttt{this} lexical du lieu o\`u elle a \'et\'e \'ecrite.
+\end{astuce}
+
+\section{Prototypes : le c\^ot\'e sombre (pollution)}
+
+Modifier un prototype partag\'e par \emph{tout le monde} est une faille de s\'ecurit\'e r\'eelle
+(CVE historiques dans des biblioth\`eques connues) et un bug garanti.
+
+\begin{codejs}
+// A NE JAMAIS FAIRE
+Array.prototype.last = function () { return this[this.length - 1]; };
+//   -> "for...in" sur un tableau, des bibliotheques qui detectent "last", des conflits entre libs.
+
+// Le vecteur d'attaque classique : fusion recursive d'objets non controles
+function fusion(target, source) {
+  for (const k in source) {
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;   // BLOQUE
+    if (Object.prototype.toString.call(source[k]) === "[object Object]") {
+      fusion(target[k] ??= {}, source[k]);
+    } else target[k] = source[k];
+  }
+  return target;
+}
+// Avec JSON.parse(...) sur une entree utilisateur, sans ce filtre :
+//   {"__proto__":{"isAdmin":true}}   ->   ({}).isAdmin === true  POUR TOUTES LES OBJETS !
+Object.prototype.hasOwnProperty.call({}, "isAdmin");     // false, une fois prot\`ege
+const sur = Object.create(null);        // objet sans prototype : parfait pour un dictionnaire pur
+\end{codejs}
+
+\`A retenir~: valider les cl\'es d'un objet venant de l'ext\'erieur, pr\'ef\'erer \texttt{Map} pour
+un dictionnaire, et ne jamais \'ecrire de \texttt{for...in} sur des donn\'ees non fiables.
+
+\section{Proxy et Reflect : intercepter le langage}
+
+\begin{codejs}
+const pairesValidees = new WeakMap();     // metadonnees clees par objet, sans fuite memoire
+
+function objetValide(contrat) {
+  const cible = {};
+  return new Proxy(cible, {
+    set(o, prop, val) {
+      if (typeof prop !== "string") throw new TypeError("cles non-string interdites");
+      const regle = contrat[prop];
+      if (!regle) throw new Error(`Propriete inconnue : ${String(prop)}`);
+      if (!regle.test(val)) throw new TypeError(`${prop}: valeur invalide (${val})`);
+      return Reflect.set(o, prop, val);   // delegue proprement au comportement par defaut
+    },
+    get(o, prop) {
+      if (prop === "nettoyer") return () => Reflect.ownKeys(o).forEach((k) => Reflect.deleteProperty(o, k));
+      return Reflect.get(o, prop);
+    },
+    deleteProperty(o, prop) { throw new Error(`Suppression interdite : ${String(prop)}`); },
+  });
+}
+const user = objetValide({
+  age: { test: (v) => Number.isInteger(v) && v > 0 && v < 130 },
+  email: { test: (v) => /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(v) },
+});
+user.age = 28;          // OK
+user.age = -3;          // TypeError: age: valeur invalide (-3)
+user.telephone = 12;    // Error: Propriete inconnue : telephone
+
+// LeProxy de reactivite (le principe de Vue, Svelte stores, MobX...)
+function reactive(objet, onChange) {
+  const handler = {
+    get(o, k, recv) {
+      const v = Reflect.get(o, k, recv);
+      return typeof v === "object" && v !== null ? new Proxy(v, handler) : v;
+    },
+    set(o, k, v, recv) {
+      const avant = o[k];
+      const r = Reflect.set(o, k, v, recv);
+      if (!Object.is(avant, v)) onChange(k, v, avant);
+      return r;
+    },
+  };
+  return new Proxy(objet, handler);
+}
+const etat = reactive({ user: { name: "Nour", tags: [] } }, (k, v) => console.log("changement", k, v));
+etat.user.name = "Awa";       // changement name Awa
+etat.user.tags.push("vip");   // capte aussi les mutations profondes
+
+// Un Proxy de lecture securisee, pour remplacer les "if (a && a.b && a.b.c)"
+const sur = (o, def = undefined) => new Proxy(o ?? {}, {
+  get: (t, k) => (k in t ? (typeof t[k] === "object" && t[k] !== null ? sur(t[k], def) : t[k]) : def),
+});
+sur(undefined).a.b.c.d;        // undefined  (au lieu de TypeError)
+\end{codejs}
+
+\begin{note}
+Un \texttt{Proxy} est puissant mais co\^uteux~: chaque lecture passe par un pi\`ege. On l'utilise
+aux fronti\`eres (\'etat r\'eactif d'un store, objet de configuration, validation d'entr\'ee), jamais
+dans une boucle \`a dix millions d'it\'erations.
+\end{note}
+
+\section{Valeur ou r\'ef\'erence, et les preuves}
+
+\begin{codejs}
+// Primitives = comparees par valeur ; objets = compares par reference (identite)
+"abc" === "abc";                    // true
+[1, 2] === [1, 2];                  // false
+const a = [1], b = a; a === b;      // true : le MEME tableau
+Object.is(NaN, NaN);                // true (contrairement a ===)
+Object.is(+0, -0);                  // false
+
+// Le cout de la reference : une mutation involontaire est un bug sans message d'erreur
+function ajouterLigne(lignes, ligne) {
+  lignes.push(ligne);               // MUTATION : l'appelant voit son tableau change
+  return lignes;
+}
+function ajouterLigneImmut(lignes, ligne) { return [...lignes, ligne]; }   // la bonne habitude
+
+// Le "shallow copy" ne protege qu'un niveau : la preuve en 3 lignes
+const src = { liste: [1, 2] }, cop = { ...src };
+cop.liste.push(3);                  // src.liste vaut [1,2,3] !
+\end{codejs}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris une classe \verb|CompteBancaire| avec~: champ priv\'e \verb|\#solde|, getter
+        \verb|solde|, m\'ethode \verb|debiter(montant)| qui l\`eve une erreur si le solde devient
+        n\'egatif, un \verb|historique| immuable, et une m\'ethode statique \verb|fromJSON|.
+        Ajoute \verb|[Symbol.toPrimitive]| pour un affichage lisible.
+  \item Ajoute une classe \verb|Comepargne| qui h\'erite, ajoute un taux et \'ecrase
+        \verb|interets()| ; v\'erifie que \verb|super| est bien appel\'e et que \verb|instanceof|
+        fonctionne dans les deux sens.
+  \item Pr\'edis la valeur de \verb|this| pour cinq appels que tu inventes (m\'ethode, fl\'ech\'ee,
+        callback perdu, \verb|bind|, \verb|call|), puis \'ecris un test unitaire qui confirme.
+  \item \'Ecris un \verb|proxyValidation(schema)| r\'eutilisable~: il v\'erifie types et bornes
+        d'un objet de configuration, affiche le chemin exact de la cl\'e fautive
+        (\verb|db.pool.max|), et renvoie un objet fig\'e apr\`es validation.
+  \item \'Ecris une fonction \verb|copieProfondeSensible(obj, { ignorer: [...], dates: true })|
+        qui g\`ere \verb|Date|, \verb|Map|, \verb|Set|, \verb|Array|, les cycles
+        (avec \verb|WeakMap|), et refuse les fonctions. Compare \`a \verb|structuredClone|.
+  \item D\'emo de pollution de prototype~: construis un petit parseur de requ\^ete
+        qui fusionne \verb|?a[b]=1| dans un objet, montre l'attaque, puis corrige-la.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item MDN --- Heritage et prototypes --- \url{https://developer.mozilla.org/fr/docs/Learn/JavaScript/Objects/Object_prototypes}
+  \item MDN --- Classes --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Classes}
+  \item MDN --- Proxy / Reflect --- \url{https://developer.mozilla.org/fr/docs/Web/JavaScript/Reference/Global_Objects/Proxy}
+  \item JavaScript.info --- \url{https://javascript.info/prototype-inheritance} (chapitres 8 et 21)
+  \item \emph{Prototype pollution} (article de r\'ef\'erence) --- \url{https://medium.com/intrinsic/attacking-javascripts-prototype-pollution-7d2b66d64790}
+\end{itemize}
+\end{ressources}
+
+\index{JavaScript!prototypes}\index{this}\index{classes}\index{Proxy}

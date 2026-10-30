@@ -1,0 +1,383 @@
+<section class="chap" id="entretien-et-revue">
+<h2><span class="n">·</span>Entretien, revue de code, anglais technique</h2>
+
+<p>Un entretien technique n'évalue pas ta mémoire&nbsp;: il évalue ta capacité à raisonner à voix
+haute sur un problème flou, et à dire « je ne sais pas, voici comment je chercherais ». Les
+questions ci-dessous sont celles qui reviennent, classées par langue&nbsp;; les réponses sont
+courtes parce qu'en entretien, une réponse qui dépasse trente secondes est une réponse perdue.</p>
+
+<h3 id="javascript">Vingt questions JavaScript</h3>
+
+<details class="corrige"><summary><code>==</code> et <code>===</code>&nbsp;: quelle différence, et quand garder le premier&nbsp;?</summary>
+<p><code>===</code> compare type et valeur sans conversion&nbsp;; <code>==</code> applique l'algorithme
+d'abstraction equality (conversions de chaînes, de <code>null</code>/<code>undefined</code>, de
+<code>Number</code>). Le seul usage défendable de <code>==</code> est <code>x == null</code>, qui
+couvre <code>null</code> et <code>undefined</code> en une ligne. Partout ailleurs&nbsp;:
+<code>===</code>.</p></details>
+
+<details class="corrige"><summary>Pourquoi <code>0.1 + 0.2 !== 0.3</code>, et que fais-tu d'un prix&nbsp;?</summary>
+<p>IEEE-754&nbsp;: 0,1 et 0,2 n'ont pas de représentation binaire exacte. Sur un prix, on stocke des
+entiers (centimes) ou on utilise une bibliothèque décimale&nbsp;; jamais d'arrondi « à la fin » sur un
+cumul de flottants.</p></details>
+
+<details class="corrige"><summary>Que vaut <code>[1] + [2]</code>, et pourquoi&nbsp;?</summary>
+<p><code>"12"</code>&nbsp;: <code>+</code> avec un opérande objet appelle <code>ToPrimitive</code>,
+qui passe par <code>toString</code> sur les tableaux. D'où l'intérêt de <code>Number.isFinite</code>
+et de validations explicites aux frontières.</p></details>
+
+<details class="corrige"><summary>Explique la portée, le hoisting et la « fermeture » (closure).</summary>
+<p><code>var</code> est fonctionnel et initialisé à <code>undefined</code> en haut de la fonction&nbsp;;
+<code>let</code>/<code>const</code> sont blocaux avec une zone morte temporaire. Une fermeture, c'est
+une fonction qui garde la référence à son environnement d'origine&nbsp;: l'état survit à l'appel, ce
+qui permet un module, un compteur privé, un mémiseur.</p></details>
+
+<details class="corrige"><summary><code>this</code>&nbsp;: trois règles et trois réparations.</summary>
+<p>Méthode <code>obj.f()</code> → <code>this === obj</code>&nbsp;; fonction isolée →
+<code>undefined</code> en strict&nbsp;; <code>new</code> → l'instance. Réparations, dans l'ordre&nbsp;:
+fonction fléchée déclarée dans le constructeur, <code>.bind(this)</code>, ou fermeture
+<code>() =&gt; this.f()</code>.</p></details>
+
+<details class="corrige"><summary>Micro-tâches, macro-tâches&nbsp;: ordre exact.</summary>
+<p>La pile d'appel se vide, puis la file des micro-tâches tourne entièrement
+(<code>promise.then</code>, <code>queueMicrotask</code>, <code>MutationObserver</code>), puis
+<em>une</em> macro-tâche (<code>setTimeout</code>, I/O, événements), puis les micro-tâches nées de
+cette macro-tâche. Un <code>setTimeout(fn, 0)</code> est donc toujours après un
+<code>Promise.resolve().then</code>.</p></details>
+
+<details class="corrige"><summary><code>fetch</code> renvoie une 404&nbsp: que se passe-t-il&nbsp;?</summary>
+<p>Rien de spécial&nbsp;: la promesse est résolue, <code>ok</code> vaut <code>false</code>. Sans test
+explicite de <code>response.ok</code>, l'erreur éclate plus loin dans <code>.json()</code> ou dans le
+rendu. Toujours&nbsp;: <code>if (!res.ok) throw new Error(...)</code>.</p></details>
+
+<details class="corrige"><summary>Comment annules-tu une requête, et pourquoi c'est important&nbsp;?</summary>
+<p>Avec un <code>AbortController</code> passé en <code>signal</code>. Sans annulation, une saisie
+rapide dans un champ de recherche produit des réponses dans le désordre (la dernière arrivée gagne,
+pas la dernière lancée), et l'utilisateur reste débranché sur une requête inutile.</p></details>
+
+<details class="corrige"><summary>Que fait <code>Promise.allSettled</code> et quand le préfères-tu&nbsp;?</summary>
+<p>Il attend toutes les promesses et renvoie un tableau de
+<code>{status, value|reason}</code>. On le préfère à <code>all</code> quand une sous-partie qui échoue
+ne doit pas faire échouer l'ensemble (agrégateur de santé, imports en parallèle).</p></details>
+
+<details class="corrige"><summary>Différence entre <code>map</code> et <code>forEach</code>, entre mutation et copie.</summary>
+<p><code>map</code> construit un nouveau tableau, <code>forEach</code> exécute des effets de bord. Le
+piège&nbsp;: muter l'objet <em>contenu</em> dans un <code>map</code> (les références sont partagées).
+Copie superficielle = <code>{...o}</code>/slice&nbsp;; copie profonde =
+<code>structuredClone</code> (qui perd fonctions et DOM).</p></details>
+
+<details class="corrige"><summary>Pourquoi <code>sort()</code> trie-t-elle <code>[10, 9, 2]</code> en <code>[10, 2, 9]</code>&nbsp;?</summary>
+<p>Parce que le tri par défaut convertit en chaînes. On passe donc toujours
+<code>(a, b) =&gt; a - b</code>. Bonus&nbsp;: <code>sort</code> trie sur place, donc elle modifie le
+tableau d'entrée.</p></details>
+
+<details class="corrige"><summary>Qu'est-ce qu'une « race condition » côté client&nbsp;?</summary>
+<p>Deux flux asynchrones qui écrivent le même état sans ordre garanti&nbsp;: réponse obsolète qui
+écrase la fraîche, double soumission de formulaire, <code>setState</code> lu après écriture.
+Réponses&nbsp;: clé de requête, annulation, drapeau d'envoi, <code>useReducer</code> plutôt qu'un
+état lu de l'extérieur.</p></details>
+
+<details class="corrige"><summary><code>event.preventDefault()</code> vs <code>stopPropagation()</code>.</summary>
+<p>Le premier annule le comportement par défaut du navigateur (navigation, submit)&nbsp;; le second
+empêche la remontée dans l'arbre. Un écouteur délégué appelle en général les deux&nbsp;:
+<code>preventDefault</code> sur l'action, <code>stopPropagation</code> uniquement quand un parent
+écoute la même chose.</p></details>
+
+<details class="corrige"><summary>Pourquoi déléguer un écouteur sur une liste de 10 000 lignes&nbsp;?</summary>
+<p>Un écouteur sur le conteneur au lieu de 10 000&nbsp;: moins de mémoire, aucun nettoyage quand la
+liste change, et les éléments créés plus tard sont couverts. On résout la cible avec
+<code>event.target.closest("[data-id]")</code> et on vérifie <code>conteneur.contains(cible)</code>.</p></details>
+
+<details class="corrige"><summary>Comment insères-tu du texte utilisateur dans la page sans faille&nbsp;?</summary>
+<p><code>textContent</code>, ou une construction par nœuds. Jamais <code>innerHTML</code> avec des
+données. Si le HTML doit venir d'un enrichissement, on passe par un assainisseur (DOMPurify) et on
+documente pourquoi.</p></details>
+
+<details class="corrige"><summary>Que fait <code>async/await</code> que <code>.then</code> ne fait pas&nbsp;?</summary>
+<p>Rien de plus sur le plan de la sémantique&nbsp;: c'est du <code>.then</code> lisible, avec des
+<code>try/catch</code> qui fonctionnent, des boucles possibles et des variables dans la portée. La
+seule différence opérationnelle est qu'un <code>await</code> dans une boucle sérialise les appels.</p></details>
+
+<details class="corrige"><summary>Modules ES vs CommonJS&nbsp;: ce que ça change vraiment.</summary>
+<p>ESM est statique (liés à la compilation des imports), donc analysable, secouable (tree-shaking),
+avec des imports asynchrones et de vraies exports nommées. CommonJS est dynamique, chargée à
+l'exécution, avec cache par résolution. Dans un projet neuf&nbsp;: <code>"type": "module"</code> et
+extensions <code>.mjs</code>/<code>.js</code> cohérentes.</p></details>
+
+<details class="corrige"><summary>Pourquoi un <code>package-lock.json</code> se commite-t-il&nbsp;?</summary>
+<p>Parce que sans lui, deux installations ne résolvent pas le même graphe de versions. En CI,
+<code>npm ci</code> exige le verrou et produit un arbre identique&nbsp;: c'est la parité
+dev/prod.</p></details>
+
+<details class="corrige"><summary>Que mesure <code>performance.mark</code>, et quelles sont tes deux métriques web préférées&nbsp;?</summary>
+<p>Des horodatages haute résolution, utilisables pour des <code>measure</code>. Métriques&nbsp;:
+LCP (contenu principal visible), INP (réactivité aux interactions), CLS (stabilité du layout) —
+plus le temps de réponse serveur si tu as la main dessus.</p></details>
+
+<details class="corrige"><summary>Une fuite mémoire en JS, à quoi ça ressemble&nbsp;?</summary>
+<p>Croissance monotone du tas, écouteurs ou fermetures qui retiennent des DOM détachés, tableaux
+qui ne se vident jamais, caches sans eviction. Outils&nbsp;: trois instantanés heap, comparaison
+<em>Objects allocated between snapshot 2 and 3</em>, et recherche des nœuds détachés.</p></details>
+
+<h3 id="php">Vingt questions PHP</h3>
+
+<details class="corrige"><summary>Que fait <code>declare(strict_types=1)</code> et pourquoi chaque fichier&nbsp;?</summary>
+<p>Il interdit la conversion implicite des arguments et de la valeur de retour&nbsp;: passer
+<code>"12"</code> à une fonction qui attend <code>int</code> devient une <code>TypeError</code>. Il
+ne s'applique qu'au fichier où il est écrit (portée fichier), d'où le réflexe de le mettre en tête
+de <em>tous</em> les fichiers, y compris les tests.</p></details>
+
+<details class="corrige"><summary><code>null</code>, <code>false</code>, <code>""</code>, <code>0</code> dans une condition&nbsp;: le piège.</summary>
+<p>Les quatre sont faux. Sur une chaîne qui peut être vide ou une valeur numérique légitime, on teste
+explicitement&nbsp;: <code>=== null</code>, <code>=== ""</code>, <code>array_key_exists</code> avant un
+<code>$_GET</code>. <code>empty()</code> avale le <code>0</code>&nbsp;; <code>isset()</code> répond
+« non » sur une clé qui vaut <code>null</code>.</p></details>
+
+<details class="corrige"><summary>Tableau indexé, tableau associatif, liste&nbsp;: comment PHP les distingue-t-il et pourquoi ça compte&nbsp;?</summary>
+<p>Un tableau est une table de hachage ordonnée&nbsp;; « liste » = clés entières de 0 à n-1.
+<code>json_encode</code> sort <code>{}</code> dès que les clés ne forment pas une liste continue, ce
+qui casse les clients. <code>array_is_list</code> (8.1) permet de corriger avant d'encoder.</p></details>
+
+<details class="corrige"><summary>Différence entre <code>==</code> et <code>===</code> en PHP 8.</summary>
+<p>PHP 8 a supprimé les comparaisons chaîne/nombre les plus absurdes, mais garde la coercition&nbsp;:
+<code>"abc" == 0</code> est devenu <code>false</code> alors qu'il était <code>true</code> avant.
+La règle reste&nbsp;: toujours <code>===</code>, et une conversion explicite (<code>(int)</code>,
+<code>filter_var</code>) aux frontières.</p></details>
+
+<details class="corrige"><summary><code>require</code>, <code>include</code>, <code>require_once</code>&nbsp;: et aujourd'hui&nbsp;?</summary>
+<p><code>require</code> interrompt sur échec, <code>include</code> avertit seulement&nbsp;; les
+versions <code>_once</code> évitent le double chargement. En pratique, l'autoloader Composer rend la
+question caduque&nbsp;: on ne charge que l'autoloader, et le reste est résolu par les namespaces.</p></details>
+
+<details class="corrige"><summary>PSR-4 en trois phrases.</summary>
+<p>Un préfixe de namespace est associé à un répertoire&nbsp;; le reste du namespace est le chemin de
+sous-répertoires&nbsp;; le nom du fichier est le nom de la classe, casse comprise. Une classe hors de
+ce chemin n'est pas trouvée — et, sous Linux, pas de second chance.</p></details>
+
+<details class="corrige"><summary>Interface, classe abstraite, trait&nbsp;: lequel, quand&nbsp;?</summary>
+<p>Interface = contrat, pour les appelants et le typage&nbsp;; classe abstraite = état + implémentation
+partielle, dans une hiérarchie&nbsp;; trait = réutilisation horizontale de comportement, à manier avec
+précaution (il injecte du code, il ne déclare pas de type). Par défaut&nbsp;: interface petite,
+composition explicite, pas d'héritage profond.</p></details>
+
+<details class="corrige"><summary>Pourquoi <code>final class</code> par défaut&nbsp;?</summary>
+<p>Parce que l'héritage non prévu casse l'encapsulation&nbsp;: un changement interne devient un
+changement d'API. On ouvre quand un vrai besoin de polymorphisme apparaît, souvent via interface.</p></details>
+
+<details class="corrige"><summary>Qu'apporte un <code>readonly</code> property ou une classe <code>readonly</code>&nbsp;?</summary>
+<p>L'immuabilité après l'initialisation, donc la sécurité de partager l'instance, l'absence de
+copie défensive, et des objets de valeur (DTO, entités lues) faciles à raisonner. Avec
+<code>final</code>, c'est la forme par défaut d'un modèle de domaine.</p></details>
+
+<details class="corrige"><summary>Une requête préparée protège de quoi, exactement&nbsp;?</summary>
+<p>De l'injection SQL&nbsp;: la structure de la requête est envoyée et compilée avant les valeurs, qui
+voyagent séparément et ne peuvent pas devenir du code. Elle ne protège ni de l'injection d'identifiants
+(nom de table ou de colonne → liste blanche), ni du XSS, ni du LDAP, ni du shell.</p></details>
+
+<details class="corrige"><summary><code>ATTR_EMULATE_PREPARES</code> à <code>false</code>&nbsp;: pourquoi&nbsp;?</summary>
+<p>Avec l'émulation, PDO échappe lui-même et envoie une requête texte&nbsp;: on perd la garantie
+sécurité, les types réels (tout devient chaîne) et les plans de requête du serveur. À désactiver, plus
+<code>ERRMODE_EXCEPTION</code>.</p></details>
+
+<details class="corrige"><summary>Une transaction PDO&nbsp;: ce que tu fais si une requête échoue.</summary>
+<p><code>beginTransaction</code>, travail, <code>commit</code>, et dans le <code>catch</code> un
+<code>rollBack</code> puis <code>throw</code> — jamais un <code>return false</code>. Attention aux
+tables MyISAM (pas transactionnelles) et au DDL (implicite commit en MySQL).</p></details>
+
+<details class="corrige"><summary>Comment haches-tu un mot de passe, et que fais-tu des anciens&nbsp;?</summary>
+<p><code>password_hash($m, PASSWORD_DEFAULT)</code> (bcrypt aujourd'hui, Argon2id disponible), et
+<code>password_verify</code>. À la connexion, si <code>password_needs_rehash</code> est vrai, on
+re-hache à la volée&nbsp;: migration silencieuse, sans réinitialisation massive.</p></details>
+
+<details class="corrige"><summary>XSS stocké, réflexif, DOM&nbsp;: une parade par variante.</summary>
+<p>Sortie&nbsp;: <code>htmlspecialchars($v, ENT_QUOTES | ENT_HTML5, 'UTF-8')</code> au moment de
+l'émission, pas à l'entrée. URL&nbsp;: <code>rawurlencode</code>. JS&nbsp;: <code>json_encode</code>.
+DOM&nbsp;: ne jamais injecter de <code>location.hash</code> dans <code>innerHTML</code>. Plus une CSP
+en ceinture.</p></details>
+
+<details class="corrige"><summary>CSRF&nbsp;: le jeton suffit-il&nbsp;?</summary>
+<p>Non. Jeton de session vérifié en <code>hash_equals</code>, cookie <code>SameSite=Lax</code> ou
+<code>Strict</code>, <code>HttpOnly</code>, et méthodes mutantes refusées en GET. Sur une API sans
+cookie, le risque change de nature&nbsp;: c'est le token d'accès qui doit être court et révoquable.</p></details>
+
+<details class="corrige"><summary>Une session qui déménage&nbsp;: que fais-tu&nbsp;?</summary>
+<p><code>session_regenerate_id(true)</code> après toute authentification ou changement de mot de passe
+(fixation de session), et invalidation côté serveur (stockage en base ou Redis) quand on veut déconnecter
+vraiment — détruire le cookie ne suffit pas.</p></details>
+
+<details class="corrige"><summary>Un upload&nbsp;: les trois contrôles non négociables.</summary>
+<p>Liste blanche d'extensions <em>et</em> vérification du type réel avec <code>finfo_file</code> (le
+<code>$_FILES['type']</code> vient du client, il ne vaut rien)&nbsp;; nom de fichier généré, hors
+arborescence exécutable&nbsp;; taille bornée, et quota disque si c'est mutualisé.</p></details>
+
+<details class="corrige"><summary>Composer&nbsp;: la différence entre <code>install</code> et <code>update</code>, et pourquoi le lock se commite.</summary>
+<p><code>install</code> respecte le <code>composer.lock</code>&nbsp;; <code>update</code> le recalcule.
+Le lock se commite pour que la prod et la CI installent exactement les mêmes versions, et
+<code>composer install --no-dev --optimize-autoloader</code> devient le geste de déploiement.</p></details>
+
+<details class="corrige"><summary>OPcache&nbsp;: à quoi sert-il, et quel piège en prod&nbsp;?</summary>
+<p>Il garde le bytecode compilé en mémoire&nbsp;; sans lui, chaque requête reparse le code. Piège&nbsp;:
+si <code>validate_timestamps</code> est désactivé, un fichier remplacé n'est pas vu&nbsp;; il faut
+recharger l'OPcache (ou <code>opcache_revalidate_freq</code> non nul) après un déploiement.</p></details>
+
+<details class="corrige"><summary>Une page qui met 4 secondes&nbsp;: ta méthode.</summary>
+<p>Découper le temps&nbsp;: serveur (journal de requêtes SQL, <code>slow_query_log</code>,
+<code>EXPLAIN</code>) puis PHP (profilateur Xdebug ou <code>perf</code>) puis réseau (compression,
+cache, HTTP/2). Sans mesures, on optimise le mauvais étage&nbsp;; on écrit donc d'abord le chiffre,
+on corrige, on remesure.</p></details>
+
+<h3 id="java">Vingt questions Java</h3>
+
+<details class="corrige"><summary>Différence entre <code>==</code> et <code>equals</code>, et le piège des boîtes.</summary>
+<p><code>==</code> compare les références sur les objets, les valeurs sur les primitifs. Le cache des
+petits entiers fait que <code>Integer.valueOf(3) == Integer.valueOf(3)</code> est vrai et
+<code>…200…</code> faux&nbsp;: une source de bugs qui ne se reproduit pas en production. Toujours
+<code>equals</code> (ou <code>Objects.equals</code> pour tolérer <code>null</code>).</p></details>
+
+<details class="corrige"><summary>Contrat <code>equals</code>/<code>hashCode</code>.</summary>
+<p>Deux objets égaux doivent avoir le même <code>hashCode</code>. Si on casse le contrat, les
+<code>HashMap</code>/<code>HashSet</code> perdent les clés. Un <code>hashCode</code> ne doit pas
+dépendre d'un champ mutable&nbsp;; d'où l'attrait des <code>record</code>, qui génèrent les deux.</p></details>
+
+<details class="corrige"><summary><code>String</code>, <code>StringBuilder</code>, <code>char[]</code>&nbsp;: quand&nbsp;?</summary>
+<p><code>String</code> est immuable (sûr, partageable, internable). En boucle, la concaténation crée
+un objet par tour → <code>StringBuilder</code> ou <code>String.join</code>/<code>Collectors.joining</code>.
+Pour du contenu sensible en mémoire (mot de passe), un <code>char[]</code> qu'on peut écraser.</p></details>
+
+<details class="corrige"><summary>Checked vs unchecked exceptions, et ton choix par défaut.</summary>
+<p>Checked&nbsp;: le compilateur force le traitement (IOException, SQLException) — utile quand
+l'appelant peut vraiment réagir. Unchecked&nbsp;: bug ou situation hors de contrôle. Par défaut, on
+propage en unchecked avec du contexte empaqueté, et on ne capture que là où l'on peut faire quelque
+chose. Jamais de <code>catch (Exception e) {}</code>.</p></details>
+
+<details class="corrige"><summary>Pourquoi ne pas mettre un <code>Optional</code> en champ ou en paramètre&nbsp;?</summary>
+<p><code>Optional</code> est une valeur de retour&nbsp;: il signale « peut ne pas exister ». En champ,
+il s'ajoute à l'état et n'est pas sérialisable&nbsp;; en paramètre, il obscurcit l'appel. Un
+constructeur qui refuse <code>null</code> (<code>Objects.requireNonNull</code>) est plus clair.</p></details>
+
+<details class="corrige"><summary><code>ArrayList</code> vs <code>LinkedList</code> vs <code>CopyOnWriteArrayList</code>.</summary>
+<p><code>ArrayList</code>&nbsp;: accès O(1), insertion en fin amortie O(1), au milieu O(n) (copie) — et
+c'est presque toujours le bon choix. <code>LinkedList</code>&nbsp;: nœuds et pointeurs, mauvais taux de
+réussite cache&nbsp;; à éviter. <code>CopyOnWriteArrayList</code>&nbsp;: lecture gratuite, écriture
+copieuse — listes d'écouteurs.</p></details>
+
+<details class="corrige"><summary>Comment un <code>HashMap</code> trouve-t-il un élément&nbsp;?</summary>
+<p>Il hache la clé, masque pour obtenir un compartiment, puis compare avec <code>equals</code> dans la
+liste ou l'arbre du compartiment (arbre au-delà de 8 nœuds si la table fait 64 cases ou plus).
+Redimensionnement au facteur de charge 0,75. Conséquence&nbsp;: une clé au <code>hashCode</code>
+constant dégénère en liste.</p></details>
+
+<details class="corrige"><summary>Génériques et effacement&nbsp;: ce que tu ne peux pas faire.</summary>
+<p>À l'exécution, le type générique est effacé. Donc pas de <code>new T()</code>, pas de
+<code>T[]</code> typé, pas de <code>instanceof List&lt;String&gt;</code>, pas de surcharge par
+paramètre générique. Les wildcards (<code>? extends</code>, <code>? super</code>, règle PECS)
+tiennent lieu de variance.</p></details>
+
+<details class="corrige"><summary><code>record</code>, <code>sealed</code>, motifs&nbsp;: à quoi ça sert ensemble&nbsp;?</summary>
+<p>Le <code>record</code> donne un type de valeur immutable&nbsp;; <code>sealed</code> ferme la
+hiérarchie&nbsp;; le <code>switch</code> à motifs devient exhaustif et vérifié à la compilation.
+C'est la version la plus proche d'un union type, et le meilleur outil de modélisation d'un domaine.</p></details>
+
+<details class="corrige"><summary><code>final</code>, <code>finally</code>, <code>finalize</code>.</summary>
+<p><code>final</code> = pas de réassignation / pas d'héritage&nbsp;; <code>finally</code> = bloc
+toujours exécuté (nettoyage) — attention, un <code>return</code> dans le <code>finally</code> avale
+l'exception&nbsp;; <code>finalize</code> = déprécié, remplacé par try-with-resources et
+<code>Cleaner</code>.</p></details>
+
+<details class="corrige"><summary>Try-with-resources&nbsp;: ce que ça garantit.</summary>
+<p>La fermeture dans l'ordre inverse de l'ouverture, même en cas d'exception, avec les exceptions
+supprimées rattachées à la principale. Équivalent d'un <code>finally</code> correct, impossible à
+oublier. Toute ressource doit être <code>AutoCloseable</code>.</p></details>
+
+<details class="corrige"><summary>Streams&nbsp;: quand tu les refuses.</summary>
+<p>Quand la boucle est plus courte à lire (deux conditions de sortie, effet de bord sur un état
+local), quand il faut des indices, ou sur des chemins très chauds où l'allocation compte. Sinon,
+<code>map</code>/<code>filter</code>/<code>collect</code> décrivent l'intention. Et un
+<code>parallelStream</code> sans mesure est une dette&nbsp;: il emprunte le <code>ForkJoinPool</code>
+commun.</p></details>
+
+<details class="corrige"><summary>Différence entre <code>map(Function.identity())</code> et <code>Collectors.toMap</code>, et le plantage classique de <code>toMap</code>.</summary>
+<p><code>toMap</code> lève <code>IllegalStateException</code> sur une clé dupliquée et un
+<code>NullPointerException</code> sur une valeur nulle. On passe donc un merge function et on remplace
+les nulls, ou on collecte dans un <code>LinkedHashMap</code>.</p></details>
+
+<details class="corrige"><summary>Que garantit le Java Memory Model, et qu'est-ce qu'un état non sécurisé&nbsp;?</summary>
+<p>Le JMM garantit la visibilité et l'ordre pour les écritures <code>volatile</code>, les sections
+synchronisées et les variables <em>final</em> correctement publiées. Lecture et écriture concurrentes
+d'un <code>int</code> sans synchronisation = données en compétition (le compilateur et le processeur
+ont le droit de réordonner, de mettre en cache, de perdre une incrémentation).</p></details>
+
+<details class="corrige"><summary><code>synchronized</code>, <code>ReentrantLock</code>, <code>AtomicInteger</code>, <code>ConcurrentHashMap</code>&nbsp;: lequel quand&nbsp;?</summary>
+<p>Structure concurrente d'abord (le moins de verrous possible), accumulateur atomique pour un
+compteur, <code>synchronized</code> pour un petit bloc ou un invariant, <code>ReentrantLock</code>
+seulement quand il faut un délai, l'équité ou plusieurs conditions. Jamais de verrou manuel sur une
+collection déjà concurrente.</p></details>
+
+<details class="corrige"><summary>Threads virtuels&nbsp;: ce qu'ils changent et ce qu'ils ne changent pas.</summary>
+<p>Un thread virtuel est bon marché&nbsp;: des millions de tâches bloquantes en attente (HTTP, JDBC,
+fichier) deviennent naturelles, avec un code synchrone lisible. Ils ne rendent pas le code
+<em>cpu-bound</em> plus rapide, et un <code>synchronized</code> qui bloque épingle le thread porteur
+(pinning&nbsp;; préférer un <code>ReentrantLock</code> sur les chemins chauds).</p></details>
+
+<details class="corrige"><summary>Un <code>CompletableFuture</code>&nbsp;: composition et annulation.</summary>
+<p><code>thenCompose</code> pour enchaîner sans nesting, <code>thenCombine</code> pour joindre,
+<code>allOf</code> pour attendre un lot, <code>orTimeout</code>/<code>completeOnTimeout</code> pour
+borners. Attention&nbsp;: annuler un <code>CompletableFuture</code> n'interrompt pas le calcul en
+cours&nbsp;; il faut le faire côté exécuteur/interruption.</p></details>
+
+<details class="corrige"><summary>Le tas, la pile, le GC&nbsp;: le minimum à savoir en entretien.</summary>
+<p>La pile porte les trames (locaux, références) et l'overflow vient d'une récursion&nbsp;; le tas
+porte les objets et le <code>OutOfMemoryError</code> vient d'une rétention. Le GC est
+séquentiel&nbsp;: regions jeunes/anciennes, copie pour les jeunes, mixte pour les anciennes. Un tas
+trop petit provoque un ramasse-miettes fébrile&nbsp;; un tas énorme allonge les pauses.</p></details>
+
+<details class="corrige"><summary>Ton service ralentit&nbsp;: que regardes-tu en premier&nbsp;?</summary>
+<p>Les métriques avant le profiler&nbsp;: débit, latence p99, CPU, GC (pauses et débit
+d'allocation), pool de connexions (attente&nbsp;?). Un pool saturé ou un <code>SELECT N+1</code>
+produisent exactement le même symptôme vu du client. Ensuite seulement, graphe d'appel.</p></details>
+
+<details class="corrige"><summary>Maven vs Gradle, et pourquoi une CI doit être reproductible.</summary>
+<p>Maven&nbsp;: convention, cycle de vie fixe, XML explicite. Gradle&nbsp;: script, cache
+d'artefacts, incrémentation, très rapide sur les builds multi-modules. Dans les deux cas la CI épingle
+les versions, utilise le verrou (<code>-o</code>/<code>--offline</code> quand c'est possible) et ne
+reconstruit pas ce qui n'a pas changé&nbsp;: un build qui dure 25 minutes finit par être contourné.</p></details>
+
+<h3 id="revue-de-code">La revue de code&nbsp;: la compétence qu'on ne t'enseignera pas</h3>
+
+<div class="tbl-wrap"><table>
+<thead><tr><th>Étape</th><th>Ce que tu fais</th><th>Ce que tu n'écris pas</th></tr></thead>
+<tbody>
+<tr><td>1. Le cadrage</td><td>Lire la description, l'issue liée, le nom des commits. Deviner
+l'intention avant de lire la première ligne.</td><td>« c'est quoi ce bazar »</td></tr>
+<tr><td>2. Le périmètre</td><td>Vérifier que la pull request fait une chose. Si elle en fait trois,
+demander la scission avant de commenter le fond.</td><td>Un commentaire de style sur 900 lignes</td></tr>
+<tr><td>3. Les cas d'erreur</td><td>Chercher ce qui se passe quand la liste est vide, la base
+injoignable, le jeton expiré, le fichier de 4 Go.</td><td>« ça marchera jamais »</td></tr>
+<tr><td>4. Les données</td><td>Entrée validée&nbsp;? Sortie échappée&nbsp;? Requête préparée&nbsp;?
+Migration réversible&nbsp;? Secret dans le code&nbsp;?</td><td>Un reproche sur le nom d'une variable
+si un secret est commité</td></tr>
+<tr><td>5. Les tests</td><td>Un test rate-t-il si on enlève la correction&nbsp;? (Le seul test qui
+prouve quelque chose.)</td><td>« les tests passent, c'est bon »</td></tr>
+<tr><td>6. La forme</td><td>Nommage qui décrit l'intention, fonction qui tient à l'écran, pas de
+commentaire qui répète le code.</td><td>Une discussion de 40 messages sur l'indentation</td></tr>
+</tbody></table></div>
+
+<div class="box note"><p class="titre-boxe">Formuler une remarque qui est acceptée</p>
+<p>« Cette requête renvoie toutes les lignes&nbsp;: avec 2 millions d'articles, on sature la mémoire.
+Je proposerais une limite avec tri sur l'index <code>publie_le</code> — qu'en penses-tu&nbsp;? »
+&nbsp;: le fait, la conséquence, la proposition, la question. Une remarque sans conséquence mesurable
+est une préférence, et elle se dit comme telle&nbsp;: « détail non bloquant ».</p></div>
+
+<h3 id="anglais">L'anglais technique, sans cours d'anglais</h3>
+<ul>
+<li>Lis la doc dans sa langue d'origine une fois par semaine (Node, PHP, Java&nbsp;: les versions
+françaises sont en retard et parfois fausses). Deux heures par mois suffisent à ne plus être bloqué.</li>
+<li>Tiens ton carnet de vocabulaire dans le dépôt, en markdown, dix lignes par semaine&nbsp;:
+<code>pull request</code>, <code>flake</code>, <code>regression</code>, <code>deadlock</code>,
+<code>backpressure</code>, <code>idempotent</code>, <code>throttle</code>, <code>rate limit</code>,
+<code>break change</code>.</li>
+<li>Écris en anglais tes messages de commit et tes issues (les contributeurs étrangers te répondront).
+Quatre phrases suffisent&nbsp;: ce que j'ai fait, pourquoi, comment le vérifier, ce qui reste.</li>
+<li>Une vidéo technique par semaine, sous-titres anglais, vitesse 1,25&nbsp;: c'est le meilleur
+investissement conjuguable du lot.</li>
+</ul>
+</section>

@@ -1,0 +1,444 @@
+% ============================================================================
+\chapter{Composer, standards PSR, qualit\'e et outils de development}
+\label{ch-php-composer}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Utiliser Composer comme un adulte~: manifeste, lock, scripts, paquets, publication.
+  \item Conna\^itre les PSR qui changent r\'eellement le code (1, 3, 4, 6, 7, 11, 12, 15, 17).
+  \item Automatiser le style et la correction~: PHP-CS-Fixer/PHP~Codesniffer, PHPStan, Rector.
+  \item Installer l'environnement serveur~: nginx + php-fpm, OPcache, Xdebug, journaux.
+  \item Tester~: PHPUnit, Mockery, DBunit-like, et les patterns pour rendre le code testable.
+\end{itemize}
+\end{objectif}
+
+\section{Composer}
+
+\begin{terminal}
+# Installation officielle (Linux/macOS)
+curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+composer --version
+# Windows : https://getcomposer.org/Composer-Setup.exe
+# Alt : php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" ... (verifie la signature)
+
+cd mon-projet
+composer init
+composer require guzzlehttp/guzzle monolog/monolog          # prod
+composer require --dev phpunit/phpunit phpstan/phpstan rector/rector friendsofphp/php-cs-fixer
+composer update                              # respecte les contraintes, puis reecrit composer.lock
+composer update vendor/paquet --with-all-dependencies
+composer outdated --direct                   # uniquement les dependances directes
+composer show --tree
+composer why symfony/polyfill-ctype          # qui tire ca, et pourquoi
+composer validate --strict
+composer dump-autoload -o --classmap-authoritative    # en prod : table classe->fichier, pas de stat
+composer audit                               # CVE connues dans l'arbre
+composer check-platform-reqs
+composer install --no-dev --optimize-autoloader        # la commande de deploiement
+\end{terminal}
+
+\begin{codejson}
+{
+  "name": "nour/blog",
+  "description": "Un blog PHP moderne, sans framework.",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.3",
+    "ext-pdo": "*",
+    "ext-mbstring": "*",
+    "ext-json": "*",
+    "monolog/monolog": "^3.5",
+    "symfony/dotenv": "^7.0",
+    "vlucas/phpdotenv": "^5.6"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.0",
+    "phpstan/phpstan": "^1.11",
+    "rector/rector": "^1.2",
+    "friendsofphp/php-cs-fixer": "^3.54",
+    "squizlabs/php_codesniffer": "^3.9",
+    "roave/security-advisories": "dev-latest"
+  },
+  "autoload": { "psr-4": { "App\\": "src/" } },
+  "autoload-dev": { "psr-4": { "Tests\\": "tests/" } },
+  "scripts": {
+    "test": "phpunit --colors=always",
+    "stan": "phpstan analyse --memory-limit=512M",
+    "fix": ["php-cs-fixer fix", "rector process"],
+    "check": ["@fix", "@stan", "@test"],
+    "serve": "php -S 127.0.0.1:8000 -t public public/router.php",
+    "post-install-cmd": ["@php bin/console migrate"]
+  },
+  "scripts-descriptions": { "check": "Formate, analyse, teste." },
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true,
+    "allow-plugins": false,
+    "platform": { "php": "8.3.0" }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
+\end{codejson}
+
+\etape{Semver et contraintes---les m\^emes notions qu'en npm, deux pi\`eges en plus}
+\begin{itemize}
+  \item \verb|^7.0| accepte \verb|7.x| (comme npm). \verb|~7.0| accepte \verb|7.0.x| -- et
+        \emph{aussi} \verb|7.1| en philosophie Composer, ce qui surprend~: sois explicite.
+  \item \verb|dev-main| et les \verb|@dev| ne se m\'elangent pas avec des versions stables~; \'evite
+        les branches stables en production (impossible de reconstruire \`a l'identique sans le lock).
+  \item \texttt{composer.lock} se versionne~: pour une \emph{biblioth\`eque} il est ignor\'e, pour une
+        \emph{application} il est sacr\'e. C'est la seule r\`egle qui distingue les deux cas.
+  \item \verb|platform.php| g\`ele la version \og ~cible~ \fg{}~: utile quand ton poste n'a pas la m\^eme
+        version que le serveur (et qu'un paquet exige \og ~php \textgreater=~8.4~ \fg{}).
+\end{itemize}
+
+\etape{Publier une biblioth\`eque}
+\begin{terminal}
+# sur GitHub : composer.json correct, tag sement, README, licence
+git tag v1.0.0 && git push --tags
+# rendre le paquet decouvrable : https://packagist.org/submit (souvent auto via GitHub Actions)
+# chez les autres : composer require nour/blog-utils "^1.0"
+# paquet prive : repository "vcs" (https://repo.privie.git) + config gitlab-token,
+#   ou Satispress/Private Packagist, ou un depot artefacts.
+\end{terminal}
+
+\section{Les standards PSR, en pratique}
+
+\begin{tabz}{llX}
+  \headrow \thd{PSR} \& \thd{Nom} \& \thd{Ce que \c{c}a change chez toi} \\
+  \midrule
+  1/12 \& Coding Style \& \verb|declare(strict\_types=1);|, un fichier = une classe, \verb|namespace App\;|, \verb|use| tri\'es, accolade ouvrante \`a la ligne suivante pour les m\'ethodes, indent 4 espaces. \\
+  3 \& Log \& \verb|Psr\\Log\\LoggerInterface| : tu remplaces Monolog par n'importe quoi sans toucher le code. \\
+  4 \& Autoload \& un dossier \verb|src/| mapp\'e sur un pr\'efixe d'espace de noms. \\
+  6 \& Contexte d'interface \& \verb|getContainer()| etc. : rare en app, fr\'equent en biblioth\`eque. \\
+  7/17 \& Messages HTTP \& objets \verb|Request|/\verb|Response| immuables, \verb|ServerRequestInterface| ; PSR-17 les fabrique. \\
+  11 \& Conteneur \& \verb|get()|/\verb|has()|~: tous les conteneurs se valent. \\
+  14 \& Exceptions \& \verb|ThrowableInterface|~: rare, mais les biblioth\`eques s\'erieuses le font. \\
+  15 \& Middlewares \& \verb|MiddlewareInterface|~: le mod\`ele de Slim, Laminas, et des frameworks modernes. \\
+  16 \& Cache \& \verb|CacheItemPoolInterface|~: code ton cache une fois, change d'impl\'ementation \`a volont\'e. \\
+  18 \& HTTP Client \& \verb|HttpClientInterface|~: d\'ecouple de Guzzle. \\
+  20/23 \& Environnement \& erreurs \& lecture d'\verb|.env|~; \verb|bootstrap.php| commun. \\
+\end{tabz}
+
+Les liens de lecture~: \link{PHP-FIG}{https://www.php-fig.org/psr/},
+\link{PHP~PSR~visual~guide}{https://php-fig.github.io/},
+\link{PHP Standard Recommendations sur packagist}{https://packagist.org/providers/psr/log-implementation}.
+
+\section{Style et analyse automatique}
+
+\begin{terminal}
+# PHP-CS-Fixer : aligne le style sur un preset (Symfony, PSR-12)
+vendor/bin/php-cs-fixer fix --diff --using-cache=no
+# PHP_CodeSniffer : verifier sans corriger (id\'eal en CI)
+vendor/bin/phpcs --standard=PSR12 --colors src tests
+vendor/bin/phpcbf --standard=PSR12 src            # autocorrection
+# PHPStan : la vraie valeur ajout\'ee --- trouve les bugs, pas les espaces
+vendor/bin/phpstan analyse --level=8 src
+# Psalm (analyse plus profonde, plus bavarde)
+vendor/bin/psalm --level=2
+# Rector : refonte automatique (monter de version PHP, moderniser une API)
+vendor/bin/rector process --dry-run
+\end{terminal}
+
+\begin{codeconf}
+# .php-cs-fixer.dist.php
+<?php
+$finder = (new PhpCsFixer\Finder())->in(['src', 'tests'])->append(['config']);
+return (new PhpCsFixer\Config())
+    ->setRiskyAllowed(true)
+    ->setRules([
+        '@Symfony' => true,
+        '@PHP83Migration' => true,
+        'declare_strict_types' => true,
+        'global_namespace_import' => ['import_classes' => true],
+        'ordered_imports' => ['sort_algorithm' => 'alpha'],
+        'native_function_invocation' => ['include' => ['@compiler_optimized']],
+        'phpdoc_to_comment' => false,
+        'yoda_style' => false,
+        'no_unused_imports' => true,
+        'single_line_throw' => false,
+    ])
+    ->setFinder($finder);
+\end{codeconf}
+
+\begin{codeconf}
+# phpstan.neon
+parameters:
+    level: 8
+    paths: [src, tests]
+    checkMissingIterableValueType: true
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        - identifier: missingType.iterableValue
+    bootstrapFiles: [tests/bootstrap.php]
+\end{codeconf}
+
+\begin{note}
+Ordre d'adoption qui rapporte~: (1) PHP-CS-Fixer (5 minutes, aucun d\'ebat)~; (2) PHPStan niveau
+5, puis 8 progressivement~; (3) \verb|declare(strict\_types=1)| partout~; (4) Rector pour les
+mont\'ees de version~; (5) Psalm si le projet est critique. Le niveau 8 de PHPStan est le vrai
+d\'etecteur de bugs de nullit\'e, de types fant\^omes et d'oublis de v\'erification---l'\'equivalent du
+\verb|strict| de TypeScript, en plus s\'ev\`ere.
+\end{note}
+
+\section{Le serveur~: nginx + php-fpm (ou Apache)}
+
+\begin{codeconf}
+# /etc/nginx/sites-available/nour
+server {
+    listen 80;
+    server_name nour.dev www.nour.dev;
+    root /var/www/nour/public;                 # LA RACINE WEB = public/ , jamais le projet
+    index index.php;
+
+    location / {
+        try_files $uri $uri/ /index.php$is_args$args;   # le "front controller"
+    }
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.3-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_read_timeout 60s;
+    }
+    location = /favicon.ico { log_not_found off; access_log off; }
+    location ~* \.(css|js|woff2|svg|png|jpg|webp)$ {
+        expires 1y; add_header Cache-Control "public, immutable"; access_log off;
+    }
+    location ~ /\.(?!well-known) { deny all; }
+}
+\end{codeconf}
+
+\begin{codeconf}
+; /etc/php/8.3/fpm/pool.d/nour.conf  -- un pool par application
+[nour]
+user = nour
+group = nour
+listen = /run/php/php8.3-fpm-nour.sock
+listen.owner = www-data
+listen.group = www-data
+pm = dynamic
+pm.max_children = 25                 ; memoire_par_processus ~60 Mo => (RAM*0.8)/60
+pm.start_servers = 6
+pm.min_spare_servers = 4
+pm.max_spare_servers = 10
+pm.max_requests = 500                 ; recycle pour limiter les fuites
+clear_env = no                        ; sans cela, tes variables d'environnement ne passent PAS
+php_admin_value[upload_max_filesize] = 10M
+php_admin_value[memory_limit] = 256M
+php_admin_value[error_log] = /var/log/php/nour-error.log
+catch_workers_output = yes
+decorate_workers_output = no
+\end{codeconf}
+
+\begin{terminal}
+sudo systemctl reload php8.3-fpm nginx
+php -i | grep -E "opcache.enable|memory"        # OPcache doit etre actif
+# OPcache en production (les memes opcodes recompiles a chaque requete = gaspillage) :
+#   opcache.enable=1, opcache.memory_consumption=192, opcache.max_accelerated_files=20000,
+#   opcache.validate_timestamps=0  (+ `php-fpm -tt && kill -USR2 <master>` apres un deploiement)
+\end{terminal}
+
+\section{D\'ebogueur Xdebug---et comment s'en servir sans pleurer}
+
+\begin{terminal}
+# Linux (paquet) : sudo apt install php-xdebug ; ou via le gestionnaire de la distro
+# macOS : pecl install xdebug  |  Windows : download.coderix.com/xdebug (choisir le .dll
+#         correspondant a php -i : version, NTS/TS, xdebug)
+php --ini ; php -i | grep xdebug.mode
+\end{terminal}
+
+\begin{codeconf}
+; /etc/php/8.3/mods-available/xdebug.ini  (ou dans php.ini)
+zend_extension=xdebug
+xdebug.mode=debug
+xdebug.start_with_request=trigger        ; ne s'active que si XDEBUG_TRIGGER present : + de controle
+xdebug.client_host=127.0.0.1
+xdebug.client_port=9003
+xdebug.idekey=VSCODE
+xdebug.log=/tmp/xdebug.log
+xdebug.max_nesting_level=512
+xdebug.profiler_output_dir=/tmp
+xdebug.mode=profile,debug                 ; les deux a la fois en dev local seulement
+\end{codeconf}
+
+\begin{codejson}
+{
+  "name": "Ecouter Xdebug",
+  "type": "php",
+  "request": "launch",
+  "port": 9003,
+  "pathMappings": { "/var/www/nour": "${workspaceFolder}" },
+  "log": true
+}
+\end{codejson}
+
+D\'eclencher une session~: \link{xdebug-trigger}{https://xdebug.org/wizard}~; en pratique~: extension
+\og ~Xdebug Helper~ \fg{}, ou \cmd{curl -H "XDEBUG-TRIGGER: 1" http://nour.dev/article?id=7}.
+\verb|xdebug\_break()| dans le code, \verb|xdebug\_print\_function\_stack()| pour voir qui m'a appel\'e,
+\verb|xdebug\_start\_code\_coverage()| pour mesurer ce qui manque.
+
+\subsection{Profilage~: o\`u part le temps}
+
+\begin{terminal}
+# 1. Xdebug profile (cachegrind) puis QCachegrind / KCacheGrind / WebCacheGrind
+curl -H "XDEBUG-PROFILE: 1" http://nour.dev/rapport -o /dev/null
+kcachegrind /tmp/cachegrind.out.*
+
+# 2. blackfire.io (versions locales gratuites) ou xhprof
+composer require --dev symfony/xhprof
+
+# 3. Le minitraceur maison, 10 lignes, suffisant 9 fois sur 10
+#    $t=microtime(true); ... ; error_log(sprintf('[perf] %s: %.1f ms', $etape, 1e3*(microtime(true)-$t)));
+\end{terminal}
+
+\section{Tests PHP~: PHPUnit (et Pest)}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+namespace Tests\Unit\Domain;
+
+use App\Domain\Article\Article;
+use App\Domain\Article\Statut;
+use DateTimeImmutable;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+
+#[CoversClass(Article::class)]
+final class ArticleTest extends TestCase
+{
+    private function article(string $titre = 'Un titre correct', Statut $s = Statut::Brouillon): Article
+    {
+        return new Article(null, $titre, 'corps', $s, new Auteur('N', 'n@e.com'), new DateTimeImmutable());
+    }
+
+    public function testLaPublicationFixeLaDate(): void
+    {
+        $a = $this->article()->publier();
+        self::assertSame(Statut::Publie, $a->statut());
+        self::assertNotNull($a->publieLe());
+    }
+
+    #[DataProvider('titresInvalides')]
+    public function testRefuseLesTitresInvalides(string $titre, string $attendu): void
+    {
+        $this->expectException(\DomainException::class);
+        $this->expectExceptionMessageMatches($attendu);
+        $this->article($titre);
+    }
+    public static function titresInvalides(): iterable
+    {
+        yield 'vide' => ['', '/minimum/'];
+        yield 'trop court' => ['ab', '/minimum/'];
+        yield 'trop long' => [str_repeat('a', 200), '/maximum/'];
+    }
+
+    public function testRenommerNeMutePasLOriginal(): void
+    {
+        $original = $this->article('A');
+        $modifie = $original->renommer('B');
+        self::assertNotSame($original, $modifie);
+        self::assertSame('A', $original->titre());
+    }
+}
+\end{codephp}
+
+\begin{codephp}
+<?php
+// tests/bootstrap.php --- le minimum pour tester sans toucher a la vraie base
+require __DIR__ . '/../vendor/autoload.php';
+putenv('APP_ENV=test');
+// SQLite en memoire pour les tests d'integration : rapide, isole, reel
+$pdo = new PDO('sqlite::memory:');
+$pdo->exec(file_get_contents(__DIR__ . '/../database/schema.sqlite.sql'));
+\end{codephp}
+
+\begin{codeconf}
+; phpunit.xml.dist
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="tests/bootstrap.php" colors="true" cacheDirectory=".phpunit.cache"
+         failOnWarning="true" failOnNotice="true" beStrictAboutOutputDuringTests="true">
+  <testsuites>
+    <testsuite name="unit"><directory>tests/Unit</directory></testsuite>
+    <testsuite name="integration"><directory>tests/Integration</directory></testsuite>
+  </testsuites>
+  <source>
+    <include><directory>src</directory></include>
+  </source>
+  <coverage>
+    <report><text outputFile="php://stdout"/><html outputDirectory="coverage"/></report>
+  </coverage>
+  <php>
+    <ini name="error_reporting" value="-1"/>
+    <server name="APP_ENV" value="test" force="true"/>
+  </php>
+</phpunit>
+\end{codeconf}
+
+\begin{terminal}
+vendor/bin/phpunit --testdox --coverage-text
+vendor/bin/phpunit --filter=Article --coverage-clover coverage.xml
+vendor/bin/phpunit --order-by=defects --reverse-list    # les echecs d'abord
+# Pest (syntaxe plus courte, tres appreciee) : composer require --dev pestphp/pest && vendor/bin/pest
+\end{terminal}
+
+\subsection{Paquets PHP qui valent leur poids}
+
+\begin{tabz}{lX}
+  \headrow \thd{Paquet} \& \thd{Usage} \\
+  \midrule
+  \link{monolog/monolog}{https://github.com/Seldaek/monolog} \& journalisation PSR-3, handlers fichier/Sentry/Slack.\\
+  \link{symfony/dotenv}{https://symfony.com/components/Dotenv} \& lecture de \fichier{.env} par environnements.\\
+  \link{nesbot/carbon}{https://carbon.nesbot.com/} \& dates agr\'eables (et \verb|DateTimeImmutable| natif, souvent suffisant).\\
+  \link{ramsey/uuid}{https://github.com/ramsey/uuid} \& UUIDv7/v4.\\
+  \link{vlucas/phpdotenv}{https://github.com/vlucas/phpdotenv} \& l'alternative simple.\\
+  \link{guzzlehttp/guzzle}{https://docs.guzzlephp.org/} ou \link{symfony/http-client}{https://symfony.com/components/HttpClient} \& client HTTP.\\
+  \link{phpmailer/phpmailer}{https://github.com/PHPMailer/PHPMailer} ou \link{symfony/mailer}{https://symfony.com/doc/current/mailer.html} \& emails.\\
+  \link{respect/validation}{https://respectvalidation.readthedocs.io/} \& validation d\'eclarative.\\
+  \link{league/flysystem}{https://flysystem.thephpleague.com/} \& stockage abstrait (local, S3, FTP).\\
+  \link{symfony/console}{https://symfony.com/components/Console} \& commandes CLI, sans framework.\\
+  \link{robmorgan/phinx}{https://book.cakephp.org/phinx/} \& migrations.\\
+  \link{mockery/mockery}{https://docs.mockery.io/} \& mocks (surtout pour les interfaces).\\
+  \link{friendsofphp/php-cs-fixer}{https://github.com/PHP-CS-Fixer/PHP-CS-Fixer} \& style.\\
+  \link{rector/rector}{https://getrector.com/} \& refactorisations en masse.\\
+  \link{filp/whoops}{https://github.com/filp/whoops} \& page d'erreur de d\'eveloppement magnifique.\\
+\end{tabz}
+
+\begin{exercice}
+\begin{enumerate}
+  \item Cr\'ee un projet \og ~sans framework~ \fg{} propre~: \verb|composer init|, PSR-4, \verb|public/index.php|,
+        \verb|src/|, \verb|tests/|, \verb|data/|, scripts \verb|serve|, \verb|check|, \verb|test|.
+  \item Ajoute PHP-CS-Fixer et PHPStan niveau~8~: fais passer le projet au vert en partant de
+        \og ~plein d'erreurs~ \fg{}. Note les bugs r\'eels trouv\'es par PHPStan (il y en a).
+  \item \'Ecris 20 tests PHPUnit~: d'abord sur le domaine pur (aucune d\'ependance), puis sur le d\'ep\^ot
+        avec SQLite en m\'emoire, puis un test d'int\'egration HTTP (une vraie requ\^ete sur le routeur).
+  \item Configure Xdebug~: arr\^ete-toi dans une action, inspecte la pile, utilise
+        \verb|xdebug\_break()| dans une fermeture. Puis profile une page lente et nomme la fonction
+        qui co\^ute~; corrige, reprofile.
+  \item Rends ton d\'ep\^ots compatible PSR-3 et PSR-16~: ajoute un cache m\'emoire avec TTL~; passe
+        du \verb|apcu| au \verb|files| sans changer une ligne de m\'etier.
+  \item Publie une petite biblioth\`eque sur Packagist~: tests, CI, style, analyse, tag, README~;
+        installe-la dans un autre projet.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Composer documentation --- \url{https://getcomposer.org/doc/}
+  \item PHP-FIG --- \url{https://www.php-fig.org/psr/}
+  \item PHPStan --- \url{https://phpstan.org/} --- Psalm --- \url{https://psalm.dev/} --- Rector --- \url{https://getrector.com/}
+  \item PHPUnit --- \url{https://docs.phpunit.de/} --- Pest --- \url{https://pestphp.com/}
+  \item Xdebug --- \url{https://xdebug.org/docs/step_debug} --- PHP-FPM tuning --- \url{https://php.watch/configuration/php-fpm}
+  \item \link{PHP~The~Right~Way}{https://phptherightway.com/} --- relis la partie \og ~Dependencies~ \fg{} et \og ~Tooling~ \fg{}.
+\end{itemize}
+\end{ressources}
+
+\index{Composer}\index{PSR}\index{PHPStan}\index{Xdebug}\index{PHPUnit}

@@ -1,0 +1,335 @@
+% ============================================================================
+\chapter{Tester son code~: Vitest, Jest, Playwright}
+\label{ch-js-tests}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item D\'ecider quoi tester (et quoi ne surtout pas tester).
+  \item \'Ecrire des tests lisibles avec le sch\'ema Arrange-Act-Assert et un nommage qui documente.
+  \item Ma\^itriser les mocks, les faux timers, et le mock de r\'eseau (msw).
+  \item Tester l'interface (composants) et le parcours complet (Playwright).
+  \item Brancher les tests dans une CI GitHub Actions qui refuse un mauvais commit.
+\end{itemize}
+\end{objectif}
+
+\section{Pourquoi et quoi}
+
+Un test n'est pas une certification de correction~: c'est un \emph{filet} qui te permet de
+modifier le code sans peur. Le retour sur investissement vient des zones \`a r\`egles m\'etier,
+pas des lignes de branchement trivial.
+
+\begin{tabz}{lXll}
+  \headrow \thd{\'Etage} \& \thd{Quoi} \& \thd{Vitesse} \& \thd{Part saine} \\
+  \midrule
+  Unitaires \& fonctions pures, r\`egles m\'etier, parseurs, validateurs \& ms \& 70 \% \\
+  Int\'egration \& un module + sa base/son disque/son API simul\'ee \& dizaines de ms \& 20 \% \\
+  Bout-en-bout \& parcours utilisateur r\'eel dans un navigateur \& secondes \& 10 \% \\
+\end{tabz}
+
+Ne teste \textbf{pas}~: les getters/setters, une biblioth\`eque tiers (React ne t'int\'eresse pas),
+le nombre exact d'appels internes d'une impl\'ementation (\c{c}a casse au moindre refactor), ni le CSS.
+
+\section{Vitest~: le choix par d\'efaut en 2026}
+
+\begin{terminal}
+npm i -D vitest @vitest/coverage-v8 jsdom fake-indexeddb
+npx vitest run --coverage
+npx vitest --ui                 # interface de developpement : surveillance, filtres, timelines
+\end{terminal}
+
+\begin{codejson}
+{
+  "test": {
+    "environment": "node",
+    "globals": false,
+    "coverage": {
+      "provider": "v8",
+      "reporter": ["text", "html", "lcov"],
+      "thresholds": { "lines": 80, "functions": 75, "branches": 70 }
+    },
+    "projects": [
+      { "extends": true, "test": { "include": ["tests/unit/**"], "environment": "node" } },
+      { "extends": true, "test": { "include": ["tests/dom/**"], "environment": "jsdom" } }
+    ]
+  }
+}
+\end{codejson}
+
+\begin{codejs}
+// tests/unit/panier.test.js
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { calculerTotaux, ajouter } from "../../src/lib/panier.js";
+
+describe("calculerTotaux", () => {
+  it("applique la TVA de 20 % sur le montant hors taxes", () => {
+    const t = calculerTotaux([{ prix: 10, qte: 2 }]);
+    expect(t.ht).toBe(20);
+    expect(t.tva).toBeCloseTo(4, 5);
+    expect(t.ttc).toBeCloseTo(24, 5);
+  });
+
+  it.each([
+    [[], 0],
+    [[{ prix: 12.5, qte: 1 }], 15],
+    [[{ prix: 8, qte: 3 }], 28.8],
+  ])("panier %j -> TTC %f", (lignes, ttc) => {
+    expect(calculerTotaux(lignes).ttc).toBeCloseTo(ttc * 1.2, 5);
+  });
+
+  it("refuse une quantite negative", () => {
+    expect(() => ajouter({ lignes: [] }, { prix: 1, qte: -3 })).toThrow(/quantite/);
+  });
+
+  it("ne mute pas le panier recu", () => {
+    const initial = Object.freeze({ lignes: Object.freeze([{ prix: 1, qte: 1 }]) });
+    const suivant = ajouter(initial, { prix: 2, qte: 1 });
+    expect(suivant.lignes).toHaveLength(2);
+    expect(initial.lignes).toHaveLength(1);
+  });
+});
+\end{codejs}
+
+\subsection{Les assertions qui comptent}
+
+\begin{codejs}
+expect(valeur).toBe(1);              // identite (Object.is) : primitives
+expect(objet).toEqual({ a: 1 });     // structure profonde, ignore undefined
+expect(objet).toStrictEqual({ a: 1, b: undefined });   // strict : types + cles undefined
+expect(tab).toEqual(expect.arrayContaining([2, 3]));
+expect(objet).toMatchObject({ a: { b: 1 } });           // sous-ensemble : le test qui ne casse pas pour rien
+expect(chaine).toMatch(/^\\d{4}-\\d{2}-\\d{2}$/);
+expect(n).toBeCloseTo(0.3, 5);                           // flottants
+expect(p).resolves.toEqual(x); expect(p).rejects.toThrow(Error);
+expect(fn).toHaveBeenCalledTimes(2);
+expect(fn).toHaveBeenCalledWith({ id: 1 }, expect.any(Number));
+expect(element).toBeInTheDocument();                      // avec @testing-library/jest-dom
+expect(localStorage.getItem("k")).not.toBeNull();
+\end{codejs}
+
+\section{Mocks, espions, horloges}
+
+\begin{codejs}
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// 1. Espionner une fonction locale : on verifie le dialogue avec une dependance
+const logger = { info: vi.fn() };
+await service.traiter(logger);
+expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("ok"));
+expect(logger.info.mock.calls.length).toBe(1);
+logger.info.mockImplementation(() => { throw new Error("panne"); });
+logger.info.mockResolvedValue({ id: 1 });       // pour une fonction asynchrone
+logger.info.mockRestore();
+
+// 2. Mock d'un module entier (ex : la couche reseau)
+vi.mock("../../src/api.js", () => ({
+  api: { get: vi.fn().mockResolvedValue({ items: [{ id: 1, titre: "x" }] }) },
+}));
+
+// 3. Horloges fausses : tester un debounce, un retry, une expiration de session
+vi.useFakeTimers();
+const fn = vi.fn();
+debounce(fn, 300)("a"); debounce(fn, 300)("ab");
+await vi.advanceTimersByTimeAsync(300);
+expect(fn).toHaveBeenCalledTimes(1);
+expect(fn).toHaveBeenCalledWith("ab");
+vi.setSystemTime(new Date("2026-01-15T10:00:00Z"));
+vi.useRealTimers();
+
+// 4. Substituts d'environnement
+process.env.NODE_ENV = "test";
+globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+\end{codejs}
+
+\begin{astuce}
+Quand le mock devient plus long que le test, c'est que le code est mal d\'ecoup\'e~: la d\'ependance
+est trop dure \`a isoler. Injecte-la (param\`etre, constructeur, contexte) au lieu de mocker le
+module. Les bons tests viennent d'un bon d\'ecouplage, pas d'un bon moqueur.
+\end{astuce}
+
+\subsection{Mock de r\'eseau avec msw~: le test qui ne ment pas}
+
+\begin{codejs}
+// tests/msw/handlers.js
+import { http, HttpResponse } from "msw";
+export const handlers = [
+  http.get("/api/articles", ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get("page") ?? 1);
+    return HttpResponse.json({ items: [], page, total: 0 });
+  }),
+  http.post("/api/articles", async ({ request }) => {
+    const corps = await request.json();
+    if (!corps.titre) return HttpResponse.json({ message: "titre requis" }, { status: 422 });
+    return HttpResponse.json({ id: 1, ...corps }, { status: 201 });
+  }),
+  http.get("/api/articles/:id", () => HttpResponse.error()),        // simule une panne reseau
+];
+// tests/setup.js
+import { beforeAll, afterEach, afterAll } from "vitest";
+import { setupServer } from "msw/node";
+export const server = setupServer(...handlers);
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));   // toute requete non prevue = echec
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+\end{codejs}
+
+\section{Tester l'interface~: par le comportement visible}
+
+\begin{codejs}
+// tests/dom/liste.test.jsx
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ListeCourses } from "../../src/ui/ListeCourses.jsx";
+
+it("ajoute un article et le rend comme termine au clic", async () => {
+  render(<ListeCourses />);
+  const champ = screen.getByRole("textbox", { name: /article/i });     // les roles d'abord :
+  await userEvent.type(champ, "Riz{Enter}");                            //  accessible = testable
+  expect(screen.getByRole("listitem")).toHaveTextContent("Riz");
+  await userEvent.click(screen.getByRole("checkbox"));
+  expect(screen.getByRole("listitem")).toHaveClass("fait");
+  await waitFor(() => expect(localStorage.getItem("courses")).toContain("Riz"));
+});
+\end{codejs}
+
+R\`egle d'or~: teste ce que l'\emph{utilisateur} voit et fait, jamais l'impl\'ementation interne.
+\verb|getByRole|, \verb|getByLabelText|, \verb|getByText| plut\^ot que \verb|getByTestId|~; et si
+tu n'arrives pas \`a s\'electionner un \'el\'ement par son r\^ole, c'est un vrai bug d'accessibilit\'e
+que tu viens de trouver.
+
+\section{Playwright~: le test bout-en-bout qui vaut le d\'etour}
+
+\begin{terminal}
+npm init playwright@latest         # installe navigateurs + github action + exemple
+npx playwright test --ui
+npx playwright codegen http://localhost:5173   # enregistre tes clics en code
+npx playwright show-report
+\end{terminal}
+
+\begin{codejs}
+// tests/e2e/parcours.spec.ts
+import { test, expect } from "@playwright/test";
+
+test("un visiteur peut ajouter un article et le retrouve apres rechargement", async ({ page, context }) => {
+  await page.goto("/");
+  await page.getByLabel("Article").fill("Riz basmati");
+  await page.getByRole("button", { name: "Ajouter" }).click();
+
+  await expect(page.getByRole("listitem")).toHaveText(/Riz basmati/);
+  await expect(page.getByText(/1 article/)).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("listitem")).toHaveText(/Riz basmati/);
+});
+
+test("une requete API lente n'affiche pas de doublon", async ({ page }) => {
+  let appelee = 0;
+  await page.route("**/api/articles", async (route) => {
+    appelee++;
+    await new Promise((r) => setTimeout(r, 800));
+    route.fulfill({ json: { items: [], total: 0 } });
+  });
+  await page.goto("/articles");
+  await page.getByRole("button", { name: /recharger/i }).click();
+  await page.getByRole("button", { name: /recharger/i }).click();
+  await expect(page.getByTestId("compteur-appels")).toHaveText("1");
+});
+\end{codejs}
+
+\begin{note}
+Playwright sert aussi \`a autre chose~: captures d'\'ecran automatiques pour ton README,
+PDFs, g\'en\'eration de vignettes, tests multi-navigateurs et multi-\emph{viewports},
+mocks r\'eseau au niveau HTTP (le plus fid\`ele qui existe). Un seul outil, quatre usages.
+\end{note}
+
+\section{Tests property-based~: chercher les cas que tu n'as pas imagin\'es}
+
+\begin{codejs}
+import fc from "fast-check";
+it("le tri est une permutation ordonnee, pour tout tableau", () => {
+  fc.assert(
+    fc.property(fc.array(fc.integer()), (tab) => {
+      const tri = trier(tab);
+      expect(tri).toHaveLength(tab.length);
+      expect([...tri].sort((a, b) => a - b)).toEqual(tri);
+      expect(tri.reduce((s, x) => s + x, 0)).toBe(tab.reduce((s, x) => s + x, 0));
+    }),
+    { numRuns: 200 }
+  );
+});
+it("serialiser/parser est un aller-retour", () => {
+  fc.assert(fc.property(panierArbitraire, (p) => {
+    expect(deverser(verser(p))).toEqual(p);
+  }));
+});
+\end{codejs}
+
+C'est l'arme id\'eale pour les parseurs, les slugifieurs, les codecs, les calculateurs de prix.
+
+\section{Tests et int\'egration continue}
+
+\begin{codeyml}
+# .github/workflows/ci.yml
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+concurrency: { group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }
+jobs:
+  qualite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint && pnpm typecheck
+      - run: pnpm test -- --coverage
+      - uses: actions/upload-artifact@v4
+        with: { name: couverture, path: coverage/lcov-report }
+  e2e:
+    runs-on: ubuntu-latest
+    needs: qualite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - uses: microsoft/playwright-github-action@v1
+      - run: npx playwright install --with-deps chromium
+      - run: npm run start & npx wait-on http://localhost:4173 && npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: traces, path: test-results/ }
+\end{codeyml}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris une suite de 15 tests sur le module \verb|panier|~: cas nominaux, cas limites
+        (vide, quantit\'es nulles, prix n\'egatifs, d\'ecimales), erreurs, immuabilit\'e.
+  \item Ajoute un test de non-r\'egression~: reproduis un bug que tu as vraiment eu cette semaine,
+        \'ecris le test qui \'echoue, puis corrige le code pour le faire passer.
+  \item Mock le r\'eseau avec msw et teste la gestion d'erreur de ton client HTTP~: panne,
+        401 (d\'econnexion provoqu\'ee), 500, r\'eponse lente avec annulation.
+  \item Teste un composant UI avec Testing Library~: seulement par r\^oles et libell\'es. Note
+        chaque fois que tu as \'et\'e tent\'e par un \verb|data-testid|~: c'\'etait une dette d'accessibilit\'e.
+  \item \'Ecris deux tests Playwright~: parcours d'ajout/suppression, et gestion du mode hors ligne.
+  \item Configure la couverture \`a seuil 80 \% et la CI GitHub Actions. V\'erifie qu'un commit
+        rouge \'echoue bien~: si tu n'as pas vu l'action passer au rouge, ta CI est d\'ecorative.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Vitest --- \url{https://vitest.dev/guide/}
+  \item Jest (si tu dois le maintenir) --- \url{https://jestjs.io/fr/docs/getting-started}
+  \item Testing Library --- \url{https://testing-library.com/docs/react-testing-library/intro/}
+  \item Playwright --- \url{https://playwright.dev/docs/intro}
+  \item msw --- \url{https://mswjs.io/docs/} --- fast-check --- \url{https://fast-check.dev/}
+  \item GitHub Actions, doc compl\`ete --- \url{https://docs.github.com/fr/actions}
+\end{itemize}
+\end{ressources}
+
+\index{tests}\index{Vitest}\index{Playwright}\index{mock}

@@ -1,0 +1,215 @@
+% ============================================================================
+\chapter{Cinq projets complets, du cahier des charges \`a la mise en ligne}
+\label{ch-projets}
+% ============================================================================
+
+Cinq projets \`a faire \emph{en entier}~: sp\'ecification, d\'ecoupage, code, tests, s\'ecurit\'e,
+d\'eploiement, README. Chacun indique les chapitres n\'ecessaires~; si tu bloques, c'est qu'un
+pr\'erequis est \`a relire, pas que le projet est trop dur.
+
+\begin{tablez}[p{0.19\textwidth}p{0.115\textwidth}p{0.12\textwidth}X]
+  \headrow Projet \& Langage \& Dur\'ee \& Ce qu'il t'apprend vraiment \\
+  \midrule
+  \thd{P1} Gestion de t\^aches \& JS pur \& 8--14 h \& DOM, \'etat, events, \verb|localStorage|, build Vite, sans framework \\
+  \thd{P2} Chat temps r\'eel \& Node + JS \& 20--30 h \& HTTP/WS, flux, \verb|WebSocket|, files, auth par session, d\'eploiement \\
+  \thd{P3} Blog complet \& PHP + MySQL \& 30--45 h \& MVC maison, requ\^etes pr\'epar\'ees, auth, upload, admin, SEO, s\'ecurit\'e \\
+  \thd{P4} Raccourcisseur d'URL \& Java + Spring \& 25--40 h \& API REST, JPA, rate-limit, tests d'int\'egration, Docker \\
+  \thd{P5} Mini-ERP polyglotte \& les trois \& 60 h+ \& fronti\`eres propres~: API Java, back-office PHP, front JS, contrats \\
+\end{tablez}
+
+\section{P1 --- Gestionnaire de t\^aches (JavaScript, z\'ero framework)}
+
+\etape{Cahier des charges}
+Liste de t\^aches, plusieurs projets (\og ~pays~ \fg{} de la liste), \'edition en place, filtres
+(toutes / actives / termin\'ees), recherche, tri (manuel par glisser, puis date), \'etiquettes,
+\'ech\'eance avec coloration, archivage, undo (Ctrl+Z sur la derni\`ere action), export/import JSON,
+mode hors-ligne complet, th\`eme sombre.
+
+\etape{Contraintes techniques}
+\begin{itemize}
+  \item Aucun framework~: modules ES, \verb|<script type="module">|, Vite pour le build.
+  \item Architecture en trois couches~: \verb|etat.js| (le mod\`ele + les r\'educteurs),
+        \verb|rendu.js| (du mod\`ele au DOM), \verb|events.js| (du DOM au mod\`ele). Aucune fonction
+        du rendu ne mutante~; aucun \'ev\'enement qui touche directement au \verb|localStorage|.
+  \item Persistance~: \verb|localStorage| avec un sch\'ema versionn\'e (\verb|{version: 2, taches: []}|)
+        et une fonction de migration. \'Ecriture amortie (debounce 400 ms) et propre
+        (\verb|beforeunload| non fiable~: \'ecrire \`a chaque mutation, sans attendre).
+  \item Accessibilit\'e~: navigation clavier compl\`ete, \verb|aria-live| pour le compteur, labels
+        r\'eels, focus pi\'eg\'e dans le dialogue d'ajout, contraste AA.
+\end{itemize}
+
+\etape{D\'ecoupage en 8 livrables testables}
+\begin{enumerate}
+  \item Squelette Vite + structure des modules + rendu d'une liste cod\'ee en dur.
+  \item \'Etat central \verb|store| (\verb|subscribe|/ \verb|dispatch|)~; aucun DOM dans l'\'etat.
+  \item Ajout/\'edition/suppression + formulaire accessible (\verb|<dialog>| natif).
+  \item Filtres et recherche (URL hash ou \verb|searchParams| pour partager un filtre~! ).
+  \item Bascule, tri manuel (glisser avec \verb|draggable| + \verb|aria|)~; puis raccourcis clavier.
+  \item Persistance + migrations + gestion d'un stockage plein/interdit (try/catch, mode m\'emoire).
+  \item Undo/redo (pile de snapshots born\'ee \`a 50)~; export/import JSON valid\'e.
+  \item Build \verb|vite build|, Lighthouse \`a 100, tests Vitest sur le r\'educteur et les migrations,
+        DPWA (\verb|manifest.webmanifest|) et publication sur Netlify/GitHub Pages.
+\end{enumerate}
+
+\etape{Crit\`eres d'acceptation (\`a cocher)}
+Recharger la page ne perd aucune donn\'ee~; supprimer la derni\`ere t\^ache d'un projet vide ne casse
+rien~; l'application fonctionne sans r\'eseau~; un fichier JSON corrompu au d\'emarrage est ignor\'e
+avec un message~; le clique sur \og ~terminer~ \fg{} est possible au clavier~; Lighthouse Performance
+$\geq$ 95 et Accessibilit\'e $=$ 100~; \verb|npm test| passe~; le README explique les 8 livrables.
+
+\etape{Extensions}
+Sync multi-onglets via \verb|BroadcastChannel|~; statistiques (t\^aches/jour, heatmap) dessin\'ees en
+\verb|<canvas>|~; une PWA avec Service Worker et file d'attente hors-ligne~; un mode \og ~semestrier~ \fg{}
+avec dates r\'ecurentes (\`a faire \emph{avec} \verb|Intl| et jamais avec des millisecondes brutes).
+
+\section{P2 --- Chat temps r\'eel (Node.js)}
+
+\etape{Sp\'ecification}
+Salons multiples, inscription/connexion, pseudonyme, statut en ligne, envoi de message, historique
+pagin\'e de 50 messages, indicateurs \og ~en train d'\'ecrire~ \fg{}, pr\'esence, reactions, coupures r\'eseau
+reconnect\'ees avec rejeu, mod\'eration (ignorer/bannir), salon g\'en\'eral en lecture seule.
+
+\etape{Choix assum\'es}
+Serveur HTTP \verb|node:http| ou \verb|express|~; \verb|ws| (pas socket.io) pour comprendre le
+protocole~; \verb|better-sqlite3| ou PostgreSQL~; \verb|jose| ou \verb|iron-session| pour la session~;
+\verb|zod| ou un validateur maison pour chaque trame re\c{c}ue~; \verb|pino| pour les logs structur\'es.
+Frontend en JS pur (le m\^eme socle que P1) pour que le serveur reste le seul cerveau.
+
+\etape{Les 4 difficult\'es p\'edagogiques (ne les \'evite pas)}
+\begin{enumerate}
+  \item \textbf{Protocole sur flux~:} un message WebSocket est un paquet~; tu dois cadrer
+        \verb|{type, id, payload}|, valider, r\'epondre par \verb|ack|~; et g\'erer les trames
+        trop grosses (limite 64 Ko~: refuser, journaliser, d\'econnecter proprement).
+  \item \textbf{Reconnexion~:} garder la file des messages non acquitt\'es~; au rejeu, le client
+        envoie son dernier \verb|seq|~; le serveur renvoie le delta~: test avec
+        \verb|navigator.onLine| forc\'e et red\'emarrage du serveur.
+  \item \textbf{Pr\'esence~:} un \verb|ping|/ \verb|pong| toutes les 25 s avec purge des sockets
+        morts~; diffusion \og ~\'ecrit\ldots~ \fg{} throttl\'ee \`a 1 par seconde et 500 ms de silence.
+  \item \textbf{Isolation~:} un utilisateur ne lit que son salon~; une requ\^ete HTTP ne doit jamais
+        lister les messages d'un autre~: \'ecris le test qui prouve la fuite, avant l'impl\'ementation.
+\end{enumerate}
+
+\etape{S\'ecurit\'e (liste non n\'egociable)}
+Hachage Argon2id/bcrypt, cookies \verb|\_\_Host-| \verb|Secure| \verb|HttpOnly| \verb|SameSite=Lax|,
+CSRF sur les routes HTTP mutantes, limitation de connexion (5/min/IP + verrouillage progressif),
+longueur maximale des messages, \'echappement HTML au rendu (\verb|textContent|, jamais
+\verb|innerHTML| sur du contenu utilisateur), refus des origines de WebSocket non list\'ees
+(v\'erifie \verb|Origin|~! ), gzip uniquement sur les r\'eponses > 1 Ko, \verb|helmet|-like headers.
+
+\etape{Livrables}
+\verb|README| avec diagramme des trames~; sch\'ema SQL comment\'e~; \verb|docker-compose.yml|~;
+tests (unitaires sur le parsing de trames, int\'egration sur la reconnexion)~; un script
+\verb|load.js| (1 000 clients, 20 msg/s) et la mesure du d\'ebit~; le d\'eploiement derri\`ere un reverse
+proxy (Caddy ou Nginx) avec TLS~; une note d'une page sur ce que tu changerais avec Redis
+en cas de multi-instances.
+
+\section{P3 --- Blog complet en PHP nu + MySQL (le vrai projet d'embauche)}
+
+\etape{Sp\'ecification}
+C\^ot\'e lecteur~: liste pagin\'ee, article, recherche pleine texte, tags, flux RSS et sitemap,
+commentaires avec mod\'eration, compte avec avatar. C\^ot\'e auteur~: r\'edaction avec autosave,
+brouillons, publication programm\'ee, upload d'image redimensionn\'ee, statistiques de lecture.
+C\^ot\'e admin~: gestion des utilisateurs et des r\^oles, mod\'eration, journal d'audit.
+
+\etape{Architecture}
+Un mini-MVC en 250 lignes~: un point d'entr\'ee unique \verb|public/index.php|, un routeur,
+des contr\^oleurs fins, une couche d\'ep\^ot en PDO, un conteneur de services minuscule, un moteur de
+template (\verb|extract| interdit~: une m\'ethode \verb|render($vue, $donn\'ees)|), et
+l'autoloader PSR-4 de Composer. Les composants maison~: \verb|Requ\^ete|, \verb|R\'eponse|,
+\verb|S\'eance|, \verb|Authentification|, \verb|Validation|, \verb|Journal|, \verb|Cache| (fichiers).
+
+\etape{Exigences de qualit\'e (le diff qui fait la diff\'erence en entretien)}
+\begin{itemize}
+  \item Toutes les requ\^etes pr\'epar\'ees~; aucune variable dans le SQL~; le pr\'efixe de table dans une
+        constante~; \verb|SELECT| nommant les colonnes.
+  \item \'Echappement par contexte~: \verb|htmlspecialchars| pour le HTML, \verb|rawurlencode| pour
+        l'URL, jamais de \verb|echo| d'un contenu utilisateur non filtr\'e~; le CSP bloque l'inline.
+  \item CSRF sur tout ce qui mute, rotation d'identifiant de s\'eance \`a la connexion, r\'eg\'en\'eration
+        de l'empreinte d'argon si les param\`etres changent, verrouillage apr\`es 5 \'echecs,
+        r\'einitialisation par jeton \`a usage unique stock\'e hach\'e.
+  \item Upload~: \verb|getimagesize| + r\'e-encodage (jamais confiance \`a l'extension), taille limit\'ee,
+        nom al\'eatoire, hors \verb|docroot| ou avec \verb|Content-Disposition|, et virus-scan branchable.
+  \item Pagination par curseur au-del\`a de 10 000 lignes~; index justifi\'es par un \verb|EXPLAIN|.
+  \item \verb|composer phpstan| niveau 8 sans erreur~; \verb|php-cs-fixer|~; \verb|PHPUnit| sur le
+        domaine et les d\'ep\^ots~; \verb|exit 1| en CI si un seul test tombe.
+  \item SEO propre~: URLs cananiques, \verb|<link rel=prev/next>|, balises OG, donn\'ees structur\'ees
+        JSON-LD, temps de r\'eponse < 120 ms, images en \verb|srcset|.
+\end{itemize}
+
+\etape{Extensions}
+\'Edition collaborative (verrou optimiste par colonne \verb|version|)~; recherche par \verb|FULLTEXT|
+avec synonymes~; i18n (2 langues, table de traductions)~; API JSON consomm\'ee par un front JS~;
+webhooks sortants sign\'es~; file d'attente en base pour l'envoi d'emails~; un
+\verb|docker-compose| complet (php-fpm, nginx, mysql, maildev).
+
+\section{P4 --- Raccourcisseur d'URL + analytique (Java + Spring Boot)}
+
+\etape{Sp\'ecification}
+Cr\'eer un raccourci (code court, base 62, collision g\'er\'ee par r\'eessai), redirection 302 avec
+journalisation asynchrone, liens personnalis\'es, expiration, limites par compte (quota),
+tableau de bord~: clics par jour, r\'ef\'erents, pays (par IP, sans stockage de l'IP compl\`ete~: hach\'ee
+et tronqu\'ee), API publique avec jeton, suppression/r\'ecup\'eration, QR code optionnel.
+
+\etape{Mod\`ele de donn\'ees et choix}
+PostgreSQL~: \verb|liens(id bigserial, code text unique, cible text, compte\_id, cree\_le, expire\_le,
+supprime bool)| et \verb|clics(id bigserial, lien\_id, jour date, referer\_domaine, pays char(2),
+agent\_hash bytea)|~; agr\'egats dans \verb|clics\_jour| (d\'eclencheur ou traitement planifi\'e) pour que
+le tableau de bord reste un \verb|SELECT| simple. Redis optionnel pour le compteur~: vidang\'e
+p\'eriodiquement vers Postgres (la bonne discussion d'architecture~: exactitude contre d\'ebit).
+
+\etape{Les points techniques qui font progresser}
+\begin{enumerate}
+  \item Le g\'en\'erateur de code~: base 62, entropie (un \verb|LongAdder| + hachage de \verb|nanoTime|,
+        ou un compteur chiffr\'e)~; la v\'erification d'unicit\'e par \verb|INSERT ... ON CONFLICT| et non
+        par un \verb|SELECT| suivi d'un \verb|INSERT| (course).
+  \item Le chemin critique~: une seule requ\^ete~: \verb|SELECT id, compte\_id, actif FROM liens WHERE code=?|~;
+        le log du clic part dans une \verb|BlockingQueue| consomm\'ee par un worker
+        (jamais une \'ecriture par requ\^ete sur le m\^eme thread)~: puis le 302 sort.
+  \item Le cache~: Caffeine devant Postgres avec TTL 60 s~; invalidation \`a la modification.
+  \item La limitation~: jeton par compte et par IP (filtre Spring~; ou Bucket4j) avec
+        \verb|Retry-After|~; mesure et rapport (\verb|/actuator/metrics|).
+  \item Les tests~: \verb|@SpringBootTest| + Testcontainers~; un test de propri\'et\'e sur le
+        codage/d\'ecodage~; un test de concurrence qui cr\'ee 500 liens en parall\`ele (aucun doublon).
+  \item Le d\'eploiement~: image via buildpacks~; \verb|/readiness| branch\'e sur la BDD~: arr\^et gracieux~;
+        et (bonus) l'image native avec le temps de d\'emarrage mesur\'e.
+\end{enumerate}
+
+\section{P5 --- Mini-ERP polyglotte (l'exercice d'architecture)}
+
+Un entrep\^ot minimal~: articles, clients, commandes, stock. Une API Java (Spring Boot) porte la
+coh\'erence m\'etier et le stock~; un back-office PHP (le squelette de P3) g\`ere les fiches et les
+utilisateurs internes~; un front JS (Vite + TypeScript, ou un framework choisi apr\`es les
+chapitres~JS) consomme l'API. Ce n'est pas un pr\'etexte \`a tout microserviciser~: c'est
+l'exercice des \textbf{fronti\`eres}.
+
+\etape{Les cinq d\'ecisions \`a \'ecrire noir sur blanc dans un \fichier{ADR-001.md}}
+\begin{enumerate}
+  \item \textbf{Contrat~:} \verb|openapi.yaml| est la source de v\'erit\'e~; il est versionn\'e~; le front
+        g\'en\`ere ses types (ou l'inverse~: il est test\'e par un contrat~: \link{Dredd}{https://github.com/apiaryio/dredd},
+        Schemathesis, ou \verb|atdgen|-like en Java).
+  \item \textbf{Authentification~:} qui \'emet~? Qui v\'erifie~? (r\'eponse saine~: Spring ressource
+        server + login g\'er\'e par PHP via un jeton sign\'e court~; r\'eponse honn\^ete~: Keycloak.)
+  \item \textbf{Transactions~:} le stock et la commande sont dans la m\^eme base~: une transaction
+        SQL suffit~: documente ce qui changerait si ce n'\'etait plus le cas (saga, idempotence).
+  \item \textbf{Erreurs~:} un format unique (9457) chez les deux backend~; les codes m\'etier dans une
+        table commune~; les traductions c\^ot\'e front.
+  \item \textbf{D\'eploiement~:} un \verb|docker-compose| qui monte les trois + Postgres + un proxy~;
+        un \verb|make up| qui fait tout~; un \verb|make check| qui lance les trois suites.
+\end{enumerate}
+
+\etape{Bar\`eme d'auto-\'evaluation (sur 20, sois cruel)}
+Tests qui prouvent un comportement et non des lignes~: /4~; gestion des erreurs et des cas limites~:
+/4~; s\'ecurit\'e (cha\^ines, secrets, autorisations)~: /4~; lisibilit\'e du code et de la structure~: /3~;
+documentation (README, ADR, sch\'ema)~: /2~; exploitation (logs, m\'etriques, d\'eploiement reproductible)~: /3.
+Un projet \`a 12/20 qui tourne vaut mieux qu'un 18/20 qui ne se lance que sur ta machine~: mais
+vise 16 en ajoutant les trois derniers points (m\'etriques, journal, secret hors d\'ep\^ot).
+
+\begin{note}
+Comment mener ces projets sans abandonner~: d\'ecoupe en livrables d'une demi-journ\'ee~; committe \`a chaque
+livraison~; \'ecris le test avant la correction d'un bug~; si tu blocs plus de
+30 minutes, \'ecris le probl\`eme en une phrase (le \og ~canard en caoutchouc~ \fg{}~: 70 \% des fois tu
+trouves en \'ecrivant)~; et termine. Une version moche mais en ligne, test\'ee par trois personnes,
+vaut infiniment plus qu'une version parfaite dans un dossier \verb|projet-3-final-v2|.
+\end{note}
+
+\index{projet}\index{capstone}\index{architecture}

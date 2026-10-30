@@ -1,0 +1,192 @@
+% ============================================================================
+\chapter{Comment utiliser ce manuel}
+\label{ch-comment}
+% ============================================================================
+
+Ce livre a un objectif unique : te faire passer de \og je n'ai jamais \'ecrit une ligne de
+code \fg{} \`a \og je con\c{c}ois une application compl\`ete dans trois langages, je sais d\'ebugger,
+tester, s\'ecuriser et d\'eployer \fg{}. Il est con\c{c}u pour \^etre utilis\'e avec un \^editor ouvert
+\`a c\^ot\'e, pas lu comme un roman.
+
+\section{Ce que tu vas obtenir}
+
+\begin{objectif}
+\begin{itemize}
+  \item \textbf{Trois langages ma\^itris\'es ensemble}~: \langjs{} (le langage du navigateur et de
+        Node.js), \langphp{} (le moteur de la moiti\'e du web) et \langjava{} (le langage des
+        syst\`emes s\'erieux, des banques, d'Android, et une part \'enorme du code d'entreprise mondial).
+  \item \textbf{Un environnement de travail r\'eel} install\'e sur \emph{ta} machine, avec les bons
+        outils, les bons raccourcis et les bonnes habitudes d\`es le premier jour.
+  \item \textbf{Des centaines d'extraits de code complets et ex\'ecutables}, pens\'es pour \^etre
+        recopi\'es \`a la main (c'est comme \c{c}a qu'on apprend), puis modifi\'es.
+  \item \textbf{Des exercices avec corrig\'es} \`a la fin de chaque chapitre, et trois projets
+        fil rouges \`a la fin du livre.
+  \item \textbf{Tous les liens} vers les documentations officielles, les t\'el\'echargements, les
+        extensions, les livres gratuits et les cha\^ines qui comptent.
+\end{itemize}
+\end{objectif}
+
+\section{La convention typographique}
+
+\begin{tabz}{p{0.34\textwidth}X}
+  \headrow \thd{\'El\'ement} \& \thd{Signification} \\
+  \midrule
+  \verb|code_en_police_fixe| \& Nom de fichier, commande, mot-cl\'e \`a taper tel quel.\\
+  \cmd{npm install} \& Commande \`a taper dans un terminal.\\
+  \fichier{src/app.js} \& Chemin de fichier, relatif \`a la racine de ton projet.\\
+  \keys{Ctrl + S} \& Raccourci clavier.\\
+  \verb|console.log(1)| \& Dans un bloc \texttt{codejs}, \texttt{terminal}\dots : tout le code
+  affich\'e est r\'eel et fonctionnel, \`a recopier tel quel.\\
+  \src{https://developer.mozilla.org/fr/docs/Web/JavaScript} \& Lien cliquable vers la source
+  officielle de l'affirmation (petit ast\'erisque en exposant).\\
+\end{tabz}
+
+Deux types de blocs reviennent partout : \verb|terminal| (les commandes \`a taper, avec le
+r\'esultat attendu en commentaire) et les blocs de code \verb|codejs|, \verb|codephp|,
+\verb|codejava|, \verb|codesql|, \verb|codeconf|, \verb|codejson|, \verb|codeyml|,
+\verb|codeplain| (du code complet, \`a recopier puis \`a ex\'ecuter).
+
+\subsection{Les encadr\'es}
+
+\begin{itemize}
+  \item \textbf{Objectif de la chapitre}~: la liste des comp\'etences acquises \`a la fin du chapitre.
+        Si tu les poss\`edes d\'ej\`a, saute-le.
+  \item \textbf{Note}~: pr\'ecision th\'eorique ou contexte historique.
+  \item \textbf{Astuce de pro}~: habitude des d\'eveloppeurs exp\'eriment\'es, gain de temps imm\'ediat.
+  \item \textbf{Pi\`ege \`a \'eviter}~: l'erreur que 9 d\'eveloppeurs sur 10 font la premi\`ere fois.
+        Ces encadr\'es valent de l'or~: ils t'\'epargnent des heures.
+  \item \textbf{Exercices guid\'es}~: \`a faire \emph{obligatoirement} \`a la main, sans copier-coller.
+  \item \textbf{Ressources et outils cit\'es}~: les liens du chapitre, r\'esum\'es.
+  \item \textbf{Projet \`a r\'ealiser}~: travail long, plusieurs jours, \`a faire en fin de partie.
+\end{itemize}
+
+\section{Comment \'etudier avec ce livre}
+
+\etape{\'etape 1 --- Tape le code, ne le copie jamais}
+Le copier-coller cr\'ee l'illusion de la compr\'ehension. Taper force \`a lire chaque caract\`ere,
+chaque point-virgule, chaque accolade. C'est p\'enible les trois premiers jours, puis
+ton cerveau int\`egre la syntaxe toute seule. Ajoute une r\`egle~:
+\emph{chaque bloc de code du livre est \`a recopier, \`a ex\'ecuter, puis \`a casser volontairement}
+(pour voir le message d'erreur).
+
+\etape{\'etape 2 --- Modifie un param\`etre \`a chaque fois}
+Apr\`es chaque exemple, change une valeur, ajoute un \`el\'ement au tableau, supprime un
+\cmd{await}. Pr\'edis le r\'esultat \emph{avant} d'ex\'ecuter. Cette boucle
+\`a la boucle \og prediction $\rightarrow$ ex\'ecution $\rightarrow$ v\'erification\fg{}, la m\'ethode la plus rapide
+pour progresser en programmation, toutes langues confondues.
+
+\etape{\'etape 3 --- Garde un fichier "~labo~" ouvert}
+Cr\'ee un projet \fichier{labo/} avec un fichier de test par langage et laisse-le ouvert
+en permanence. Tu y testes toutes les id\'ees folles.
+
+\begin{terminal}
+mkdir -p ~/labo/js ~/labo/php ~/labo/java
+cd ~/labo/js && node -e 'console.log("ca marche")'
+cd ~/labo/php && php -r 'echo "ca marche", PHP_EOL;'
+cd ~/labo/java && printf 'public class Labo { public static void main(String[] a){ System.out.println("ca marche"); } }' > Labo.java && javac Labo.java && java Labo
+\end{terminal}
+
+\etape{\'etape 4 --- Les exercices d'abord, la suite du livre ensuite}
+Un chapitre est fini quand les exercices le sont, pas quand la page est tourn\'ee.
+
+\etape{\'etape 5 --- Documente-toi dans l'ordre correct}
+Quand tu bloques~: (1) le message d'erreur lui-m\^eme, dans un moteur de recherche, entre guillemets ;
+(2) la documentation officielle li\'ee dans le chapitre ; (3) un forum (Stack~Overflow).
+Ne saute pas l'\'etape~1~: lire un message d'erreur est une comp\'etence \`a part enti\`ere,
+et c'est celle qui te rendra autonome.
+
+\section{Ordre de lecture conseill\'e}
+
+\begin{enumerate}
+  \item \Cref{ch-environnement} et \cref{ch-git} --- installation des outils, terminal, Git.
+        \textbf{Non n\'egociable}, m\^eme si tu "~sais d\'eja faire~".
+  \item \textbf{Partie I --- JavaScript}. C'est le langage qui donne un r\'esultat visible
+        imm\'ediatement (une page web), donc la motivation ne retombe pas. Il couvre aussi la
+        logique pure (fonctions, tableaux, asynchrone) qui servira partout ailleurs.
+  \item \textbf{Partie II --- PHP}. Tu vas d\'ecouvrir le c\^ot\'e serveur "~pour de vrai~"~: requ\^etes,
+        formulaires, base de donn\'ees, sessions, s\'ecurit\'e. Beaucoup de concepts du JS reviennent,
+        ce qui les ancre.
+  \item \textbf{Partie III --- Java}. Le langage le plus exigeant, mais le plus formateur~: typage
+        strict, classes, compilation, collections, concurrency, outils d'entreprise.
+  \item \textbf{Partie IV} --- les trois projets, le plan de 12 semaines, l'aide-m\'emoire,
+        et la chasse aux erreurs classiques.
+\end{enumerate}
+
+\begin{astuce}
+Tu veux commencer par le web tout de suite~? Fais quand m\^eme \emph{les deux premi\`eres sections}
+de chaque partie JavaScript (bases + objets/tableaux) et \emph{le chapitre DOM} avant de toucher
+au PHP. Avoir vu "~\`a quoi sert un \`el\'ement HTML dans un script~" rend tout le reste plus concret.
+\end{astuce}
+
+\section{Ce livre ne contient pas (volontairement)}
+
+\begin{itemize}
+  \item Les recettes "~clique ici dans cette interface propri\'etaire~"~: elles meurent en six mois.
+  \item Une th\'eorie des langages formelle. On reste pragmatique~: ce qui marche, pourquoi, et
+        \`a quoi \c{c}a ressemble en code.
+  \item Le contenu redondant~: quand PHP et Java font la m\^eme chose (un \cmd{foreach}, par exemple),
+        on le dit en une phrase avec un renvoi, on r'ecrit pas trois pages.
+\end{itemize}
+
+\section{Comment lire ce document}
+
+Le manuel est fourni en deux formats construits sur le m\^eme texte~: une page
+\fichier{HTML} pour l'\'ecran, et un \fichier{PDF} pour l'impression ou la relecture
+hors ligne. Le contenu est identique, seul le confort change.
+
+\begin{itemize}
+  \item \textbf{La page HTML} --- double-clique sur \fichier{manuel-js-php-java.html}.
+        \keys{Ctrl}+\keys{F} (\keys{Cmd}+\keys{F} sur Mac) cherche dans les quarante-six
+        chapitres d'un coup, y compris dans le code. Le bouton \og ~Sommaire~ \fg{} \`a gauche
+        ouvre le plan d\'etaill\'e, o\`u chaque titre est un lien. Le th\`eme suit celui du
+        syst\`eme, et le bouton en haut \`a droite bascule clair/sombre. Les blocs de code se
+        copient d'un clic sur l'\'etiquette plac\'ee en haut du bloc.
+  \item \textbf{Le PDF} --- soit tu le t\'el\'echarges tel quel (m\^eme texte, pagin\'e, format A4),
+        soit tu le fabriques depuis la page HTML avec \keys{Ctrl}+\keys{P} puis \og ~Destination:
+        Enregistrer au format PDF~\fg{}: la feuille de style d'impression casse une page par
+        chapitre, laisse le code entier et n'imprime ni le sommaire lat\'eral ni les boutons.
+  \item \textbf{Les corrig\'es} des quarante exercices sont repli\'es dans la page HTML (clique
+        sur \og ~Corrig\'e~\fg) et d\'epli\'es en entier dans le PDF.
+\end{itemize}
+
+\begin{astuce}
+Range le fichier HTML dans ton dossier de cours et ouvre-le en \emph{local}: il fonctionne sans
+internet, sans installation, sans d\'ependance. Les liens vers la documentation officielle, eux,
+demandent une connexion --- c'est voulu: la doc, on la relit, on ne la recopie pas.
+\end{astuce}
+
+\subsection{O\`u chercher quoi}
+
+\begin{tabz}{ll}
+  \headrow
+  \thd{Situation} & \thd{O\`u aller} \\
+  Je n'ai rien install\'e & chapitre 2, \emph{Environnement et outils} \\
+  Je ne connais pas Git & chapitre 3, \emph{Git et terminal} \\
+  Comment \'etudier avec ce livre & chapitre 4, \emph{M\'ethode de travail} \\
+  Je veux un planning clef en main & annexe \og ~Parcours 100 jours~\fg \\
+  Je veux savoir si je suis pr\^et & annexe \og ~Pr\'eparer les entretiens~\fg \\
+  Je cherche un livre, une doc, une communaut\'e & annexe \og ~Ressources officielles~\fg \\
+  Une erreur me bloque & partie \og ~Antis\`eche~\fg{} (les 60 erreurs classiques) \\
+  Je veux un seul langage de bout en bout & partie I (JavaScript), II (PHP), III (Java) \\
+\end{tabz}
+
+\section*{Avant de commencer --- le test des 3 minutes}
+
+Ex\'ecute ces trois lignes dans un terminal. Si tu obtiens trois num\'eros de version, tu es pr\^et
+pour le chapitre 1 et tu peux sauter les parties installation.
+
+\begin{terminal}
+node --version    # attendu : v20.x ou v22.x
+php --version     # attendu : PHP 8.3.x ou 8.4.x
+java -version     # attendu : openjdk 21.x
+\end{terminal}
+
+Sinon, pas de panique~: \cref{ch-environnement} installe tout, ligne par ligne, pour
+Linux, macOS et Windows.
+
+\begin{center}
+\Large\bfseries\color{themecolor}
+Pr\^et ? Le chapitre suivant commence par installer ta bo\^ite \`a outils.
+\end{center}
+
+\index{conventions}\index{methode de travail}

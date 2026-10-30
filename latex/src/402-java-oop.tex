@@ -1,0 +1,404 @@
+% ============================================================================
+\chapter{Java orient\'e objet~: classes, encapsulation, h\'eritage, interfaces}
+\label{ch-java-oop}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item \'Ecrire une classe correcte~: invariants, encapsulation, \verb|equals|, \verb|toString|.
+  \item Utiliser les \verb|record| pour les donn\'ees et les classes immuables par d\'efaut.
+  \item Choisir entre h\'eritage, interface et composition~: et savoir que \verb|sealed| change la donne.
+  \item Mod\'eliser un domaine avec des ADT (types sommes) et un \verb|switch| exhaustif.
+  \item Conna\^itre les classiques~: \verb|static|, classes imbriqu\'ees, initialisation, paquets.
+\end{itemize}
+\end{objectif}
+
+\section{Anatomie d'une classe}
+
+\begin{codejava}
+package com.exemple.blog.modele;                       // = arborescence de dossiers, obligatoire en tete
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Un article de blog. Modele riche : les regles vivent ici.
+ */
+public final class Article {
+
+    // Constantes : public static final, nom en MAJUSCULES_SNAKE
+    public static final int TITRE_MIN = 3;
+    public static final int TITRE_MAX = 160;
+
+    // Champs : prives par defaut. static = appartient a la classe.
+    private static final java.util.concurrent.atomic.AtomicLong SEQUENCE = new java.util.concurrent.atomic.AtomicLong();
+    private final long id;
+    private String titre;
+    private String corps;
+    private Statut statut;
+    private final Instant creeLe;
+    private Instant publieLe;
+    private final List<String> tags;                    // liste mutable -> encapsulee
+
+    // Constructeur : meme nom, aucun type de retour. Surcharges = mots-cles optionnels.
+    public Article(String titre, String corps, Statut statut) {
+        this(SEQUENCE.incrementAndGet(), titre, corps, statut, Instant.now(), null, List.of());
+    }
+    public Article(long id, String titre, String corps, Statut statut,
+                   Instant creeLe, Instant publieLe, List<String> tags) {
+        this.id = id;
+        this.creeLe = Objects.requireNonNull(creeLe, "creeLe");
+        this.tags = new ArrayList<>(tags);              // COPIE defensive : jamais la reference recue
+        setTitre(titre);                                // passe par le setter : la regle s'applique une fois
+        this.corps = Objects.requireNonNull(corps, "corps");
+        this.statut = Objects.requireNonNull(statut, "statut");
+        this.publieLe = publieLe;
+        verifierInvariant();
+    }
+
+    // Bloc d'initialisation de classe (une fois, au chargement) et d'instance
+    static { /* lecture d'un fichier de config, construction d'un regex compile, etc. */ }
+    { /* normalisation commune a tous les constructeurs -- rarement necessaire */ }
+
+    public long id() { return id; }
+    public String titre() { return titre; }
+
+    public void setTitre(String titre) {
+        var t = titre == null ? "" : titre.trim();
+        if (t.length() < TITRE_MIN || t.length() > TITRE_MAX) {
+            throw new IllegalArgumentException(
+                "titre de %d caracteres attendu entre %d et %d".formatted(t.length(), TITRE_MIN, TITRE_MAX));
+        }
+        this.titre = t;
+    }
+
+    /** Vue en lecture seule : la liste reelle reste privee. */
+    public List<String> tags() { return Collections.unmodifiableList(tags); }
+
+    public void ajouterTag(String tag) {
+        var t = Objects.requireNonNull(tag, "tag").trim().toLowerCase(java.util.Locale.ROOT);
+        if (t.isEmpty() || t.length() > 30) { throw new IllegalArgumentException("tag invalide : " + tag); }
+        if (!tags.contains(t)) { tags.add(t); }
+    }
+
+    public boolean estPublie() { return statut == Statut.PUBLIE; }
+
+    public Article publier(Instant quand) {
+        if (statut == Statut.ARCHIVE) { throw new IllegalStateException("un article archive ne se republicie pas"); }
+        return new Article(id, titre, corps, Statut.PUBLIE, creeLe, quand, tags);  // nouvel objet
+    }
+
+    private void verifierInvariant() {
+        if (statut == Statut.PUBLIE && publieLe == null) {
+            throw new IllegalStateException("article publie sans date de publication");
+        }
+        if (publieLe != null && publieLe.isBefore(creeLe)) {
+            throw new IllegalStateException("publication anterieure a la creation");
+        }
+    }
+
+    @Override public String toString() {
+        return "Article #%d \"%s\" (%s, %d tags)".formatted(id, titre, statut, tags.size());
+    }
+    @Override public boolean equals(Object o) {
+        if (this == o) { return true; }
+        if (!(o instanceof Article a)) { return false; }   // pattern matching (Java 16+)
+        return id == a.id;                                  // identite metier : l'id suffit ici
+    }
+    @Override public int hashCode() { return Long.hashCode(id); }
+}
+
+enum Statut {
+    BROUILLON("Brouillon"), PUBLIE("Publie"), ARCHIVE("Archive");
+    private final String libelle;
+    Statut(String libelle) { this.libelle = libelle; }
+    public String libelle() { return libelle; }
+    public static Statut depuis(String v) {
+        return valueOf(v.trim().toUpperCase(Locale.ROOT));      // IllegalArgumentException si inconnu
+    }
+}
+\end{codejava}
+
+\subsection{Modificateurs d'acc\`es~: la table honn\^ete}
+
+\begin{tabz}{lXXXX}
+  \headrow \thd{Modificateur} \& \thd{Classe} \& \thd{Sous-classe} \& \thd{Paquet} \& \thd{Monde} \\
+  \midrule
+  \verb|private| \& oui \& non \& non \& non \\
+  (aucun, \og ~package-private~ \fg{}) \& oui \& non \& oui \& non \\
+  \verb|protected| \& oui \& oui \& oui \& non \\
+  \verb|public| \& oui \& oui \& oui \& oui \\
+  \verb|module| (Java~9, \verb|exports|) \& \multicolumn{4}{p{0.6\textwidth}}{uniquement avec \verb|module-info.java| : contr\^ole entre modules} \\
+\end{tabz}
+
+Les trois r\'eflexes qui rendent une conception saine~: (1) \verb|final| sur les classes et les
+m\'ethodes qui n'ont pas vocation \`a l'\^etre~; (2) \verb|private| sur les champs, \verb|public|
+uniquement sur ce qui est une capacit\'e~; (3) aucun setter \verb|public| automatique~: un setter
+g\'en\'er\'e par l'IDE est une d\'ecision d'architecture par d\'efaut, rarement la bonne.
+
+\section{\texttt{equals}, \texttt{hashCode}, \texttt{toString}}
+
+Le contrat, litt\'eralement~: deux objets \verb|equals| \textbf{doivent} avoir le m\^eme
+\verb|hashCode| (l'inverse n'est pas requis). Sans cela, \verb|HashMap|/ \verb|HashSet|
+ne retrouvent plus la cl\'e, et tu passes une journ\'ee \`a chercher pourquoi.
+
+\begin{codejava}
+// La version courte, moderne, et sans faute :
+@Override public boolean equals(Object o) {
+    return o instanceof Point p && Double.compare(p.x, x) == 0 && Double.compare(p.y, y) == 0;
+}
+@Override public int hashCode() { return Objects.hash(x, y); }      // ou Objects.hashCode(x) seul
+
+// Les objets flottants : compare avec une tolerance, jamais ==
+static boolean pres(Point a, Point b) {
+    return Math.abs(a.x() - b.x()) < 1e-9 && Math.abs(a.y() - b.y()) < 1e-9;
+}
+
+// A ne JAMAIS mettre dans equals/hashCode : un champ mutable, un identifiant genere
+// a l'instance (System.identityHashCode), un objet sans equals coherent (tableau -> Arrays.equals).
+// Collections : Objects.equals pour les champs, Arrays.equals/deepEquals pour les tableaux.
+\end{codejava}
+
+\section{Les \texttt{record}~: la donn\'ee bien faite, en une ligne}
+
+\begin{codejava}
+public record Point(double x, double y) { }                      // immuable, avec equals/hashCode/toString
+public record ArticleResume(long id, String titre, String slug, Instant publieLe) { }
+
+// Constructeur compact : validation centrale, sans field assignations repetees
+public record Email(String valeur) {
+    public Email {
+        valeur = valeur == null ? "" : valeur.trim().toLowerCase(Locale.ROOT);
+        if (!valeur.matches("^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$")) {
+            throw new IllegalArgumentException("email invalide : " + valeur);
+        }
+    }
+    public boolean estGmail() { return valeur.endsWith("@gmail.com"); }
+}
+
+// Constructeurs canoniques et surcharges, methodes, impl\'ementation d'interfaces : OK
+public record Periode(Instant debut, Instant fin) implements Comparable<Periode> {
+    public Periode {
+        if (fin.isBefore(debut)) { throw new IllegalArgumentException("fin < debut"); }
+    }
+    public Periode(Instant debut, java.time.Duration duree) { this(debut, debut.plus(duree)); }
+    public long secondes() { return java.time.Duration.between(debut, fin).toSeconds(); }
+    @Override public int compareTo(Periode o) { return debut.compareTo(o.debut); }
+}
+
+// Limite : pas d'h eritage possible (extends Record implicite), pas de champ non-final.
+// -> un record = DONNEES. Des que tu as besoin de mutabilite ou d'heritage -> une classe.
+var p = new Point(1, 2);
+System.out.println(p.x() + " " + p);            // accesseur = nom du champ ; toString genere
+var points = List.of(new Point(0, 0), new Point(1, 1));
+var parX = points.stream().sorted(Comparator.comparingDouble(Point::x)).toList();
+\end{codejava}
+
+\begin{astuce}
+Utilise un \verb|record| comme DTO, comme cl\'e de Map, comme r\'esultat multiple d'une m\'ethode,
+comme \'ev\'enement, comme requ\^ete/r\'eponse d'API. En revanche, une entit\'e m\'etier avec des r\`egles et
+des transitions (\verb|publier()|, \verb|payer()|) m\'erite une classe~: le record n'emp\^eche pas
+les m\'ethodes, mais il encourage \`a tout rendre public et plat.
+\end{astuce}
+
+\section{H\'eritage, polymorphisme, \texttt{abstract}}
+
+\begin{codejava}
+public abstract class Forme implements Comparable<Forme> {
+    private final String couleur;
+    private int x, y;
+
+    protected Forme(String couleur) { this.couleur = Objects.requireNonNull(couleur); }   // jamais appelee seule
+
+    public abstract double aire();                       // la sous-classe doit fournir
+    public abstract Forme deplace(int dx, int dy);
+
+    public String decrire() {                          // implementation partagee
+        return "%s (%s, aire %.2f)".formatted(getClass().getSimpleName(), couleur, aire());
+    }
+    @Override public int compareTo(Forme o) { return Double.compare(aire(), o.aire()); }
+    // equals/hashCode sur une hierarchie : ne les definit que si tu peux le faire proprement.
+    // Regle de bonne conduite : si tu ecris equals dans une classe heritable, documente-le.
+}
+
+public final class Cercle extends Forme {
+    private final double rayon;
+    public Cercle(double rayon, String couleur) { super(couleur); this.rayon = rayon; }
+    @Override public double aire() { return Math.PI * rayon * rayon; }
+    @Override public Cercle deplace(int dx, int dy) { return new Cercle(rayon, couleur()); }  // covariance du retour
+}
+
+// Une hierarchie n'est PAS un moyen de partager du code : c'est un contrat de substitution
+// (principe de Liskov). Si une sous-classe casse le contrat, la hierarchie etait fausse.
+Forme f = new Cercle(2, "rouge");
+f.aire();                       // dispatch virtuel : le code de Cercle s'execute
+if (f instanceof Cercle c) { System.out.println(c.rayon()); }   // jamais de cast sans test
+
+// Pas d'heritage multiple de classes. Les interfaces ont des methodes par defaut :
+interface Dessinable {
+    void dessiner();
+    default void dessinerEnRouge() { System.out.println("rouge"); dessiner(); }
+    static Dessinable vide() { return () -> { }; }
+    sealed interface FormeDessinable extends Dessinable permits Cercle, Rectangle { }
+}
+\end{codejava}
+
+\section{Interfaces~: le vrai pilier de la conception en Java}
+
+\begin{codejava}
+// 1. Un contrat, pas un champ de donnees : pas de constantes "magiques" dans une interface.
+public interface Depot<T, Id> extends AutoCloseable {
+    T sauver(T entite);
+    java.util.Optional<T> trouver(Id id);
+    List<T> lister(Pageable page);
+    default boolean existe(Id id) { return trouver(id).isPresent(); }
+    // Une methode "default" est la pour evoluer sans casser les impls ; pas pour stocker du logique.
+}
+
+// 2. Impl\'ementation par composition : les capacites sont des objets qu'on injecte.
+public final class DepotArticlesJdbc implements Depot<Article, Long> { /* ... */ }
+public final class DepotArticlesCache implements Depot<Article, Long> {
+    private final Depot<Article, Long> delegue;          // pattern decorator
+    private final java.util.concurrent.ConcurrentHashMap<Long, Article> cache = new java.util.concurrent.ConcurrentHashMap<>();
+    public DepotArticlesCache(Depot<Article, Long> delegue) { this.delegue = delegue; }
+    @Override public Article sauver(Article a) { cache.put(a.id(), a); return delegue.sauver(a); }
+    /* ... */
+}
+
+// 3. Les interfaces-fonctionnelles du JDK (une seule methode abstraite, @FunctionalInterface)
+@FunctionalInterface
+public interface Validation<T> {
+    Resultat valider(T objet);
+    default Validation<T> puis(Validation<T> autre) {
+        return o -> { var r = valider(o); return r.valide() ? autre.valider(o) : r; };
+    }
+}
+Runnable r = () -> System.out.println("go");
+Comparator<Article> parTitre = Comparator.comparing(Article::titre, String.CASE_INSENSITIVE_ORDER);
+java.util.function.Predicate<Article> publiees = a -> a.estPublie();
+java.util.function.Function<Article, String> enJson = a -> a.titre();
+java.util.function.Consumer<String> affiche = System.out::println;
+// Les references de methode : Article::titre, System.out::println, List::size, Integer::parseInt,
+// String::new (fabrique), Cercle::new -- voir chapitre Streams.
+\end{codejava}
+
+\section{\texttt{sealed}~: la somme de types, et le switch exhaustif}
+
+C'est LE motif qui change la fa\c{c}on de mod\'eliser un domaine en Java~: un ensemble \emph{ferm\'e}
+de variantes, et un compilateur qui te pr\'evient quand tu en oublies une.
+
+\begin{codejava}
+public sealed interface ErreurApi permits ErreurHttp, ErreurValidation, ErreurReseau { }
+
+public record ErreurHttp(int statut, String message) implements ErreurApi { }
+public record ErreurValidation(Map<String, List<String>> champs) implements ErreurApi {
+    public ErreurValidation { champs = Map.copyOf(champs); }
+}
+public record ErreurReseau(String hote, Throwable cause) implements ErreurApi { }
+
+// Traitement : pas de "default" necessaire -> le compilateur sait que c'est complet
+public static String decrire(ErreurApi e) {
+    return switch (e) {
+        case ErreurHttp h -> "HTTP " + h.statut() + " : " + h.message();
+        case ErreurValidation v -> v.champs().size() + " champ(s) en erreur";
+        case ErreurReseau r -> "joins pas " + " + r.hote() + " (" + r.cause().getMessage() + ")";
+        // aucune branche default : si j'ajoute une variante, TOUTES les occurrences cassent a la compilation
+    };
+}
+
+// Hierarchie fermee partielle : "non-sealed" autorise les sous-types elsewhere
+public sealed class Compte permits CompteCourant, CompteEpargne { }
+public non-sealed class CompteCourant extends Compte { }
+
+// ADT recursif + pattern matching : un mini-AST, 15 lignes, sans une seule instanceof
+sealed interface Expr permits Const, Plus, Mult { }
+record Const(double v) implements Expr { }
+record Plus(Expr g, Expr d) implements Expr { }
+record Mult(Expr g, Expr d) implements Expr { }
+static double eval(Expr e) {
+    return switch (e) {
+        case Const c -> c.v();
+        case Plus(Expr g, Expr d) -> eval(g) + eval(d);       // "record patterns" (Java 21)
+        case Mult(Expr g, Expr d) -> eval(g) * eval(d);
+    };
+}
+// eval(new Mult(new Plus(new Const(1), new Const(2)), new Const(4))) = 12
+\end{codejava}
+
+\section{Immutabilit\'e~: le d\'efaut qui rend tout plus simple}
+
+\begin{codejava}
+public final class Money implements Comparable<Money> {
+    private final long centimes;
+    private final java.util.Currency devise;
+
+    public Money(long centimes, java.util.Currency devise) {
+        this.centimes = centimes;
+        this.devise = Objects.requireNonNull(devise);
+    }
+    public static Money centimes(long c, java.util.Currency d) { return new Money(c, d); }
+    public static Money euros(double e, java.util.Currency d) { return new Money(Math.round(e * 100), d); }
+
+    public Money plus(Money autre) {
+        requireSameDevise(autre);
+        return new Money(Math.addExact(centimes, autre.centimes), devise);   // addExact : OverflowException, pas de silence
+    }
+    public Money fois(int facteur) { return new Money(Math.multiplyExact(centimes, facteur), devise); }
+    public Money partage(int parts) { /* repartir le centime restant : la vraie difficulte du monetaire */ }
+
+    private void requireSameDevise(Money autre) {
+        if (!devise.equals(autre.devise)) { throw new IllegalArgumentException("devises differentes"); }
+    }
+    @Override public int compareTo(Money o) { return Long.compare(centimes, o.centimes); }
+    @Override public String toString() { return "%s %s".formatted(devise, centimes / 100.0); }
+}
+// Pourquoi c'est important : un objet immuable est sur et partageable entre threads sans
+// aucune synchronisation, se met en cache sans peur, et ne peut pas etre corrompu
+// par un appelant. C'est la forme par defaut d'un modele metier en Java.
+\end{codejava}
+
+\begin{note}
+Le mot \textbf{final} ne rend pas l'objet profond\'ement immuable~: un champ \verb|final List<X>|
+peut rester mutable. Les trois techniques de durcissement~: copie d\'efensive \`a l'entr\'ee et \`a la
+sortie~; \verb|List.copyOf(...)| / \verb|Map.copyOf(...)| (vraiment immuables, Java~10+)~; ou
+ne pas exposer la collection~: renvoyer un \verb|Stream|, une taille, ou un accesseur typ\'e
+\verb|int tailleTags()|.
+\end{note}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris le mod\`ele complet d'une biblioth\`eque~: \verb|Livre| (ISBN, titre, auteurs, ann\'ee),
+        \verb|Exemplaire| (code-barres, \'etat en enum), \verb|Emprunt| (dates, membre),
+        \verb|Membre|~: tout immuable, invariants dans les constructeurs, pas un seul setter public.
+  \item Ajoute \verb|equals|/ \verb|hashCode|/ \verb|toString| corrects, puis refais la m\^eme
+        chose avec des records~: compare les deux fichiers (le record en fait la moiti\'e).
+  \item \'Ecris une classe \verb|Duree| (secondes) avec \verb|plus|, \verb|moins|, \verb|compare|,
+        \verb|formatage| (\og ~1 h 05~ \fg{}), et des tests sur les cas limites~; puis remplace-la par
+        \verb|java.time.Duration| et note ce que tu as gagn\'e (ou pas).
+  \item Hi\'erarchie \verb|Forme| : abstract \verb|aire|, \verb|perimetre|, \verb|deplacer|, et une
+        interface \verb|Comparateur| avec \verb|byArea()| et \verb|byPerimeter()| par d\'efaut.
+        Ajoute un test~: un tableau mixte tri\'e par aire.
+  \item Refais la mod\'elisation des erreurs avec \verb|sealed| + \verb|record| + \verb|switch|
+        exhaustif, puis ajoute une nouvelle variante et compte les lignes rouges que le compilateur
+        produit~: c'est la valeur de ce patron, en chair et en os.
+  \item Construis une petite \verb|Resultat<T>| (succ\`es/\'echec, sans exception)~:
+        \verb|ok(v)|, \verb|err(e)|, \verb|map|, \verb|flatMap|, \verb|recover|, \verb|onSuccess|,
+        \verb|getOrDefault|. C'est le d\'ebut de la programmation fonctionnelle en Java~; le
+        chapitre suivant t'en montrera l'utilit\'e concr\`ete avec Streams.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Dev.java --- \emph{Object-Oriented Programming} --- \url{https://dev.java/learn/java-platform/object-oriented-programming/}
+  \item Javadoc \verb|Object| (le contrat d'equals/hashCode y est \'ecrit noir sur blanc) --- \url{https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html}
+  \item Records --- \url{https://openjdk.org/jeps/395} --- Sealed classes --- \url{https://openjdk.org/jeps/409}
+  \item Patterns for package-private classes --- \url{https://inside.java/} (le blog des \'equipes OpenJDK)
+  \item \emph{Effective Java} (Joshua~Bloch) --- les items 1--15 valent le livre : c'est LA r\'ef\'erence de style objet Java.
+\end{itemize}
+\end{ressources}
+
+\index{Java!classes}\index{record}\index{sealed}\index{equals}\index{immutabilite}

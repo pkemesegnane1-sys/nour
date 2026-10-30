@@ -1,0 +1,323 @@
+% ============================================================================
+\chapter{PHP : tableaux et cha\^ines en profondeur, dates et regex}
+\label{ch-php-struct}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Choisir la bonne structure~: liste, dictionnaire \verb|array|, \verb|ArrayObject|, g\'en\'erateur.
+  \item Concat\'ener, comparer, d\'ecouper du texte unicode sans se faire surprendre.
+  \item Manipuler les dates avec \verb|DateTimeImmutable| (et ne plus toucher \`a \verb|date()|).
+  \item \'Ecrire des expressions r\'eguli\`eres PCRE\textsuperscript{}{2} correctes et rapides.
+  \item Tri multi-crit\`eres, regroupement, indexation, partitions~: les motifs r\'eels du CRUD.
+\end{itemize}
+\end{objectif}
+
+\section{Les quatre visages du tableau PHP}
+
+\begin{codephp}
+<?php
+// 1. LISTE indexee : clefs 0..n. Les operations qui vont bien :
+$liste = [];
+$liste[] = 'a';                       // empiler a la fin ( amorti O(1) )
+array_push($liste, 'b', 'c');
+array_pop($liste);                     // depiler la fin
+array_shift($liste);                   // O(n) : decale tout -> a eviter sur les grandes listes
+$clefs = array_keys($liste);  $n = count($liste);
+sort($liste);                          // reindexe
+asort / ksort / usort / uasort / uksort ;
+shuffle / reverse / array_slice / array_chunk ;
+
+// 2. DICTIONNAIRE : cles chaines. C'est LA structure de hachage de PHP (rapide, ordonnee).
+$parId = [];
+foreach ($articles as $a) { $parId[$a['id']] = $a; }      // recherche ensuite en O(1)
+unset($parId[42]);
+foreach ($parId as $id => $a) { /* preserver les cles */ }
+
+// 3. OBJET tableau-like : ArrayObject / ArrayIterator (iteration, count, acces [] )
+$collection = new ArrayObject($articles);
+$collection->asort();
+
+// 4. GENERATEUR : la meme interface, memoire constante
+function lireCsv(string $chemin, int $saut = 1): Generator
+{
+    $h = fopen($chemin, 'rb');
+    if ($h === false) { throw new RuntimeException("impossible d'ouvrir {$chemin}"); }
+    try {
+        for ($i = 0; $i < $saut; $i++) { fgetcsv($h); }
+        while (($ligne = fgetcsv($h, 0, ',', '"', '\\')) !== false) {
+            yield $ligne;
+        }
+    } finally {
+        fclose($h);
+    }
+}
+foreach (lireCsv('clients.csv') as $n => $ligne) { traiter($ligne, $n); }   // 5 Go ? aucun souci.
+\end{codephp}
+
+\begin{piege}
+Trois comportements de tableau qui pi\`egent tout le monde~:\\
+(1) \verb|array\_merge| \textbf{r\'eindexe} les cl\'es num\'eriques et \textbf{ne fusionne pas
+r\'ecursivement}. Pour un dictionnaire~: \verb|+\$tableau| (les cl\'es existantes gagnent),
+\verb|array\_replace\_recursive| ou \verb|...\$spread|~;
+(2) une cl\'e de tableau \verb|"1"| devient l'entier \verb|1|~: \verb|['1' => 'a']| a la cl\'e
+\verb|1|. Les identifiants num\'eriques en provenance d'une base doivent \^etre cast\'es en
+\verb|(string)| si tu t'en sers comme cl\'es~;
+(3) un tableau est copi\'e \`a l'affectation (s\'emantique de valeur), mais la copie est \og ~lazy~ \fg{}~:
+elle reste partag\'ee tant que rien n'est modifi\'e. \verb|=\&| et les objets suivent une autre r\`egle.
+\end{piege}
+
+\section{Les motifs de transformation qui remplacent les boucles}
+
+\begin{codephp}
+<?php
+$articles = json_decode((string) file_get_contents('data/articles.json'), true, 512, JSON_THROW_ON_ERROR);
+
+// Map / filter / reduce : PHP n'a pas de chainage, mais les fermetures rendent cela lisible
+$titres = array_map(static fn (array $a): string => trim($a['titre']), $articles);
+$publies = array_values(array_filter($articles, static fn (array $a): bool => !empty($a['publie_le'])));
+$vues = array_reduce($articles, static fn (int $c, array $a): int => $c + (int) ($a['vues'] ?? 0), 0);
+
+// Regrouper / indexer
+$parAnnee = [];
+foreach ($articles as $a) {
+    $parAnnee[substr((string) $a['publie_le'], 0, 4)][] = $a;
+}
+$parAnnee = array_reduce($articles, static function (array $acc, array $a): array {
+    $acc[substr((string) $a['publie_le'], 0, 4)][] = $a;
+    return $acc;
+}, []);
+$index = array_column($articles, null, 'id');                       // id => article
+$titreParId = array_combine(array_column($articles, 'id'), array_column($articles, 'titre'));
+
+// Trier par un champ, puis par un second (le spaceship est ton ami)
+usort($articles, static fn (array $a, array $b): int => [$b['publie_le'], $a['titre']] <=> [$a['publie_le'], $b['titre']]);
+usort($articles, static fn (array $a, array $b) => mb_strtolower($a['titre']) <=> mb_strtolower($b['titre']));
+
+// Compter / distinct / intersections / differences
+$nombresParTag = [];
+foreach ($articles as $a) { foreach ($a['tags'] ?? [] as $t) { $nombresParTag[$t] = ($nombresParTag[$t] ?? 0) + 1; } }
+arsort($nombresParTag);
+$top = array_slice($nombresParTag, 0, 10, true);
+$tagsUniques = array_values(array_unique(array_merge(...array_column($articles, 'tags'))));
+$communs = array_intersect($tagsDeA, $tagsDeB);
+$manquants = array_diff($attendus, $presents);
+
+// Pagination et aggregations sans SQL
+$parPage = 20;
+$page = max(1, (int) ($_GET['page'] ?? 1));
+$totalPages = (int) ceil(count($filtres) / $parPage);
+$pageCourante = array_slice($filtres, ($page - 1) * $parPage, $parPage, true);   // true = garder les cles
+
+// "group by having" a la main : array_count_values est sous-estime
+$statut = array_count_values(array_map(static fn (array $a): string => $a['statut'] ?? 'inconnu', $articles));
+\end{codephp}
+
+\section{Cha\^ines~: unicode, d\'ecoupage, \'echappements}
+
+\begin{codephp}
+<?php
+$texte = "L'\'el\'ephant d'\'Egypte -- 123 "citations"";
+
+// Longueur et extraction : toujours les versions mb_*
+mb_strlen($texto = $texte);                          // caracteres reels
+mb_substr($texto, 0, 10);  mb_strimwidth($texto, 0, 40, '...');   // troncature avec ellipse, la bonne
+mb_convert_case($texto, MB_CASE_TITLE, 'UTF-8');      // "L'\'El\'ephant D'\'egypte..."
+ucfirst(mb_strtolower($texto));
+mb_convert_encoding($texto, 'ISO-8859-1', 'UTF-8');   // pour un export vieux-systeme
+mb_detect_encoding($texto, ['UTF-8', 'ISO-8859-1'], true);
+iconv('UTF-8', 'ASCII//TRANSLIT', '\'e -> e, \c{c} -> c');  // translitteration (les accents disparaissent)
+
+// Sans mbstring, le "caract\`ere" n'existe pas : strlen compte des OCTETS.
+strlen('\'e');           // 2  <-- ne fait pas ce que tu crois
+str_contains($texte, '\'Egypte');   // casse dependante : 1 si exactement la meme sequenced'octets
+mb_stripos($texte, '\'Egypte');     // 13 (insensible a la casse, en caracteres)
+
+// Echappement : le bon outil depend UNIQUEMENT du contexte de sortie
+$html = htmlspecialchars($texte, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8');
+$url = rawurlencode($texte);                        // %C3%A9... ; http_build_query(['q' => $texte])
+$sql = $pdo->quote($texte);                          // ou mieux : requete preparee
+$coquille = escapeshellarg($texte);                   // si tu dois appeler un binaire
+$json = json_encode($texte, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+$regex = preg_quote($texte, '/');                    // neutraliser une entree dans un motif
+$csv = '"' . str_replace('"', '""', $texte) . '"';   // champ CSV qui contient virgules/quotes
+
+// Decoupage intelligent (mots, phrases, lignes)
+$mots = preg_split('/[\s\p{P}]+/u', $texte, -1, PREG_SPLIT_NO_EMPTY);
+$lignes = preg_split('/\R/u', $texte);                // \R = n'importe quelle fin de ligne
+$phrases = preg_split('/(?<=[.!?])\s+/u', $texte);
+$entites = html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+// Comparaison et tri "humains"
+strcmp('a', 'b');  strcasecmp('A', 'a');
+strcoll('\'elan', 'efant');                              // selon la locale (LC_COLLATE)
+'\'el\'ephant' <=> 'zebre';                                // binaire : evite pour l'affichage
+usort($mots, fn ($a, $b) => Collator::compare($a, $b));   // intl : la vraie comparaison linguistique
+// En pratique : IntlChar/Transliterator (intl) ou tri en base avec une collation utf8mb4_unicode_ci.
+\end{codephp}
+
+\section{Expressions r\'eguli\`eres (PCRE2)}
+
+\begin{codephp}
+<?php
+// Delimiteur /, modificateurs en queue. Le 'u' (UTF-8) est OBLIGATOIRE sur du texte humain.
+$texte = "Contact : nour@example.com ou 06 12 34 56 78 -- www.nour.dev/a?b=1";
+
+if (preg_match('/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/iu', $texte, $m)) {
+    [$tout, $debut] = $m;
+    echo $tout;
+}
+preg_match_all('#https?://[^\s"]+#iu', $texte, $liens, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+// Groupes nommes : plus lisible, et robuste si l'ordre change
+$motif = '/^(?<jour>\d{2})\/(?<mois>\d{2})\/(?<annee>\d{4})$/';
+if (preg_match($motif, '31/01/2026', $m) === 1) {
+    $d = DateTimeImmutable::createFromFormat('!Y-m-d', "{$m['annee']}-{$m['mois']}-{$m['jour']}");
+}
+// Remplacements, y compris par callback (le "sprintf" des regex)
+$sortie = preg_replace_callback(
+    '/\{(\w+)\}/',
+    static fn (array $m): string => (string) ($donnees[$m[1]] ?? $m[0]),
+    "Bonjour {prenom}, panier {total} EUR"
+);
+$normalise = preg_replace(['/[\s]+/', '/[^\w\s-]/u', '/(-+)\p{L}+/u'], [' ', '', ''], $titre);
+// Limites obligatoires en environnement non maitrise (protection ReDoS)
+if (@preg_match($motifDangereux, $entree, $m, 0, 0, 1_000_000) === false) {
+    throw new RuntimeException('motif rejete par la limite de backtracking');
+}
+// Les modificateurs qui comptent
+// u = UTF-8 ; i = insensible ; m = ^ et $ par ligne ; s = . inclut \n ; x = mode extended (commentaires)
+$verbose = '/
+    ^\+?\d{1,3}          # indicatif pays optionnel
+    (?:[\s.-]?\d){8,10}  # groupes de chiffres
+    $/ux';
+\end{codephp}
+
+\begin{note}
+\verb|preg\_match| renvoie \verb|1| (trouv\'e), \verb|0| (non trouv\'e) ou \verb|false| (erreur de motif
+ou limite d\'epass\'ee). C'est pour cela qu'on \'ecrit \verb|=== 1| et non un test de v\'erit\'e~:
+\verb|false| est \og ~faux~ \fg{}, mais pour des raisons compl\`etement diff\'erentes de \verb|0|.
+Les fonctions \verb|preg\_*| sont les seules \`a renvoyer \verb|false| sur erreur~: v\'erifie
+\verb|preg\_last\_error\_msg()| quand un r\'esultat semble bizarre.
+\end{note}
+
+\section{Dates~: la classe ou rien}
+
+\begin{codephp}
+<?php
+$maintenant = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$debut = new DateTimeImmutable('2026-01-01 00:00:00', new DateTimeZone('Europe/Paris'));
+$fin = DateTimeImmutable::createFromFormat('!d/m/Y', '31/01/2026', new DateTimeZone('Europe/Paris'));
+if ($fin === false) { throw new RuntimeException(implode(', ', DateTimeImmutable::getLastErrors()['messages'] ?? [])); }
+
+// Manipulations : les objets sont immuables, chaque appel renvoie un NOUVEL objet
+$demain = $debut->modify('+1 day')->setTime(9, 30);
+$trimestre = $debut->add(new DateInterval('P3M'));
+$intervalle = $debut->diff($fin);
+$jours = (int) $intervalle->format('%r%a');             // %r = signe, %a = jours totaux
+$secondes = $fin->getTimestamp() - $debut->getTimestamp();
+
+// Affichage
+$debut->format('Y-m-d H:i:s');   $debut->format('d/m/Y H\hi');   $debut->format(DATE_ATOM);   // 2026-01-01T00:00:00+01:00
+$debut->format('l, j F Y');      // noms en anglais ; pour le francais, passe par IntlDateFormatter
+setlocale(LC_TIME, 'fr_FR.UTF-8'); strftime('%A %d %B %Y', $debut->getTimestamp());  // strftime = deprecie :
+(new IntlDateFormatter('fr_FR', IntlDateFormatter::LONG, IntlDateFormatter::NONE))->format($debut);
+
+// Comparaisons, periodes de facture, dates de fin de mois
+$estPasse = $fin < $maintenant;
+$debutMois = $maintenant->modify('first day of this month 00:00');
+$finMois = $maintenant->modify('last day of this month 23:59:59');
+$dernierJourvrier = (new DateTimeImmutable('2028-02-01'))->modify('last day of february 2028');
+
+// Toujours en UTC en base, et une seule timezo ne appliquee a l'affichage.
+$pdo = new PDO($dsn);  $pdo->exec("SET TIME ZONE 'UTC'");
+$sqlDate = $debut->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+$affiche = (new DateTimeImmutable($sqlDate, new DateTimeZone('UTC')))->setTimezone(new DateTimeZone('Africa/Dakar'));
+\end{codephp}
+
+\begin{piege}
+Un \verb|DateTimeImmutable| garde son fuseau~; \verb|createFromFormat| sans \verb|!| h\'erite
+des heures non pr\'ecis\'ees de \emph{maintenant} (le champ \verb|!| veut dire \og ~mettre \`a z\'ero~ \fg{}).
+Les formats \verb|c|, \verb|ATOME| et \verb|Y-m-d\TH:i:sP| sont interchangeables~: choisis-en un
+seul et \'ecris-le dans la spec de ton API. Enfin, ne compare jamais deux dates avec
+\verb|==|~: compare les \verb|getTimestamp()| ou utilise \verb|<| \verb|>|, qui fonctionnent
+correctement sur les objets \verb|DateTimeInterface|.
+\end{piege}
+
+\section{JSON, s\'erialisation et fichiers de configuration}
+
+\begin{codephp}
+<?php
+// JSON : les trois drapeaux que je mets toujours
+$json = json_encode(
+    ['id' => 1, 'titre' => 'Caf\'e', 'note' => 12.5, 'date' => $maintenant],
+    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT
+);
+// JSON_PRETTY_PRINT seulement en dev/debug ; JSON_HEX_TAG/AMP prot\`egent dans un <script>.
+$data = json_decode($json, true, 512, JSON_THROW_ON_ERROR);           // assoc = vrai : tableaux
+$objet = json_decode($json, flags: JSON_THROW_ON_ERROR);              // ou objets stdClass
+$objetTyp\'e = json_decode($json, flags: JSON_THROW_ON_ERROR, depth: 32);  // puis hydrate a la main
+
+// Hydratation manuelle d'un objet metier : 20 lignes, aucune dependance
+final class Article
+{
+    public function __construct(
+        public readonly int $id,
+        public readonly string $titre,
+        public readonly ?DateTimeImmutable $publieLe,
+        /** @var string[] */ public readonly array $tags = [],
+    ) {}
+    public static function deTableau(array $d): self
+    {
+        return new self(
+            id: (int) ($d['id'] ?? throw new InvalidArgumentException('id requis')),
+            titre: trim((string) ($d['titre'] ?? '')),
+            publieLe: isset($d['publie_le']) ? new DateTimeImmutable((string) $d['publie_le']) : null,
+            tags: array_values(array_filter((array) ($d['tags'] ?? []), 'is_string')),
+        );
+    }
+    public function versTableau(): array
+    {
+        return ['id' => $this->id, 'titre' => $this->titre, 'tags' => $this->tags,
+                'publie_le' => $this->publieLe?->format(DATE_ATOM)];
+    }
+}
+
+// Config : un fichier PHP est plus rapide a lire qu'un YAML et n'exige aucune librairie
+// config/app.php -> return [...];   $config = require 'config/app.php';
+// Fichiers d'environnement (.env) : vlucas/phpdotenv ou symfony/dotenv (voir chap. Composer)
+\end{codephp}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \verb|groupesParPrefixe(array \$mots): array|~: regroupe les mots par leurs trois premi\`eres
+        lettres, trie les groupes par taille d\'ecroissante, et renvoie un tableau index\'e
+        de \verb|[prefixe, mots]|.
+  \item \verb|reformaterCSV(string $chemin, array $colonnes): string|~: lis un CSV (avec le s\'eparateur
+        devin\'e parmi \verb|;|, \verb|,|, \verb|\t|), s\'electionne/renomme les colonnes, trie,
+        et \'ecris un CSV propre avec BOM UTF-8. 100 \% g\'en\'erateur, m\'emoire constante.
+  \item \verb|trouverDoublonsProches(array \$noms): array|~: normalise (minuscules, accents,
+        ponctuation) puis regroupe par empreinte~; retourne uniquement les groupes de taille \textbackslash{}$>1\$.
+  \item \verb|prochainesDates(string $regle, DateTimeImmutable $debut, int \$n): array|~: sans
+        biblioth\`eque~: accepte \verb|chaque lundi|, \verb|1er de chaque mois|, \verb|+3 mois|,
+        en utilisant \verb|modify| et \verb|DateInterval|.
+  \item \'Ecris un \verb|Tableau| utilitaire avec les m\'ethodes \verb|map|, \verb|filter|,
+        \verb|groupBy|, \verb|chunk|, \verb|pluck|, \verb|sortBy|, \verb|unique|, \verb|first|,
+        \verb|flatten|~: c'est exactement ce que fait \verb|Illuminate\Support\Collection|,
+        et le refaire une fois est la meilleure fa\c{c}on de le comprendre ensuite.
+  \item Analyse de regex~: rends \verb|/(\w+)@\1/| et \verb|/(a+)+b/| inoffensives en ajoutant
+        les limites (limite de backtracking via \verb|pcre.backtrack\_limit|) et explique le co\^ut
+        de backtracking sur \verb|aaaaaaaaaaaaaaaaaaaaaX|.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Manuel --- Tableaux --- \url{https://www.php.net/manual/fr/ref.array.php}
+  \item Manuel --- Fonctions de cha\^ines --- \url{https://www.php.net/manual/fr/ref.strings.php}
+  \item Manuel --- Dates et heures --- \url{https://www.php.net/manual/fr/book.datetime.php}
+  \item PCRE (regex) --- \url{https://www.php.net/manual/en/reference.pcre.pattern.syntax.php}
+  \item \link{Collection (Laravel)}{https://laravel.com/docs/collections} --- la reference a lire apres l'exercice 5
+\end{itemize}
+\end{ressources}
+
+\index{PHP!tableaux}\index{PHP!chaines}\index{regex}\index{dates}

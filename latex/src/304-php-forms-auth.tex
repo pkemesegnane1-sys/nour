@@ -1,0 +1,498 @@
+% ============================================================================
+\chapter{HTTP en PHP~: requ\^etes, formulaires, sessions, authentification}
+\label{ch-php-http}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Lire une requ\^ete proprement~: m\'ethodes, en-t\^etes, \verb|$_GET|, \verb|$\_POST|, corps JSON.
+  \item Envoyer une r\'eponse correcte~: codes, en-t\^etes, redirections, streaming.
+  \item Construire un formulaire robuste~: valeurs conserv\'ees, erreurs, protection CSRF.
+  \item G\'erer une session et un mot de passe de bout en bout~: connexion, d\'econnexion,
+        \og ~mot de passe oubli\'e~ \fg{}, r\'eg\'en\'eration d'identifiant.
+  \item Uploader un fichier sans ouvrir de faille, et envoyer un email.
+\end{itemize}
+\end{objectif}
+
+\section{Requ\^ete et r\'eponse~: le contrat}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+// ---- LIRE LA REQUETE
+$modele = $_SERVER['REQUEST_METHOD'];                       // 'GET' | 'POST' | 'PUT' ...
+$uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$query = $uri;
+$entete = fn (string $nom): ?string => $_SERVER['HTTP_' . strtoupper(str_replace('-', '_', $nom))] ?? null;
+$contentType = $entete('content-type') ?? '';
+$origine = $entete('origin');
+$ip = $_SERVER['REMOTE_ADDR'] ?? 'inconnue';              // avec un proxy : X-Forwarded-For, a verifier
+$estAjax = str_contains((string) $entete('x-requested-with'), 'XMLHttpRequest');
+
+// Les superglobales, et ce qu'il faut en savoir
+$_GET;              // chaine uniquement ; attention : tableau associatif brut, non filtre
+$_POST;             // idem pour application/x-www-form-urlencoded et multipart/form-data
+$_FILES;            // upload (voir plus bas)
+$_COOKIE;           // cookies lus
+$_SESSION;          // voir session
+$_SERVER;           // meta : METHODE, URI, HTTP_*, DOCUMENT_ROOT, REQUEST_TIME_FLOAT
+$_REQUEST;          // MELANGE des trois precedents selon variables_order : NE L'UTILISE PAS
+$_ENV;              // seulement si variables_order contient "G" ; sinon : getenv() ou les constants
+
+// Corps JSON (les API modernes ne passent plus par $_POST)
+$brut = file_get_contents('php://input');
+$json = $contentType !== '' && str_contains($contentType, 'json')
+    ? json_decode($brut ?: 'null', true, 512, JSON_THROW_ON_ERROR)
+    : null;
+$entrees = $json ?? $_POST;
+
+// Lecture securisee + validation en un point : mon petit "getter" de controleur
+function champ(array $source, string $cle, ?string $defaut = null): ?string
+{
+    $v = $source[$cle] ?? $defaut;
+    return is_string($v) ? trim($v) : ($v === null ? null : (string) $v);
+}
+function champInt(array $source, string $cle, ?int $defaut = null): ?int
+{
+    $v = $source[$cle] ?? null;
+    return is_numeric($v) ? (int) $v : $defaut;
+}
+function champBool(array $source, string $cle): bool
+{
+    return in_array($source[$cle] ?? null, ['1', 1, 'on', 'true', true], true);
+}
+function filtre(array $source, string $cle, int $filtrePhp, array $options = []): mixed
+{
+    return filter_input_array($source === $_GET ? INPUT_GET : INPUT_POST, [$cle => $options ?: $filtrePhp])[$cle] ?? false;
+}
+$page = max(1, champInt($_GET, 'page', 1));
+$email = filter_var(champ($entrees, 'email') ?? '', FILTER_VALIDATE_EMAIL);   // false si invalide
+$urls = filter_var($entrees['site'] ?? '', FILTER_VALIDATE_URL);
+$id = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+// ---- ENVOYER LA REPONSE
+http_response_code(201);
+header('content-type: application/json; charset=utf-8');
+header('cache-control: private, no-store');
+header('x-page: ' . $page);
+header_link: header('link: </style.css>; rel=preload; as=style', false);   // false = ne pas remplacer
+header('retry-after: 60');
+echo json_encode(['ok' => true, 'page' => $page], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+exit;                                            // apres une redirection : TOUJOURS exit
+
+// Redirections : 303 apres un POST (modele POST/REDIRECT/GET), 301 si c'est definitif
+function rediriger(string $url, int $code = 303): never
+{
+    header('location: ' . $url, true, $code);
+    exit;
+}
+function telecharger(string $chemin, string $nom): never
+{
+    header('content-type: text/csv; charset=utf-8');
+    header('content-disposition: attachment; filename="' . addslashes($nom) . '"');
+    header('content-length: ' . (string) filesize($chemin));
+    readfile($chemin);
+    exit;
+}
+\end{codephp}
+
+\begin{piege}
+\verb|header()| \'echoue avec \og ~headers already sent~ \fg{} d\`es qu'un octet a \'et\'e \'emis~: un espace
+avant \verb|<?php|, un saut de ligne apr\`es un \verb|?>|, un \verb|echo| de debug. Les
+r\`egles qui \'eliminent ce bug pour toujours~: fichiers PHP \emph{sans} balise fermante finale,
+\verb|ob\_start()| dans le bootstrap si tu dois bufferiser, et aucune sortie avant la logique.
+\end{piege}
+
+\section{Un formulaire qui se tient~: le motif complet}
+
+\begin{codephp}
+<?php
+// src/Action/Inscription.php  ---  un seul fichier, trois cas : affichage, rejet, succes.
+declare(strict_types=1);
+
+session_start();
+$csrf = $_SESSION['csrf'] ??= bin2hex(random_bytes(32));
+$valeurs = ['pseudo' => '', 'email' => '', 'message' => '', 'newsletter' => '1'];
+$erreurs = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // 1) protection CSRF : comparaison du jeton recu avec celui de la session
+    if (!hash_equals($csrf, (string) ($_POST['_csrf'] ?? ''))) {
+        http_response_code(419);
+        exit('Formulaire expire, recharge la page.');
+    }
+    // 2) recuperer et valider
+    $valeurs['pseudo'] = champ($_POST, 'pseudo') ?? '';
+    $valeurs['email'] = mb_strtolower(champ($_POST, 'email') ?? '');
+    $valeurs['message'] = champ($_POST, 'message') ?? '';
+    $valeurs['newsletter'] = isset($_POST['newsletter']) ? '1' : '';
+
+    if (mb_strlen($valeurs['pseudo']) < 3) { $erreurs['pseudo'] = 'Au moins 3 caracteres.'; }
+    if ($valeurs['email'] === '' || filter_var($valeurs['email'], FILTER_VALIDATE_EMAIL) === false) {
+        $erreurs['email'] = 'Adresse email invalide.';
+    }
+    if (mb_strlen($valeurs['message']) > 1000) { $erreurs['message'] = '1000 caracteres maximum.'; }
+
+    if ($erreurs === []) {
+        // 3) ecrire (requete preparee : voir chapitre base de donnees)
+        $stmt = $pdo->prepare('INSERT INTO inscriptions (pseudo, email, message, newsletter, cree_le) VALUES (?, ?, ?, ?, NOW())');
+        $stmt->execute([$valeurs['pseudo'], $valeurs['email'], $valeurs['message'], $valeurs['newsletter'] === '1' ? 1 : 0]);
+        $_SESSION['flash']['succes'] = 'Merci, c\'est enregistre.';
+        rediriger('/inscription');           // PRG : un rafraichissement ne re-soumet pas
+    }
+    // sinon : on retombe dans le rendu avec $valeurs et $erreurs remplis
+}
+
+function e(?string $v): string { return htmlspecialchars((string) $v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+?>
+<?php if (isset($_SESSION['flash']['succes'])): ?>
+  <p class="succes"><?= e($_SESSION['flash']['succes']) ?></p>
+  <?php unset($_SESSION['flash']['succes']); ?>
+<?php endif; ?>
+
+<form method="post" action="/inscription" novalidate enctype="application/x-www-form-urlencoded">
+  <input type="hidden" name="_csrf" value="<?= e($csrf) ?>">
+
+  <label for="pseudo">Pseudo</label>
+  <input id="pseudo" name="pseudo" required minlength="3" maxlength="40"
+         value="<?= e($valeurs['pseudo']) ?>"
+         <?php if (isset($erreurs['pseudo'])): ?>aria-invalid="true" aria-describedby="err-pseudo"<?php endif; ?>>
+  <?php if (isset($erreurs['pseudo'])): ?><p id="err-pseudo" class="erreur"><?= e($erreurs['pseudo']) ?></p><?php endif; ?>
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" required value="<?= e($valeurs['email']) ?>">
+  <?php if (isset($erreurs['email'])): ?><p class="erreur"><?= e($erreurs['email']) ?></p><?php endif; ?>
+
+  <label for="message">Message <small>(<?= mb_strlen($valeurs['message']) ?>/1000)</small></label>
+  <textarea id="message" name="message" rows="6"><?= e($valeurs['message']) ?></textarea>
+
+  <label><input type="checkbox" name="newsletter" value="1" <?= $valeurs['newsletter'] ? 'checked' : '' ?>> Newsletter</label>
+
+  <button type="submit">Envoyer</button>
+</form>
+\end{codephp}
+
+\begin{enumerate}
+  \item \textbf{Toujours} renvoyer les valeurs saisies (sinon l'utilisateur retape tout) et
+        ne jamais r\'eafficher un mot de passe.
+  \item \textbf{Toujours} \'echapper \`a la sortie~: \verb|htmlspecialchars| avec
+        \verb|ENT\_QUOTES| et UTF-8. Une vue qui n'\'echappe pas est une faille XSS.
+  \item \textbf{Toujours} faire un POST/REDIRECT/GET apr\`es un envoi r\'eussi.
+  \item \textbf{Toujours} valider c\^ot\'e serveur, m\^eme si le HTML a \verb|required|~: le HTML se
+        contourne en dix secondes avec DevTools ou \verb|curl|.
+  \item \textbf{Jamais} faire confiance \`a \verb|\$\_FILES['type']|, \`a la longueur annonc\'ee, ni \`a
+        un \verb|name|~: tout cela vient du client.
+\end{enumerate}
+
+\section{Sessions~: le stockage c\^ot\'e serveur}
+
+\begin{codephp}
+<?php
+// php.ini (ou ini_set avant session_start, ou dans un pool php-fpm) : les reglages qui comptent
+ini_set('session.use_strict_mode', '1');              // rejette un ID de session fourni par l'attaquant
+ini_set('session.cookie_httponly', '1');              // pas accessible en JS
+ini_set('session.cookie_secure', '1');                 // HTTPS uniquement
+ini_set('session.cookie_samesite', 'Lax');
+ini_set('session.use_only_cookies', '1');              // jamais d'ID dans l'URL
+ini_set('session.gc_maxlifetime', '1800');             // 30 min d'inactivite
+ini_set('session.sid_length', '48'); ini_set('session.sid_bits_per_character', '6');
+
+session_start();                                       // cree ou reprend la session
+$_SESSION['user_id'] = 7;                              // uniquement des donnees petites et serialisables
+$uid = $_SESSION['user_id'] ?? null;
+session_regenerate_id(true);                            // APRES toute connexion/escalade : anti-fixation
+session_destroy();                                      // suppression cote serveur
+setcookie('panier', '', time() - 3600, '/');             // effacer un cookie = le reemettre expire
+$nom = session_name();                                   // 'PHPSESSID' par defaut ; renomme-le (minorite d'infos)
+
+// Session en base (multiprobe : plusieurs serveurs php-fpm) : SessionHandlerInterface
+final class SessionBdd implements SessionHandlerInterface
+{
+    public function __construct(private readonly PDO $pdo, private readonly int $duree = 1800) {}
+    public function open(string $path, string $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read(string $id): string|false
+    {
+        $s = $this->pdo->prepare('SELECT data FROM sessions WHERE id = ? AND expire > NOW()');
+        $s->execute([$id]);
+        return (string) ($s->fetchColumn() ?: '');
+    }
+    public function write(string $id, string $data): int|bool
+    {
+        $s = $this->pdo->prepare('REPLACE INTO sessions (id, data, expire) VALUES (?, ?, NOW() + INTERVAL ? SECOND)');
+        return $s->execute([$id, $data, $this->duree]);
+    }
+    public function destroy(string $id): int|bool { return $this->pdo->prepare('DELETE FROM sessions WHERE id = ?')->execute([$id]); }
+    public function gc(int $max_lifetime): int|false { return $this->pdo->exec('DELETE FROM sessions WHERE expire < NOW()'); }
+}
+(new SessionHandler())->... ; // en pratique : session_set_save_handler(new SessionBdd($pdo), true);
+\end{codephp}
+
+\begin{note}
+\textbf{Ce qu'on ne met jamais en session~:} un gros tableau (la session est s\'erialis\'ee et
+relue \`a chaque requ\^ete), un secret non chiffr\'e, un r\^ole recalculable~; et surtout pas un jeton
+d'API dans une session stock\'ee en base. Ce qu'on y met~: l'identifiant utilisateur, un
+\verb|csrf|, un \'etat d'\'etapes, des flash.
+\end{note}
+
+\section{Authentification compl\`ete~: le parcours}
+
+\begin{codephp}
+<?php
+declare(strict_types=1);
+
+final class Authentification
+{
+    public function __construct(
+        private readonly PDO $pdo,
+        private readonly int $dureeVerrou = 900,
+        private readonly int $essaisMax = 5,
+    ) {}
+
+    /** Inscription : verifie la force, hache, ecrit. Reponse identique que l'email existe ou non. */
+    public function inscrire(string $email, string $motDePasse, string $pseudo): void
+    {
+        $this->verifierForce($motDePasse);
+        $hash = password_hash($motDePasse, PASSWORD_ARGON2ID, [
+            'memory_cost' => 1 << 15, 'time_cost' => 3, 'threads' => 2,   // ~0,3 s : assez lent pour gener, assez rapide pour toi
+        ]);
+        $s = $this->pdo->prepare(
+            'INSERT INTO utilisateurs (email, mot_de_passe, pseudo, cree_le) VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE id = id'     ;
+        );
+        $s->execute([mb_strtolower($email), $hash, $pseudo]);
+    }
+
+    public function connecter(string $email, string $motDePasse, ?string $ip = null): ?Utilisateur
+    {
+        $email = mb_strtolower(trim($email));
+        $s = $this->pdo->prepare('SELECT id, email, mot_de_passe, pseudo, verrou_jusqua FROM utilisateurs WHERE email = ? LIMIT 1');
+        $s->execute([$email]);
+        $u = $s->fetch(PDO::FETCH_ASSOC);
+
+        // 1) reponse au meme rythme et au meme message que si l'email etait inconnu
+        if ($u === false) {
+            password_verify($motDePasse, '$argon2id$v=19$m=65536,t=3,p=2$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+            throw new ErreurAuthentification('Identifiants incorrects.');
+        }
+        if ($u['verrou_jusqua'] !== null && strtotime((string) $u['verrou_jusqua']) > time()) {
+            throw new ErreurAuthentification('Trop d\'essais. Reessaie plus tard.');
+        }
+        if (!password_verify($motDePasse, (string) $u['mot_de_passe'])) {
+            $this->marquerEchec((int) $u['id'], $ip);
+            throw new ErreurAuthentification('Identifiants incorrects.');
+        }
+        // 2) re-hachage si l'algorithme ou les couts ont change : la maintenance de securite offerte gracieusement
+        if (password_needs_rehash((string) $u['mot_de_passe'], PASSWORD_ARGON2ID,
+            ['memory_cost' => 1 << 15, 'time_cost' => 3, 'threads' => 2])) {
+            $n = password_hash($motDePasse, PASSWORD_ARGON2ID, ['memory_cost' => 1 << 15, 'time_cost' => 3, 'threads' => 2]);
+            $this->pdo->prepare('UPDATE utilisateurs SET mot_de_passe = ? WHERE id = ?')->execute([$n, $u['id']]);
+        }
+        // 3) ouverture de session securisee
+        session_regenerate_id(true);
+        $_SESSION = ['user_id' => (int) $u['id'], 'ip' => $ip, 'agent' => hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')), 'depuis' => time()];
+        $this->pdo->prepare('UPDATE utilisateurs SET verrou_jusqua = NULL, tentatives = 0, derniere_connexion = NOW() WHERE id = ?')
+                 ->execute([$u['id']]);
+        return Utilisateur::deLigne($u);
+    }
+
+    public function deconnecter(): void
+    {
+        if (ini_get('session.use_cookies')) {
+            $p = session_get_cookie_params();
+            setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+        }
+        $_SESSION = [];
+        session_destroy();
+    }
+
+    /** Reinitialisation : jeton aleatoire, HACHE en base, 15 min, usage unique, reponse neutre. */
+    public function demanderReinitialisation(string $email): void
+    {
+        $s = $this->pdo->prepare('SELECT id FROM utilisateurs WHERE email = ?');
+        $s->execute([mb_strtolower($email)]);
+        $id = $s->fetchColumn();
+        if ($id === false) { return; }                      // pas de fuite d'information : meme message
+        $brut = bin2hex(random_bytes(32));
+        $this->pdo->prepare('INSERT INTO reinitialisations (utilisateur_id, jeton_hash, expire_le) VALUES (?, ?, NOW() + INTERVAL 15 MINUTE)')
+                  ->execute([$id, hash('sha256', $brut)]);
+        $this->mailer->envoyer($email, 'Reinitialisation', "Lien : " . url('/mdp-oublier') . '?j=' . urlencode($brut));
+    }
+
+    public function appliquerReinitialisation(string $jetonRecu, string $nouveauMdp): void
+    {
+        $this->verifierForce($nouveauMdp);
+        $s = $this->pdo->prepare(
+            'SELECT utilisateur_id FROM reinitialisations
+             WHERE jeton_hash = ? AND expire_le > NOW() AND utilise_le IS NULL LIMIT 1'
+        );
+        $s->execute([hash('sha256', $jetonRecu)]);
+        $id = $s->fetchColumn();
+        if ($id === false) { throw new ErreurAuthentification('Lien invalide ou expire.'); }
+        $this->pdo->prepare('UPDATE utilisateurs SET mot_de_passe = ? WHERE id = ?')
+                  ->execute([password_hash($nouveauMdp, PASSWORD_ARGON2ID), $id]);
+        $this->pdo->prepare('UPDATE reinitialisations SET utilise_le = NOW() WHERE utilisateur_id = ? AND utilise_le IS NULL')->execute([$id]);
+        $this->pdo->prepare('DELETE FROM sessions WHERE utilisateur_id = ?')->execute([$id]);   // deconnecter partout
+    }
+
+    private function verifierForce(string $mdp): void
+    {
+        if (mb_strlen($mdp) < 12) { throw new ErreurValidation('Mot de passe trop court (12 caracteres minimum).'); }
+        // (bonus) comparer aux fuites connues via l'API Have I Been Pwned range, sans envoyer le mot de passe
+    }
+    private function marquerEchec(int $id, ?string $ip): void { /* incrementer tentatives, poser verrou */ }
+}
+\end{codephp}
+
+\subsection{Le middleware d'authentification, et les autorisations}
+
+\begin{codephp}
+<?php
+// Un controleur ne verifie pas qui il est : un middleware le fait, une fois, pour tout.
+final class ExigerConnexion
+{
+    public function __construct(private readonly PDO $pdo) {}
+    public function __invoke(callable $suite): Response
+    {
+        $id = $_SESSION['user_id'] ?? null;
+        if ($id === null) { return new Response(401, ['www-authenticate' => 'session'], 'Connexion requise'); }
+        // Lier la session a l'empreinte du navigateur et a l'IP : casse la session volee depuis un autre poste
+        if (!hash_equals($_SESSION['agent'] ?? '', hash('sha256', (string) ($_SERVER['HTTP_USER_AGENT'] ?? '')))) {
+            $this->deconnecter();
+            return new Response(401, [], 'Session invalide');
+        }
+        $u = Utilisateur::trouver($this->pdo, (int) $id) ?? (function (): never { $this->deconnecter(); throw new RuntimeException(); })();
+        $GLOBALS['utilisateur'] = $u;             // dans un vrai framework : attribut de requete
+        return $suite();
+    }
+    private function deconnecter(): void { (new Authentification($this->pdo))->deconnecter(); }
+}
+
+// Autorisation : centralisee, testable, et qui renvoie 404 quand l'existence meme est sensible
+final class Politiques
+{
+    public static function peutVoir(Utilisateur $u, Article $a): bool
+    {
+        return $a->estPublie() || $u->id() === $a->auteur()->id() || $u->role()->peut(Role::Redacteur);
+    }
+    public static function peutEditer(Utilisateur $u, Article $a): bool
+    {
+        return $u->id() === $a->auteur()->id() || $u->role()->peut(Role::Admin);
+    }
+}
+\end{codephp}
+
+\section{Upload de fichiers~: la version non-na\"ive}
+
+\begin{codephp}
+<?php
+/**
+ * @param array{name:string,type:string,tmp_name:string,error:int,size:int} $f  $_FILES['avatar']
+ */
+function traiterUpload(array $f, string $dossier, int $tailleMax = 5_242_880): string
+{
+    if ($f['error'] !== UPLOAD_ERR_OK) {
+        throw new ErreurUpload(match ($f['error']) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Fichier trop volumineux.',
+            UPLOAD_ERR_PARTIAL => 'Envoi interrompu.',
+            UPLOAD_ERR_NO_FILE => 'Aucun fichier recu.',
+            default => 'Erreur d\'envoi (' . $f['error'] . ').',
+        });
+    }
+    if ($f['size'] > $tailleMax) { throw new ErreurUpload('Taille maximale depassee.'); }
+
+    // 1) verifier que c'est REELLEMENT une image (le MIME annonce par le client ne vaut rien)
+    $info = @getimagesize($f['tmp_name']);
+    if ($info === false) { throw new ErreurUpload('Ce n\'est pas une image.'); }
+    $types = [IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp', IMAGETYPE_GIF => 'gif'];
+    $ext = $types[$info[2]] ?? throw new ErreurUpload('Format non accepte.');
+
+    // 2) nom genere : jamais le nom du client dans un chemin (traversee de repertoire)
+    $nom = sprintf('%s-%s.%s', date('Ymd'), bin2hex(random_bytes(8)), $ext);
+
+    // 3) hors racine web,permissions 0640, proprietaire du service ; on reencode pour neutraliser
+    //    toute charge utile cachee (EXIF, script) : passer par GD ou ImageMagick
+    $destination = rtrim($dossier, '/') . '/' . $nom;
+    if (!is_dir($dossier)) { mkdir($dossier, 0o750, true); }
+    if (!move_uploaded_file($f['tmp_name'], $destination)) {      // LA seule fonction qui prouve
+        throw new ErreurUpload('Enregistrement impossible.');                   // l'origine PHP de l'upload
+    }
+    reencoder($destination, $ext);                                  // redimensionne + retire EXIF
+    chmod($destination, 0o640);
+    return '/uploads/' . $nom;
+}
+// En nginx/apache : le dossier d'upload ne doit JAMAIS executer de PHP :
+//   php_admin_flag engine Off / ou alias en `location ^~ /uploads/ { autoindex off; }`
+\end{codephp}
+
+\subsection{En-t\^etes, cookies, emails~: les trois finitions}
+
+\begin{codephp}
+<?php
+// Cookies (le meme contrat que vu en JS)
+setcookie('theme', 'sombre', [
+    'expires' => time() + 31536000, 'path' => '/', 'domain' => '',
+    'secure' => true, 'httponly' => true, 'samesite' => 'Lax', 'partitioned' => false,
+]);
+setrawcookie('brut', rawurlencode($valeur), ['expires' => 0, 'path' => '/']);
+
+// En-tetes de securite, a poser globalement (php-fpm : dans le pool, ou dans le premier include)
+header_remove('x-powered-by'); header_remove('server');
+header('x-content-type-options: nosniff');
+header('referrer-policy: strict-origin-when-cross-origin');
+header('x-frame-options: DENY');
+header('permissions-policy: camera=(), microphone=(), geolocation=()');
+header('content-security-policy: default-src \'self\'; img-src \'self\' data:; style-src \'self\' \'unsafe-inline\'');
+header('strict-transport-security: max-age=31536000; includeSubDomains');
+
+// Email : la fonction mail() de PHP est une source de problems (pas d'auth, pas de file,
+// spam). Envoie via SMTP reel ou une API. Deux choix sains :
+//   - Symfony Mailer : composer require symfony/mailer
+//   - PHPMailer     : composer require phpmailer/phpmailer
+use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
+use Symfony\Component\Mime\Email;
+
+$transport = new EsmtpTransport((string) getenv('SMTP_HOST'), (int) getenv('SMTP_PORT'), true);
+$transport->setUsername((string) getenv('SMTP_USER'))->setPassword((string) getenv('SMTP_PASS'));
+(new Mailer($transport))->send(
+    (new Email())->from('nour@example.com')->to($email)->subject('Bienvenue')
+        ->text("Salut {$pseudo},\n\nTon compte est pret.")
+        ->html('<p>Salut <b>' . htmlspecialchars($pseudo) . '</b></p>')
+        ->attachFromPath($cheminPdf, 'guide.pdf')
+);
+\end{codephp}
+
+\begin{exercice}
+\begin{enumerate}
+  \item \'Ecris un \og ~formulaire g\'en\'erique~ \fg{}~: \verb|champ(type, nom, options)| qui g\'en\`ere le HTML,
+        lit \verb|\$\_POST|, valide selon un tableau de r\`egles, et renvoie
+        \verb|[valeurs, erreurs]|. Trois formulaires deviennent alors dix lignes chacun.
+  \item Ajoute la protection \og ~honeypot~ \fg{} (un champ cach\'e que seul un robot remplit) et un
+        d\'elai minimal entre affichage et envoi~; bloque les robots sans CAPTCHA.
+  \item \'Ecris le module d'inscription/connexion complet ci-dessus sur ton blog~: avec verrouillage
+        apr\`es cinq \'echecs, journalisation des connexions, et \og ~se souvenir de moi~ \fg{} via un jeton
+        en base (jamais un cookie \og ~mot de passe hach\'e~ \fg{}).
+  \item Ajoute un 2FA TOTP~: g\'en\`ere le secret, le code de v\'erification (\link{otphp}{https://github.com/Spomky-Labs/otphp}),
+        et exige le code pour les r\^oles sensibles.
+  \item Fais un upload multiple (jusqu'\`a 5 images)~: validit\'e, redimensionnement en trois
+        tailles, nommage, suppression \`a la suppression de l'article, et tests sur des fichiers
+        pi\`eges (\verb|photo.php|.jpg, image SVG, image de 40~MP, GIF anim\'e).
+  \item \'Ecris une page \og ~mes sessions actives~ \fg{}~: liste des sessions de l'utilisateur (agent,
+        IP, date), et bouton pour les fermer une par une~; c'est l'exercice qui fait comprendre
+        le stockage de session.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Manuel --- Gestion des sessions --- \url{https://www.php.net/manual/en/book.session.php}
+  \item Manuel --- Fonction \verb|password\_*| --- \url{https://www.php.net/manual/en/ref.password.php}
+  \item PHP-FIG PSR-7 (messages HTTP) --- \url{https://www.php-fig.org/psr/psr-7/} --- PSR-15 (middlewares)
+  \item \link{Symfony Mailer}{https://symfony.com/doc/current/mailer.html} --- \link{PHPMailer}{https://github.com/PHPMailer/PHPMailer}
+  \item \link{OWASP~Cheat~Sheet~Authentication}{https://cheatsheetseries.owasp.org/cheatsheets/Authentication\_Cheat\_Sheet.html}
+\end{itemize}
+\end{ressources}
+
+\index{PHP!formulaire}\index{PHP!session}\index{PHP!authentification}\index{CSRF}\index{upload}

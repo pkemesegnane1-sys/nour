@@ -1,0 +1,286 @@
+% ============================================================================
+\chapter{TypeScript~: rendre les erreurs visibles avant l'ex\'ecution}
+\label{ch-js-ts}
+% ============================================================================
+
+\begin{objectif}
+\begin{itemize}
+  \item Comprendre ce que TypeScript fait (et ne fait pas)~: v\'erification statique, pas de magie runtime.
+  \item Typager unions, narrowing, g\'en\'eriques, types utilitaires, discriminations.
+  \item Configurer \texttt{tsconfig.json} sans recopier un myst\`ere~: compr\'ehension de chaque drapeau.
+  \item Migrer un projet JavaScript existant progressivement, sans se noyer.
+  \item Typ\'e des API r\'eelles~: r\'eponses, sch\'emas partag\'es client/serveur, erreurs.
+\end{itemize}
+\end{objectif}
+
+\section{Le principe en dix lignes}
+
+\begin{codejs}
+// entr\'ee.ts
+function saluer(qui: string): string {
+  return `Bonjour ${qui}`;
+}
+saluer(42);              // erreur du COMPILATEUR : Argument of type 'number' is not assignable to 'string'
+
+// sortie (tsc) : les annotations disparaissent, le JS obtenu est identique a celui qu'on aurait ecrit a la main
+function saluer(qui) { return `Bonjour ${qui}`; }
+\end{codejs}
+
+TypeScript est un \textbf{v\'erificateur} qui lit tes annotations, pas un moteur qui les applique.
+Cons\'equence capitale~: \`a l'ex\'ecution, aucune protection~! Si une donn\'ee vient de l'ext\'erieur
+(JSON, formulaire, base de donn\'ees), le type d\'eclar\'e est une \emph{affirmation}. D'o\`u l'habitude
+de valider aux fronti\`eres avec \link{zod}{https://zod.dev/} ou \link{ArkType}{https://arktype.io/}.
+
+\begin{codejs}
+import { z } from "zod";
+
+const Article = z.object({
+  id: z.number().int().positive(),
+  titre: z.string().min(1).max(160),
+  tags: z.array(z.string()).default([]),
+  publieLe: z.iso.datetime().optional(),
+});
+type Article = z.infer<typeof Article>;          // le type est DERIVE du sch\'ema : source unique de verite
+
+export async function lireArticle(id: number): Promise<Article> {
+  const brut = await fetch(`/api/articles/${id}`).then((r) => r.json());
+  return Article.parse(brut);                     // erreur nette ici, pas 3 ecrans plus loin
+}
+\end{codejs}
+
+\section{Le syst\`eme de types, utilement}
+
+\begin{codejs}
+// --- Bases
+let age: number = 30;
+const user = { nom: "Nour", age: 30 } as const;          // litteraux figes : { readonly nom: "Nour" }
+type Identifiant = string | number;
+type Statut = "brouillon" | "publie" | "archive";         // union de litteraux : l'enum du JS moderne
+const ROLE = { Admin: "admin", Editeur: "editeur" } as const;
+type Role = (typeof ROLE)[keyof typeof ROLE];             // "admin" | "editeur"
+
+// --- Fonctions
+type Gestionnaire<T = Event> = (e: T) => void | Promise<void>;
+function envoyer<T>(donnees: T, options?: { signal?: AbortSignal }): Promise<Response> { /* ... */ }
+declare function sur<E extends Statut>(s: E, cb: (a: ArticleDe<E>) => void): void;
+
+// --- Objets
+interface Article {
+  readonly id: number;                 // non reassignable
+  titre: string;
+  sousTitre?: string;                   // facultatif : string | undefined
+  tags: readonly string[];              // lecture seule
+  [index: string]: unknown;             // cles supplementaires acceptees
+  (prefixe?: string): string;           // interface callable (rare)
+}
+type RecordArticle = Record<Statut, Article[]>;
+
+// --- Unions et etroitesse de type (narrowing) --- LE coeur du TS utile
+type Rep<Ok> = { ok: true; data: Ok } | { ok: false; error: string };
+async function api<T>(url: string): Promise<Rep<T>> {
+  const res = await fetch(url);
+  if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+  return { ok: true, data: (await res.json()) as T };
+}
+const r = await api<Article[]>("/api/articles");
+if (r.ok) r.data.map((a) => a.titre);      // TS sait que data existe ici
+else console.error(r.error);                 // et que error existe ici
+
+function decrire(v: string | number | boolean | null | undefined | Date) {
+  if (v === null || v === undefined) return "rien";
+  if (typeof v === "string") return v.toUpperCase();       // v : string
+  if (typeof v === "number") return v.toFixed(2);          // v : number
+  if (v instanceof Date) return v.toISOString();            // v : Date
+  return String(v);                                          // boolean
+}
+
+// Predicats de type : la facon propre de factoriser un narrowing
+function estArticle(v: unknown): v is Article {
+  return typeof v === "object" && v !== null && "id" in v && "titre" in v && typeof (v as Article).id === "number";
+}
+const bruts: unknown[] = [1, { id: 2, titre: "x" }, null];
+const vrais = bruts.filter(estArticle);            // Article[] -- pas unknown[]
+
+// Exhaustivite : le "never" devient une alarme quand un cas est oublie
+function libelle(s: Statut): string {
+  switch (s) {
+    case "brouillon": return "En cours";
+    case "publie": return "En ligne";
+    case "archive": return "Archive";
+    default: { const _exhaustif: never = s; return _exhaustif; }   // erreur si on ajoute un statut
+  }
+}
+\end{codejs}
+
+\subsection{G\'en\'eriques, sans en abuser}
+
+\begin{codejs}
+function dernier<T>(tab: T[]): T | undefined { return tab.at(-1); }
+function groupePar<T, K extends string | number>(tab: T[], clef: (t: T) => K): Record<K, T[]> {
+  return tab.reduce((acc, item) => {
+    const k = clef(item);
+    (acc[k] ??= []).push(item);
+    return acc;
+  }, {} as Record<K, T[]>);
+}
+groupePar(articles, (a) => a.statut);        // { brouillon: Article[], publie: Article[] }
+
+// Contraintes utiles
+function proprietes<T, K extends keyof T>(o: T, cles: K[]): Pick<T, K>[] { return cles.map((c) => ({ [c]: o[c] } as Pick<T, K>)); }
+function creer<T extends { id: string }>(elements: T[]): Map<string, T> { return new Map(elements.map((e) => [e.id, e])); }
+function clone<T extends object>(o: T): T { return structuredClone(o); }
+
+// Types conditionnels + infere : a lire, rarement a ecrire
+type ElementDe<T> = T extends (infer U)[] ? U : never;
+type Retours<T> = T extends (...a: never[]) => Promise<infer R> ? R : never;
+type Attendu = ElementDe<string[]>;         // string
+type Resultat = Retours<typeof fetch>;       // Response
+
+// Mapped types : rendre tout facultatif a un niveau arbitraire
+type ProfondementPartiel<T> = { [K in keyof T]?: T[K] extends object ? ProfondementPartiel<T[K]> : T[K] };
+type Template = `data-${Lowercase<string>}`;   // types de chaines par motif
+\end{codejs}
+
+\section{Les types utilitaires \`a conna\^itre}
+
+\begin{codejs}
+type A = { id: number; titre: string; sousTitre?: string; tags: string[] };
+type U1 = Partial<A>;                    // tout facultatif (ex : objet d'un PATCH)
+type U2 = Required<A>;                   // tout obligatoire
+type U3 = Readonly<A>;                   // rien d'assignable
+type U4 = Pick<A, "id" | "titre">;       // sous-ensemble
+type U5 = Omit<A, "tags">;               // retrait
+type U6 = Exclude<A["titre"], never>;     // sur des unions : A | B, retire A
+type U7 = Extract<A["titre"], string>;
+type U8 = NonNullable<A["sousTitre"]>;    // retire null | undefined
+type U9 = ReturnType<typeof fetch>;       // Promise<Response>
+type U10 = Parameters<typeof fetch>;       // [input: RequestInfo | URL, init?: RequestInit]
+type U11 = Awaited<ReturnType<typeof fetch>>;   // Response
+type U12 = A["tags"][number];             // string  (element d'un tableau)
+type U13 = Record<string, A>;             // dictionnaire
+type U14 = { [K in keyof A as `set${Capitalize<K & string>}`]: (v: A[K]) => void };
+// -> { setId: (v: number) => void; setTitre: (v: string) => void; ... }
+\end{codejs}
+
+\section{\texttt{tsconfig.json}--- chaque drapeau expliqu\'e}
+
+\begin{codejson}
+{
+  "compilerOptions": {
+    "target": "ES2023",                       // syntaxe generee (le moteur cible le plus vieux soutenu)
+    "lib": ["ES2023", "DOM", "DOM.Iterable"], // API declarees : DOM retire = plus de document
+    "module": "ESNext",                        // format des imports emits (Node : "NodeNext")
+    "moduleResolution": "Bundler",               // resolution a la Vite/esbuild ; "NodeNext" pour Node pur
+    "verbatimModuleSyntax": true,                // n'enleve pas "import type" : explicite, evite les surprises
+    "isolatedModules": true,                     // chaque fichier compilable seul (condition des bundlers)
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,           // imports avec .ts (Vite/tsx) -- exige noEmit
+    "noEmit": true,                                // tsc verifie seulement, le bundler produit le JS
+    "strict": true,                                // ACTIVE TOUT ce qui suit -- ne pas negocier
+    "noUncheckedIndexedAccess": true,              // tab[i] : T | undefined  (la verite du runtime)
+    "exactOptionalPropertyTypes": true,            // { a?: string } n'accepte plus a: undefined
+    "noImplicitOverride": true,                     // override doit etre dit
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true, "noUnusedParameters": true,
+    "allowJs": false,                               // true pour migrer un projet JS progressivement
+    "checkJs": false,                               // true : typer meme les fichiers .js
+    "declaration": true, "declarationMap": true, "sourceMap": true,
+    "outDir": "dist",
+    "skipLibCheck": true,                             // ne pas rev\'erifier les .d.ts des paquets
+    "forceConsistentCasingInFileNames": true,          // Windows te remerciera plus tard
+    "types": ["node", "vite/client"]
+  },
+  "include": ["src", "tests", "vite.config.ts"],
+  "exclude": ["dist", "node_modules", "coverage"]
+}
+\end{codejson}
+
+\begin{astuce}
+Les deux drapeaux qui rapportent le plus apr\`es \verb|strict|~:
+\texttt{noUncheckedIndexedAccess} (transforme une cat\'egorie enti\`ere de \verb|undefined is not an
+object| en erreur de compilation) et \texttt{exactOptionalPropertyTypes}. Active-les totard,
+tant que le projet est petit.
+\end{astuce}
+
+\section{Les pi\`eges de typage (et comment les nommer)}
+
+\begin{codejs}
+// 1. any : une sortie de secours qui inonde tout le fichier. Preferer unknown + etroitesse.
+function mauvais(d: any) { return d.nope.deeper; }        // aucune aide
+function bon(d: unknown) {
+  if (typeof d === "object" && d !== null && "nope" in d) { /* ... */ }
+}
+
+// 2. as : l'affirmation silencieuse. Si tu mets beaucoup de "as", c'est le type du parametre
+//    qui est faux, pas l'appel.
+const n = reponse as number;          // "marche" a la compilation, casse a l'execution
+
+// 3. null et undefined : le type ne protege que si strictNullChecks est actif
+let v: string = null;                  // OK sans strict  <-- d'ou "strict": true
+
+// 4. Objets litteraux inferes trop larges
+const config = { retries: 3 };         // { retries: number }
+const figee = { retries: 3 } as const; // { readonly retries: 3 }
+
+// 5. Tableaux vs tuple
+let a: string[] = ["x", "y"];          // taille libre
+let t: [string, number] = ["x", 1];     // forme exacte
+let m: [cle: string, valeur: number][];  // tuple nomme : le lecteur n'a plus a deviner
+
+// 6. Callback optionnel et "this"
+type Handlers = { onChange?: (v: string) => void };
+declare const h: Handlers;
+h?.onChange?.("ok");                     // l'alternative enchainee est ton amie
+
+// 7. Erreurs de paquets "sans type" : installe @types/xxx, ou ecrit un module .d.ts
+//    declare module "vieille-lib" { const x: any; export default x; }
+// 8. "interface vs type" : interface est extensible (declaration merging), type est plus
+//    expressif (unions, mappings). Pour une application : type partout, interface pour les
+//    bibliotheques que d'autres etendent.
+\end{codejs}
+
+\section{Migrer un projet existant sans tout bloquer}
+
+\begin{terminal}
+npm i -D typescript @types/node
+npx tsc --init --strict --allowJs --checkJs false --noEmit
+# etape 1 : laisser tourner tsc sur les .js (checkJs: true) => inventaire des erreurs
+# etape 2 : renommer les fichiers un a un en .ts (ou .tsx pour le JSX) ; git mv, pas de coup de main
+# etape 3 : typer les frontieres (fonctions publiques, modeles) avant les variables internes
+# etape 4 : activer les drapeaux stricts progressivement ; supprimer les "as any" au fil de l'eau
+npx tsc --noEmit
+\end{terminal}
+
+Ordre de rentabilit\'e~: (1) les mod\`eles m\'etier (types partag\'es), (2) la couche r\'eseau,
+(3) l'\'etat global, (4) les utilitaires, (5) le DOM. Les composants UI se typent presque seuls
+une fois les props d\'efinies.
+
+\begin{exercice}
+\begin{enumerate}
+  \item Reprends ton panier de la \cref{ch-js-struct} en TypeScript~: types \verb|Article|,
+        \verb|Ligne|, \verb|Panier|, \verb|Totaux|~; \verb|Resultat<T> = {ok:true,valeur:T}| ...
+        et aucun \verb|any|~; \verb|noUncheckedIndexedAccess| activ\'e.
+  \item \'Ecris un type \verb|Schema<T>| (g\'en\'erique) et trois fonctions typ\'ees
+        \verb|valider|, \verb|transformer|, \verb|serialiser| qui le r\'eutilisent.
+  \item Typ\'e les \'ev\'enements DOM~: un gestionnaire g\'en\'erique
+        \verb|surElement<E extends keyof HTMLElementEventMap>(el, type, cb)| o\`u le param\`etre du
+        callback est d\'eduit correctement (\verb|MouseEvent|, \verb|InputEvent|...).
+  \item Construis un client d'API o\`u chaque route renvoie un type~: \verb|api.get<Articles>("/articles")|
+        avec un typage du \verb|path| par motif (\verb|`/articles/\${number}`|).
+  \item Migre un de tes anciens projets JS (10 fichiers au plus) en TS, strict, sans
+        d\'esactiver une seule r\`egle. Note les types d'erreurs que tu as trouv\'es~: tu viens de
+        collecter un \'echantillon de bugs potentiels r\'eels.
+\end{enumerate}
+\end{exercice}
+
+\begin{ressources}
+\begin{itemize}
+  \item Handbook officiel (\`a lire en entier, il est court) --- \url{https://www.typescriptlang.org/docs/handbook/intro.html}
+  \item Playground pour exp\'erimenter sans installer --- \url{https://www.typescriptlang.org/play/}
+  \item \link{Total~TypeScript}{https://www.totaltypescript.com/} (Matt~Pocock, exercices + vid\'eos)
+  \item \link{TYPES-CHEATSHEET}{https://github.com/typescript-cheatsheets/react} pour React
+  \item tsconfig reference --- \url{https://www.typescriptlang.org/tsconfig}
+\end{itemize}
+\end{ressources}
+
+\index{TypeScript}\index{generiques}\index{tsconfig}
